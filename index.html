@@ -1,0 +1,695 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Text to Audio Converter - Chatterbox TTS</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+        }
+
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+            background: white;
+            border-radius: 12px;
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+            overflow: hidden;
+        }
+
+        .header {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 30px;
+            text-align: center;
+        }
+
+        .header h1 {
+            font-size: 2.5em;
+            margin-bottom: 10px;
+        }
+
+        .header p {
+            font-size: 1.1em;
+            opacity: 0.9;
+        }
+
+        .controls {
+            padding: 30px;
+            background: #f8f9fa;
+            border-bottom: 1px solid #e0e0e0;
+        }
+
+        .control-group {
+            margin-bottom: 20px;
+        }
+
+        .control-group:last-child {
+            margin-bottom: 0;
+        }
+
+        label {
+            display: block;
+            margin-bottom: 8px;
+            font-weight: 600;
+            color: #333;
+        }
+
+        input[type="text"], select {
+            width: 100%;
+            padding: 12px;
+            border: 2px solid #ddd;
+            border-radius: 6px;
+            font-size: 16px;
+            transition: border-color 0.3s;
+        }
+
+        input[type="text"]:focus, select:focus {
+            outline: none;
+            border-color: #667eea;
+        }
+
+        input[type="file"] {
+            display: none;
+        }
+
+        .browse-btn-wrapper {
+            position: relative;
+            display: inline-block;
+            width: 100%;
+        }
+
+        .button-group {
+            display: flex;
+            gap: 10px;
+            margin-top: 15px;
+        }
+
+        button {
+            padding: 12px 24px;
+            border: none;
+            border-radius: 6px;
+            font-size: 16px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s;
+            flex: 1;
+        }
+
+        .btn-primary {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+        }
+
+        .btn-primary:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 5px 15px rgba(102, 126, 234, 0.4);
+        }
+
+        .btn-secondary {
+            background: #6c757d;
+            color: white;
+        }
+
+        .btn-secondary:hover {
+            background: #5a6268;
+            transform: translateY(-2px);
+        }
+
+        button:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
+            transform: none !important;
+        }
+
+        .status {
+            padding: 12px;
+            margin-top: 15px;
+            border-radius: 6px;
+            font-size: 14px;
+            display: none;
+        }
+
+        .status.success {
+            background: #d4edda;
+            color: #155724;
+            border: 1px solid #c3e6cb;
+        }
+
+        .status.error {
+            background: #f8d7da;
+            color: #721c24;
+            border: 1px solid #f5c6cb;
+        }
+
+        .status.info {
+            background: #d1ecf1;
+            color: #0c5460;
+            border: 1px solid #bee5eb;
+        }
+
+        .content {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 30px;
+            padding: 30px;
+        }
+
+        .panel {
+            background: #f8f9fa;
+            border-radius: 8px;
+            padding: 20px;
+            min-height: 500px;
+        }
+
+        .panel h2 {
+            margin-bottom: 15px;
+            color: #333;
+            font-size: 1.5em;
+        }
+
+        .text-content {
+            width: 100%;
+            height: 450px;
+            padding: 15px;
+            border: 2px solid #ddd;
+            border-radius: 6px;
+            font-family: 'Courier New', monospace;
+            font-size: 14px;
+            line-height: 1.6;
+            resize: none;
+            background: white;
+        }
+
+        .audio-player {
+            width: 100%;
+            margin-top: 20px;
+        }
+
+        .audio-placeholder {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            height: 450px;
+            background: white;
+            border: 2px dashed #ddd;
+            border-radius: 6px;
+            color: #999;
+            font-size: 18px;
+        }
+
+        .loading {
+            display: none;
+            text-align: center;
+            padding: 20px;
+        }
+
+        .loading.active {
+            display: block;
+        }
+
+        .spinner {
+            border: 4px solid #f3f3f3;
+            border-top: 4px solid #667eea;
+            border-radius: 50%;
+            width: 40px;
+            height: 40px;
+            animation: spin 1s linear infinite;
+            margin: 0 auto 15px;
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+
+        @media (max-width: 968px) {
+            .content {
+                grid-template-columns: 1fr;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>Text to Audio Converter</h1>
+            <p>Convert text files to audio using Chatterbox TTS from Hugging Face</p>
+        </div>
+
+        <div class="controls">
+            <div class="control-group">
+                <label for="directory">Directory Path</label>
+                <div style="display: flex; gap: 10px;">
+                    <input type="text" id="directory" placeholder="Click 'Browse Folder' or enter path manually" value="" readonly style="flex: 1;">
+                    <button class="btn-secondary" id="browseFolderBtn" style="flex: 0 0 auto; min-width: 150px;">Browse Folder</button>
+                </div>
+                <input type="file" id="folderInput" webkitdirectory directory multiple style="display: none;">
+            </div>
+
+            <div class="control-group">
+                <label for="fileSelect">Select Text File</label>
+                <select id="fileSelect" disabled>
+                    <option value="">No files loaded</option>
+                </select>
+            </div>
+
+            <div class="button-group">
+                <button class="btn-primary" id="generateAllBtn" disabled>Generate Audio for All Files</button>
+            </div>
+
+            <div class="status" id="status"></div>
+        </div>
+
+        <div class="loading" id="loading">
+            <div class="spinner"></div>
+            <p>Processing...</p>
+        </div>
+
+        <div class="content">
+            <div class="panel">
+                <h2>Text Content</h2>
+                <textarea class="text-content" id="textContent" readonly placeholder="Select a file to view its content..."></textarea>
+            </div>
+
+            <div class="panel">
+                <h2>Generated Audio</h2>
+                <div id="audioContainer">
+                    <div class="audio-placeholder">
+                        Select a file to generate and play audio
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const API_URL = 'http://localhost:5000/api';
+
+        let currentFiles = [];
+        let currentDirectory = '';
+
+        // Elements
+        const directoryInput = document.getElementById('directory');
+        const fileSelect = document.getElementById('fileSelect');
+        const browseFolderBtn = document.getElementById('browseFolderBtn');
+        const folderInput = document.getElementById('folderInput');
+        const generateAllBtn = document.getElementById('generateAllBtn');
+        const textContent = document.getElementById('textContent');
+        const audioContainer = document.getElementById('audioContainer');
+        const statusDiv = document.getElementById('status');
+        const loadingDiv = document.getElementById('loading');
+
+        // Show status message
+        function showStatus(message, type = 'info') {
+            console.log(`[Status ${type}]:`, message);
+            statusDiv.textContent = message;
+            statusDiv.className = `status ${type}`;
+            statusDiv.style.display = 'block';
+            // Don't auto-hide error messages
+            if (type !== 'error') {
+                setTimeout(() => {
+                    statusDiv.style.display = 'none';
+                }, 10000);
+            }
+        }
+
+        // Show loading
+        function setLoading(isLoading) {
+            if (isLoading) {
+                loadingDiv.classList.add('active');
+            } else {
+                loadingDiv.classList.remove('active');
+            }
+        }
+
+        // Scan directory for text files
+        async function scanDirectory() {
+            const directory = directoryInput.value.trim();
+            if (!directory) {
+                showStatus('Please enter a directory path', 'error');
+                return;
+            }
+
+            setLoading(true);
+            try {
+                const response = await fetch(`${API_URL}/scan`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ directory })
+                });
+
+                const data = await response.json();
+
+                if (!response.ok) {
+                    throw new Error(data.error || 'Failed to scan directory');
+                }
+
+                currentFiles = data.files;
+                currentDirectory = directory;
+
+                // Update file select
+                fileSelect.innerHTML = '';
+                if (currentFiles.length === 0) {
+                    fileSelect.innerHTML = '<option value="">No .txt files found</option>';
+                    fileSelect.disabled = true;
+                    generateAllBtn.disabled = true;
+                    showStatus('No .txt files found in directory', 'info');
+                } else {
+                    currentFiles.forEach(file => {
+                        const option = document.createElement('option');
+                        option.value = file.path;
+                        option.textContent = file.name;
+                        fileSelect.appendChild(option);
+                    });
+                    fileSelect.disabled = false;
+                    generateAllBtn.disabled = false;
+                    showStatus(`Found ${currentFiles.length} text file(s)`, 'success');
+
+                    // Automatically load first file
+                    if (currentFiles.length > 0) {
+                        loadFile(currentFiles[0].path);
+                    }
+                }
+            } catch (error) {
+                showStatus(`Error: ${error.message}`, 'error');
+                fileSelect.disabled = true;
+                generateAllBtn.disabled = true;
+            } finally {
+                setLoading(false);
+            }
+        }
+
+        // Load file content and generate audio
+        async function loadFile(filePath) {
+            if (!filePath) return;
+
+            setLoading(true);
+            textContent.value = 'Loading...';
+            audioContainer.innerHTML = '<div class="audio-placeholder">Generating audio...</div>';
+
+            try {
+                // Read text content
+                const textResponse = await fetch(`${API_URL}/read`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ file_path: filePath })
+                });
+
+                const textData = await textResponse.json();
+
+                if (!textResponse.ok) {
+                    throw new Error(textData.error || 'Failed to read file');
+                }
+
+                textContent.value = textData.content;
+
+                // Generate audio
+                const audioResponse = await fetch(`${API_URL}/generate`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ file_path: filePath })
+                });
+
+                const audioData = await audioResponse.json();
+
+                if (!audioResponse.ok) {
+                    throw new Error(audioData.error || 'Failed to generate audio');
+                }
+
+                // Display audio player
+                const fullAudioUrl = `http://localhost:5000${audioData.audio_url}`;
+                audioContainer.innerHTML = `
+                    <audio controls class="audio-player">
+                        <source src="${fullAudioUrl}" type="audio/wav">
+                        Your browser does not support the audio element.
+                    </audio>
+                    <div style="margin-top: 15px; padding: 10px; background: #e7f3ff; border-radius: 6px; font-size: 14px;">
+                        <strong>Audio file:</strong> ${audioData.audio_url.split('/').pop()}
+                    </div>
+                `;
+
+                showStatus('Audio generated successfully!', 'success');
+            } catch (error) {
+                showStatus(`Error: ${error.message}`, 'error');
+                audioContainer.innerHTML = `<div class="audio-placeholder">Error generating audio</div>`;
+            } finally {
+                setLoading(false);
+            }
+        }
+
+        // Generate audio for all files
+        async function generateAllAudio() {
+            if (!currentFiles || currentFiles.length === 0) {
+                showStatus('Please select a folder first', 'error');
+                return;
+            }
+
+            if (!confirm(`Generate audio for all ${currentFiles.length} file(s)?`)) {
+                return;
+            }
+
+            setLoading(true);
+            generateAllBtn.disabled = true;
+
+            try {
+                // Check if files are from browser selection
+                const hasBrowserFiles = currentFiles[0] && currentFiles[0].file;
+
+                if (hasBrowserFiles) {
+                    // Process browser-selected files
+                    let successful = 0;
+                    let failed = 0;
+                    let errors = [];
+
+                    console.log(`Starting batch processing of ${currentFiles.length} files`);
+
+                    for (let i = 0; i < currentFiles.length; i++) {
+                        const fileInfo = currentFiles[i];
+                        console.log(`Processing file ${i + 1}/${currentFiles.length}: ${fileInfo.name}`);
+
+                        try {
+                            const text = await fileInfo.file.text();
+                            const formData = new FormData();
+                            formData.append('file', fileInfo.file);
+                            formData.append('filename', fileInfo.name);
+
+                            showStatus(`Processing ${i + 1}/${currentFiles.length}: ${fileInfo.name}...`, 'info');
+
+                            const response = await fetch(`${API_URL}/generate-from-upload`, {
+                                method: 'POST',
+                                body: formData
+                            });
+
+                            const data = await response.json();
+
+                            if (response.ok) {
+                                successful++;
+                                console.log(`✓ Success: ${fileInfo.name}`);
+                            } else {
+                                failed++;
+                                const errorMsg = data.error || `HTTP ${response.status}`;
+                                console.error(`✗ Failed: ${fileInfo.name} - ${errorMsg}`);
+                                errors.push(`${fileInfo.name}: ${errorMsg}`);
+                            }
+                        } catch (error) {
+                            console.error(`✗ Error processing ${fileInfo.name}:`, error);
+                            failed++;
+                            errors.push(`${fileInfo.name}: ${error.message}`);
+                        }
+                    }
+
+                    const statusMsg = `Generated audio for ${successful}/${currentFiles.length} file(s). ${failed > 0 ? `Failed: ${failed}.` : ''}`;
+                    console.log('Batch processing complete:', statusMsg);
+
+                    if (errors.length > 0) {
+                        console.error('Errors:', errors);
+                        showStatus(`${statusMsg} Errors: ${errors.join('; ')}`, 'error');
+                    } else {
+                        showStatus(statusMsg, 'success');
+                    }
+                } else {
+                    // Process server-side files (legacy)
+                    const response = await fetch(`${API_URL}/generate-all`, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ directory: currentDirectory })
+                    });
+
+                    const data = await response.json();
+
+                    if (!response.ok) {
+                        throw new Error(data.error || 'Failed to generate audio');
+                    }
+
+                    const successful = data.results.filter(r => r.status === 'success').length;
+                    const failed = data.results.filter(r => r.status === 'failed').length;
+
+                    showStatus(
+                        `Generated audio for ${successful} file(s). ${failed > 0 ? `Failed: ${failed}` : ''}`,
+                        failed > 0 ? 'info' : 'success'
+                    );
+                }
+            } catch (error) {
+                showStatus(`Error: ${error.message}`, 'error');
+            } finally {
+                setLoading(false);
+                generateAllBtn.disabled = false;
+            }
+        }
+
+        // Handle folder browse button
+        browseFolderBtn.addEventListener('click', () => {
+            folderInput.click();
+        });
+
+        // Handle folder selection
+        folderInput.addEventListener('change', async (e) => {
+            const files = Array.from(e.target.files);
+            if (files.length === 0) return;
+
+            // Get the directory path from the first file
+            const firstFile = files[0];
+            const path = firstFile.webkitRelativePath || firstFile.name;
+            const directory = path.substring(0, path.lastIndexOf('/'));
+
+            // Extract full path (this is tricky in browser, we'll use the parent folder name)
+            const folderPath = firstFile.webkitRelativePath.split('/')[0];
+
+            // Filter only .txt files
+            const txtFiles = files.filter(f => f.name.endsWith('.txt'));
+
+            if (txtFiles.length === 0) {
+                showStatus('No .txt files found in the selected folder', 'info');
+                return;
+            }
+
+            // Update UI
+            directoryInput.value = folderPath;
+            currentDirectory = folderPath;
+            currentFiles = txtFiles.map(f => ({
+                name: f.webkitRelativePath || f.name,
+                path: f.webkitRelativePath || f.name,
+                file: f
+            }));
+
+            // Update file select
+            fileSelect.innerHTML = '';
+            currentFiles.forEach(fileInfo => {
+                const option = document.createElement('option');
+                option.value = fileInfo.path;
+                option.textContent = fileInfo.name;
+                fileSelect.appendChild(option);
+            });
+
+            fileSelect.disabled = false;
+            generateAllBtn.disabled = false;
+            showStatus(`Found ${currentFiles.length} text file(s)`, 'success');
+
+            // Automatically load first file
+            if (currentFiles.length > 0) {
+                await loadFileFromBrowser(currentFiles[0]);
+            }
+        });
+
+        // Load file from browser (client-side)
+        async function loadFileFromBrowser(fileInfo) {
+            console.log('Loading file:', fileInfo.name);
+            setLoading(true);
+            textContent.value = 'Loading...';
+            audioContainer.innerHTML = '<div class="audio-placeholder">Reading file...</div>';
+
+            try {
+                // Read file content from browser
+                const text = await fileInfo.file.text();
+                console.log('File text length:', text.length);
+                textContent.value = text;
+
+                // For audio generation, we still need the server
+                // We'll need to send the file to the server
+                const formData = new FormData();
+                formData.append('file', fileInfo.file);
+                formData.append('filename', fileInfo.name);
+
+                console.log('Sending file to server:', fileInfo.name);
+                audioContainer.innerHTML = '<div class="audio-placeholder">Generating audio... (this may take a minute)</div>';
+
+                const audioResponse = await fetch(`${API_URL}/generate-from-upload`, {
+                    method: 'POST',
+                    body: formData
+                });
+
+                console.log('Response status:', audioResponse.status);
+                const audioData = await audioResponse.json();
+                console.log('Response data:', audioData);
+
+                if (!audioResponse.ok) {
+                    const errorMsg = audioData.error || `Server error: ${audioResponse.status}`;
+                    throw new Error(errorMsg);
+                }
+
+                // Display audio player
+                const fullAudioUrl = `http://localhost:5000${audioData.audio_url}`;
+                audioContainer.innerHTML = `
+                    <audio controls class="audio-player">
+                        <source src="${fullAudioUrl}" type="audio/wav">
+                        Your browser does not support the audio element.
+                    </audio>
+                    <div style="margin-top: 15px; padding: 10px; background: #e7f3ff; border-radius: 6px; font-size: 14px;">
+                        <strong>Audio file:</strong> ${audioData.audio_url.split('/').pop()}
+                    </div>
+                `;
+
+                showStatus('Audio generated successfully!', 'success');
+            } catch (error) {
+                console.error('Error in loadFileFromBrowser:', error);
+                const errorMsg = `Failed to generate audio: ${error.message}. Check console (F12) for details.`;
+                showStatus(errorMsg, 'error');
+                audioContainer.innerHTML = `<div class="audio-placeholder" style="color: #d32f2f; white-space: pre-wrap;">${errorMsg}</div>`;
+            } finally {
+                setLoading(false);
+            }
+        }
+
+        // Handle file selection from dropdown
+        fileSelect.addEventListener('change', async (e) => {
+            const selectedPath = e.target.value;
+            if (!selectedPath) return;
+
+            const fileInfo = currentFiles.find(f => f.path === selectedPath);
+            if (fileInfo && fileInfo.file) {
+                // Browser-based file
+                await loadFileFromBrowser(fileInfo);
+            } else {
+                // Server-based file (legacy path)
+                await loadFile(selectedPath);
+            }
+        });
+
+        generateAllBtn.addEventListener('click', generateAllAudio);
+
+        // Check server status on load
+        async function checkServerStatus() {
+            try {
+                const response = await fetch(`${API_URL}/status`);
+                const data = await response.json();
+                console.log('Server status:', data);
+            } catch (error) {
+                showStatus('Unable to connect to server. Please start the server first.', 'error');
+            }
+        }
+
+        checkServerStatus();
+    </script>
+</body>
+</html>
