@@ -580,6 +580,101 @@
             border: 2px solid #fbc02d;
         }
 
+        /* Progress Bar */
+        .progress-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.8);
+            z-index: 3000;
+            display: none;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .progress-overlay.show {
+            display: flex;
+        }
+
+        .progress-container {
+            background: white;
+            border-radius: 15px;
+            padding: 30px;
+            max-width: 500px;
+            width: 90%;
+            box-shadow: 0 10px 40px rgba(0, 0, 0, 0.3);
+        }
+
+        .progress-header {
+            font-size: 18px;
+            font-weight: 600;
+            color: #333;
+            margin-bottom: 20px;
+            text-align: center;
+        }
+
+        .progress-bar-wrapper {
+            width: 100%;
+            height: 30px;
+            background: #e0e0e0;
+            border-radius: 15px;
+            overflow: hidden;
+            margin-bottom: 15px;
+            position: relative;
+        }
+
+        .progress-bar-fill {
+            height: 100%;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            border-radius: 15px;
+            transition: width 0.3s ease;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: white;
+            font-size: 12px;
+            font-weight: 600;
+        }
+
+        .progress-bar-indeterminate {
+            height: 100%;
+            background: linear-gradient(90deg, transparent, #667eea, transparent);
+            animation: progress-indeterminate 1.5s infinite;
+        }
+
+        @keyframes progress-indeterminate {
+            0% { transform: translateX(-100%); }
+            100% { transform: translateX(100%); }
+        }
+
+        .progress-info {
+            font-size: 14px;
+            color: #666;
+            text-align: center;
+        }
+
+        .progress-info .time-estimate {
+            font-weight: 600;
+            color: #667eea;
+        }
+
+        .progress-stats {
+            margin-top: 15px;
+            padding: 15px;
+            background: #f9f9f9;
+            border-radius: 8px;
+            font-size: 12px;
+            color: #666;
+        }
+
+        .progress-stats-row {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 5px;
+        }
+
         .modal {
             display: none;
             position: fixed;
@@ -743,6 +838,24 @@
         </div>
     </div>
 
+    <!-- Progress Bar Overlay -->
+    <div id="progressOverlay" class="progress-overlay">
+        <div class="progress-container">
+            <div class="progress-header" id="progressHeader">Generating Audio...</div>
+            <div class="progress-bar-wrapper">
+                <div class="progress-bar-fill" id="progressBarFill" style="width: 0%;">
+                    <span id="progressPercent"></span>
+                </div>
+            </div>
+            <div class="progress-info" id="progressInfo">
+                <div id="progressTime"></div>
+            </div>
+            <div class="progress-stats" id="progressStats" style="display: none;">
+                <!-- Stats will be populated dynamically -->
+            </div>
+        </div>
+    </div>
+
     <script>
         const API_URL = 'http://localhost:5000/api';
         let currentFiles = [];
@@ -754,6 +867,115 @@
         let fileChunks = {}; // Maps file index to chunk data
         let selectedChunks = {}; // Maps file index to selected chunk ID
         let chunkAudio = {}; // Maps "fileIndex_chunkId" to array of audio generations
+
+        // Progress tracking
+        let progressPollInterval = null;
+
+        // ===== PROGRESS BAR FUNCTIONS =====
+
+        function showProgressBar(charCount) {
+            const overlay = document.getElementById('progressOverlay');
+            const header = document.getElementById('progressHeader');
+            const progressBarFill = document.getElementById('progressBarFill');
+            const progressPercent = document.getElementById('progressPercent');
+            const progressTime = document.getElementById('progressTime');
+
+            header.textContent = `Generating Audio (${charCount} characters)...`;
+            progressBarFill.style.width = '0%';
+            progressPercent.textContent = '';
+            progressTime.textContent = 'Estimating time...';
+
+            overlay.classList.add('show');
+
+            // Start polling for progress
+            startProgressPolling();
+        }
+
+        function hideProgressBar() {
+            const overlay = document.getElementById('progressOverlay');
+            overlay.classList.remove('show');
+            stopProgressPolling();
+        }
+
+        function startProgressPolling() {
+            // Poll every 500ms
+            progressPollInterval = setInterval(async () => {
+                try {
+                    const response = await fetch(`${API_URL}/generation-progress`);
+                    const data = await response.json();
+
+                    if (data.in_progress) {
+                        updateProgressBar(data);
+                    } else {
+                        // Generation completed or not started
+                        stopProgressPolling();
+                    }
+                } catch (error) {
+                    console.error('Error polling progress:', error);
+                }
+            }, 500);
+        }
+
+        function stopProgressPolling() {
+            if (progressPollInterval) {
+                clearInterval(progressPollInterval);
+                progressPollInterval = null;
+            }
+        }
+
+        function updateProgressBar(progress) {
+            const progressBarFill = document.getElementById('progressBarFill');
+            const progressPercent = document.getElementById('progressPercent');
+            const progressTime = document.getElementById('progressTime');
+            const progressStats = document.getElementById('progressStats');
+
+            if (progress.progress_percent !== undefined) {
+                // We have an estimate
+                const percent = Math.min(100, progress.progress_percent);
+                progressBarFill.style.width = `${percent}%`;
+                progressPercent.textContent = `${percent.toFixed(0)}%`;
+
+                const elapsed = progress.elapsed_seconds;
+                const remaining = progress.remaining_seconds;
+
+                progressTime.innerHTML = `
+                    <div>Elapsed: ${elapsed}s</div>
+                    <div class="time-estimate">Estimated remaining: ${remaining}s</div>
+                `;
+
+                progressStats.style.display = 'block';
+                progressStats.innerHTML = `
+                    <div class="progress-stats-row">
+                        <span>Characters:</span>
+                        <span>${progress.char_count}</span>
+                    </div>
+                    <div class="progress-stats-row">
+                        <span>Based on:</span>
+                        <span>${progress.based_on_samples} previous generations</span>
+                    </div>
+                `;
+            } else {
+                // No estimate available yet - show indeterminate
+                progressBarFill.style.width = '100%';
+                progressBarFill.innerHTML = '<div class="progress-bar-indeterminate"></div>';
+
+                progressTime.innerHTML = `
+                    <div>Elapsed: ${progress.elapsed_seconds}s</div>
+                    <div>No estimate available yet (need historical data)</div>
+                `;
+
+                progressStats.style.display = 'block';
+                progressStats.innerHTML = `
+                    <div class="progress-stats-row">
+                        <span>Characters:</span>
+                        <span>${progress.char_count}</span>
+                    </div>
+                    <div style="font-style: italic; color: #999; margin-top: 10px;">
+                        After the first few generations, we'll be able to estimate time accurately.
+                    </div>
+                `;
+            }
+        }
 
         // Elements
         const folderPath = document.getElementById('folderPath');
@@ -1080,7 +1302,12 @@
             const exaggeration = document.getElementById(`exaggeration_${index}`).value;
             const cfgWeight = document.getElementById(`cfg_weight_${index}`).value;
 
+            // Get text to show progress bar
+            const text = await fileInfo.file.text();
+            const charCount = text.length;
+
             showStatus('Generating audio...', 'info');
+            showProgressBar(charCount);
 
             try {
                 const formData = new FormData();
@@ -1102,9 +1329,11 @@
                     throw new Error(data.error || `Server error: ${response.status}`);
                 }
 
+                hideProgressBar();
                 showStatus('Audio generated successfully!', 'success');
                 await loadGeneratedAudio(index, fileName);
             } catch (error) {
+                hideProgressBar();
                 console.error('Error generating audio:', error);
                 showStatus(`Failed: ${error.message}`, 'error');
             }
@@ -1470,7 +1699,10 @@
             const exaggeration = document.getElementById(`exaggeration_chunk_${fileIndex}_${chunkId}`).value;
             const cfgWeight = document.getElementById(`cfg_weight_chunk_${fileIndex}_${chunkId}`).value;
 
+            const charCount = chunk.text.length;
+
             showStatus(`Generating audio for chunk #${chunkId + 1}...`, 'info');
+            showProgressBar(charCount);
 
             try {
                 const formData = new FormData();
@@ -1494,6 +1726,7 @@
                     throw new Error(data.error || `Server error: ${response.status}`);
                 }
 
+                hideProgressBar();
                 showStatus(`Chunk #${chunkId + 1} audio generated successfully!`, 'success');
 
                 // Reload chunk audio
@@ -1507,6 +1740,7 @@
                     renderChunkDetails(fileIndex, chunkId);
                 }
             } catch (error) {
+                hideProgressBar();
                 console.error('Error generating chunk audio:', error);
                 showStatus(`Failed: ${error.message}`, 'error');
             }

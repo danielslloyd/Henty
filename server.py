@@ -8,6 +8,9 @@ import numpy as np
 from scipy.io import wavfile
 import re
 from pydub import AudioSegment
+import json
+import time
+import threading
 
 app = Flask(__name__)
 CORS(app)
@@ -18,8 +21,16 @@ class TextToAudioConverter:
         self.device = "cuda" if torch.cuda.is_available() else "cpu"
         self.audio_dir = "generated_audio"
         self.voice_samples_dir = "voice_samples"
+        self.stats_file = "generation_stats.json"
         os.makedirs(self.audio_dir, exist_ok=True)
         os.makedirs(self.voice_samples_dir, exist_ok=True)
+
+        # Generation tracking
+        self.current_generation = None
+        self.generation_lock = threading.Lock()
+
+        # Load existing stats or initialize
+        self.generation_stats = self.load_stats()
 
     def load_model(self):
         """Load the Chatterbox TTS model"""
@@ -28,6 +39,97 @@ class TextToAudioConverter:
             self.model = ChatterboxTTS.from_pretrained(device=self.device)
             print("Model loaded successfully!")
         return self.model
+
+    def load_stats(self):
+        """Load generation statistics from file"""
+        if os.path.exists(self.stats_file):
+            try:
+                with open(self.stats_file, 'r') as f:
+                    return json.load(f)
+            except Exception as e:
+                print(f"Error loading stats: {e}")
+                return []
+        return []
+
+    def save_stats(self):
+        """Save generation statistics to file"""
+        try:
+            with open(self.stats_file, 'w') as f:
+                json.dump(self.generation_stats, f, indent=2)
+        except Exception as e:
+            print(f"Error saving stats: {e}")
+
+    def get_gpu_usage(self):
+        """Get current GPU memory usage"""
+        if self.device == "cuda" and torch.cuda.is_available():
+            try:
+                gpu_mem_allocated = torch.cuda.memory_allocated(0) / (1024**3)  # GB
+                gpu_mem_reserved = torch.cuda.memory_reserved(0) / (1024**3)  # GB
+                gpu_utilization = torch.cuda.utilization(0) if hasattr(torch.cuda, 'utilization') else None
+                return {
+                    'memory_allocated_gb': round(gpu_mem_allocated, 2),
+                    'memory_reserved_gb': round(gpu_mem_reserved, 2),
+                    'utilization_percent': gpu_utilization
+                }
+            except Exception as e:
+                print(f"Error getting GPU stats: {e}")
+                return None
+        return None
+
+    def estimate_generation_time(self, char_count):
+        """Estimate generation time based on historical data"""
+        if not self.generation_stats:
+            return None
+
+        # Calculate average ms per character from recent generations (last 20)
+        recent_stats = self.generation_stats[-20:]
+        if not recent_stats:
+            return None
+
+        total_chars = sum(s['char_count'] for s in recent_stats)
+        total_time = sum(s['generation_time_ms'] for s in recent_stats)
+
+        if total_chars == 0:
+            return None
+
+        avg_ms_per_char = total_time / total_chars
+        estimated_ms = char_count * avg_ms_per_char
+
+        return {
+            'estimated_ms': round(estimated_ms),
+            'estimated_seconds': round(estimated_ms / 1000, 1),
+            'avg_ms_per_char': round(avg_ms_per_char, 2),
+            'based_on_samples': len(recent_stats)
+        }
+
+    def log_generation(self, char_count, audio_duration_sec, generation_time_ms, gpu_stats_before, gpu_stats_after):
+        """Log a generation event with all metrics"""
+        log_entry = {
+            'timestamp': int(time.time() * 1000),
+            'char_count': char_count,
+            'audio_duration_sec': round(audio_duration_sec, 2),
+            'generation_time_ms': generation_time_ms,
+            'chars_per_second': round(char_count / (generation_time_ms / 1000), 2),
+            'gpu_before': gpu_stats_before,
+            'gpu_after': gpu_stats_after
+        }
+
+        self.generation_stats.append(log_entry)
+
+        # Keep only last 100 entries to prevent file from growing too large
+        if len(self.generation_stats) > 100:
+            self.generation_stats = self.generation_stats[-100:]
+
+        self.save_stats()
+
+        print(f"\n=== Generation Stats ===")
+        print(f"Characters: {char_count}")
+        print(f"Audio Duration: {audio_duration_sec:.2f}s")
+        print(f"Generation Time: {generation_time_ms}ms ({generation_time_ms/1000:.2f}s)")
+        print(f"Speed: {log_entry['chars_per_second']:.2f} chars/sec")
+        if gpu_stats_after:
+            print(f"GPU Memory: {gpu_stats_after['memory_allocated_gb']:.2f} GB allocated")
+        print("========================\n")
 
     def find_txt_files(self, directory):
         """Find all .txt files in the given directory"""
@@ -267,6 +369,20 @@ class TextToAudioConverter:
     def generate_audio(self, text, output_path, audio_prompt_path=None, language_id="en", exaggeration=0.5, cfg_weight=0.5):
         """Generate audio from text using Chatterbox TTS"""
         try:
+            # Start timing and capture initial GPU stats
+            start_time = time.time()
+            gpu_stats_before = self.get_gpu_usage()
+            char_count = len(text)
+
+            # Set current generation info for progress tracking
+            with self.generation_lock:
+                self.current_generation = {
+                    'char_count': char_count,
+                    'start_time': start_time,
+                    'estimated_time': self.estimate_generation_time(char_count),
+                    'status': 'generating'
+                }
+
             model = self.load_model()
 
             # Prepare generation parameters
@@ -289,6 +405,8 @@ class TextToAudioConverter:
                 gen_params["language_id"] = language_id
 
             print(f"Generating with parameters: {gen_params}")
+            print(f"Text length: {char_count} characters")
+
             wav = model.generate(text, **gen_params)
             print(f"Generated wav type: {type(wav)}, shape: {wav.shape if hasattr(wav, 'shape') else 'N/A'}")
 
@@ -316,6 +434,9 @@ class TextToAudioConverter:
 
             print(f"Final audio shape: {wav_int16.shape}, Sample rate: {model.sr}, dtype: {wav_int16.dtype}")
 
+            # Calculate audio duration
+            audio_duration_sec = len(wav_int16) / model.sr
+
             # Use scipy.io.wavfile which is more reliable on Windows
             try:
                 wavfile.write(output_path, model.sr, wav_int16)
@@ -324,8 +445,29 @@ class TextToAudioConverter:
                 print(f"Error writing WAV file: {str(write_error)}")
                 raise
 
+            # End timing and capture final GPU stats
+            end_time = time.time()
+            generation_time_ms = int((end_time - start_time) * 1000)
+            gpu_stats_after = self.get_gpu_usage()
+
+            # Log the generation
+            self.log_generation(
+                char_count=char_count,
+                audio_duration_sec=audio_duration_sec,
+                generation_time_ms=generation_time_ms,
+                gpu_stats_before=gpu_stats_before,
+                gpu_stats_after=gpu_stats_after
+            )
+
+            # Clear current generation
+            with self.generation_lock:
+                self.current_generation = None
+
             return output_path
         except Exception as e:
+            # Clear current generation on error
+            with self.generation_lock:
+                self.current_generation = None
             print(f"Error generating audio: {str(e)}")
             raise
 
@@ -854,6 +996,102 @@ def generate_chunk():
         import traceback
         print(f"Error generating chunk audio: {str(e)}")
         print(traceback.format_exc())
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/generation-stats', methods=['GET'])
+def get_generation_stats():
+    """Get generation statistics and averages"""
+    try:
+        stats = converter.generation_stats[-50:]  # Last 50 generations
+
+        if not stats:
+            return jsonify({
+                'stats': [],
+                'averages': None
+            })
+
+        # Calculate averages
+        total_chars = sum(s['char_count'] for s in stats)
+        total_time = sum(s['generation_time_ms'] for s in stats)
+        total_audio = sum(s['audio_duration_sec'] for s in stats)
+
+        averages = {
+            'avg_chars': round(total_chars / len(stats)),
+            'avg_time_ms': round(total_time / len(stats)),
+            'avg_audio_duration': round(total_audio / len(stats), 2),
+            'avg_ms_per_char': round(total_time / total_chars, 2) if total_chars > 0 else 0,
+            'sample_count': len(stats)
+        }
+
+        return jsonify({
+            'stats': stats,
+            'averages': averages
+        })
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/generation-progress', methods=['GET'])
+def get_generation_progress():
+    """Get current generation progress"""
+    try:
+        with converter.generation_lock:
+            if converter.current_generation is None:
+                return jsonify({
+                    'in_progress': False
+                })
+
+            current = converter.current_generation.copy()
+
+        elapsed_time = time.time() - current['start_time']
+        estimated = current.get('estimated_time')
+
+        progress_data = {
+            'in_progress': True,
+            'char_count': current['char_count'],
+            'elapsed_ms': int(elapsed_time * 1000),
+            'elapsed_seconds': round(elapsed_time, 1)
+        }
+
+        if estimated:
+            progress_percent = min(100, (elapsed_time * 1000 / estimated['estimated_ms']) * 100)
+            remaining_ms = max(0, estimated['estimated_ms'] - (elapsed_time * 1000))
+
+            progress_data.update({
+                'estimated_total_ms': estimated['estimated_ms'],
+                'estimated_total_seconds': estimated['estimated_seconds'],
+                'remaining_ms': int(remaining_ms),
+                'remaining_seconds': round(remaining_ms / 1000, 1),
+                'progress_percent': round(progress_percent, 1),
+                'based_on_samples': estimated['based_on_samples']
+            })
+
+        return jsonify(progress_data)
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/estimate-time', methods=['POST'])
+def estimate_generation_time():
+    """Estimate generation time for given text"""
+    try:
+        data = request.json
+        text = data.get('text', '')
+        char_count = len(text)
+
+        estimate = converter.estimate_generation_time(char_count)
+
+        if estimate is None:
+            return jsonify({
+                'char_count': char_count,
+                'has_estimate': False,
+                'message': 'No historical data available yet'
+            })
+
+        return jsonify({
+            'char_count': char_count,
+            'has_estimate': True,
+            **estimate
+        })
+    except Exception as e:
         return jsonify({'error': str(e)}), 500
 
 @app.route('/api/stitch-audio', methods=['POST'])
