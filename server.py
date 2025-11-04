@@ -6,6 +6,8 @@ from chatterbox.tts import ChatterboxTTS
 import torch
 import numpy as np
 from scipy.io import wavfile
+import re
+from pydub import AudioSegment
 
 app = Flask(__name__)
 CORS(app)
@@ -52,6 +54,160 @@ class TextToAudioConverter:
                 return f.read()
         except Exception as e:
             return f"Error reading file: {str(e)}"
+
+    def smart_chunk_text(self, text, max_chunk_size=1000):
+        """
+        Smart text chunking that respects paragraph breaks, quotations, and sentence boundaries.
+        Returns a list of dicts with chunk metadata.
+        """
+        if len(text) <= max_chunk_size:
+            # Text is short enough, return as single chunk
+            return [{
+                'id': 0,
+                'text': text,
+                'nickname': text[:50].strip() + ('...' if len(text) > 50 else ''),
+                'start_pos': 0,
+                'end_pos': len(text)
+            }]
+
+        chunks = []
+        chunk_id = 0
+        current_pos = 0
+
+        # Split by double newlines (paragraphs) first
+        paragraphs = re.split(r'\n\s*\n', text)
+        current_chunk = ""
+        chunk_start = 0
+
+        for para in paragraphs:
+            para = para.strip()
+            if not para:
+                continue
+
+            # Check if adding this paragraph would exceed the limit
+            if len(current_chunk) + len(para) + 2 <= max_chunk_size:
+                if current_chunk:
+                    current_chunk += "\n\n" + para
+                else:
+                    current_chunk = para
+                    chunk_start = current_pos
+            else:
+                # Current paragraph is too large, need to finalize current chunk
+                if current_chunk:
+                    # Save current chunk
+                    nickname = current_chunk[:50].strip() + '...'
+                    chunks.append({
+                        'id': chunk_id,
+                        'text': current_chunk,
+                        'nickname': nickname,
+                        'start_pos': chunk_start,
+                        'end_pos': chunk_start + len(current_chunk)
+                    })
+                    chunk_id += 1
+
+                # Handle large paragraph that needs to be split
+                if len(para) > max_chunk_size:
+                    # Split by sentences
+                    sentences = re.split(r'([.!?]+\s+|[.!?]+$)', para)
+                    sentence_chunk = ""
+                    sentence_start = current_pos
+
+                    for i in range(0, len(sentences), 2):
+                        sentence = sentences[i]
+                        punctuation = sentences[i + 1] if i + 1 < len(sentences) else ''
+                        full_sentence = sentence + punctuation
+
+                        if len(sentence_chunk) + len(full_sentence) <= max_chunk_size:
+                            if not sentence_chunk:
+                                sentence_start = current_pos
+                            sentence_chunk += full_sentence
+                        else:
+                            if sentence_chunk:
+                                nickname = sentence_chunk[:50].strip() + '...'
+                                chunks.append({
+                                    'id': chunk_id,
+                                    'text': sentence_chunk.strip(),
+                                    'nickname': nickname,
+                                    'start_pos': sentence_start,
+                                    'end_pos': sentence_start + len(sentence_chunk)
+                                })
+                                chunk_id += 1
+
+                            # Start new chunk
+                            sentence_chunk = full_sentence
+                            sentence_start = current_pos
+
+                        current_pos += len(full_sentence)
+
+                    # Add remaining sentences
+                    if sentence_chunk:
+                        nickname = sentence_chunk[:50].strip() + '...'
+                        chunks.append({
+                            'id': chunk_id,
+                            'text': sentence_chunk.strip(),
+                            'nickname': nickname,
+                            'start_pos': sentence_start,
+                            'end_pos': sentence_start + len(sentence_chunk)
+                        })
+                        chunk_id += 1
+
+                    current_chunk = ""
+                else:
+                    # Paragraph fits in a new chunk
+                    current_chunk = para
+                    chunk_start = current_pos
+
+            current_pos += len(para) + 2  # +2 for \n\n
+
+        # Add final chunk if any
+        if current_chunk:
+            nickname = current_chunk[:50].strip() + ('...' if len(current_chunk) > 50 else '')
+            chunks.append({
+                'id': chunk_id,
+                'text': current_chunk,
+                'nickname': nickname,
+                'start_pos': chunk_start,
+                'end_pos': chunk_start + len(current_chunk)
+            })
+
+        return chunks
+
+    def stitch_audio_files(self, audio_paths, output_path):
+        """
+        Stitch multiple audio files together into a single file.
+        Returns the path to the stitched audio file.
+        """
+        try:
+            if not audio_paths:
+                raise ValueError("No audio files provided for stitching")
+
+            # Load all audio files
+            combined = None
+            for audio_path in audio_paths:
+                if not os.path.exists(audio_path):
+                    print(f"Warning: Audio file not found: {audio_path}")
+                    continue
+
+                audio_segment = AudioSegment.from_wav(audio_path)
+
+                if combined is None:
+                    combined = audio_segment
+                else:
+                    # Add a small pause between chunks (100ms)
+                    silence = AudioSegment.silent(duration=100)
+                    combined = combined + silence + audio_segment
+
+            if combined is None:
+                raise ValueError("No valid audio files found to stitch")
+
+            # Export the combined audio
+            combined.export(output_path, format="wav")
+            print(f"Successfully stitched {len(audio_paths)} audio files to: {output_path}")
+            return output_path
+
+        except Exception as e:
+            print(f"Error stitching audio files: {str(e)}")
+            raise
 
     def ensure_valid_wav_format(self, wav_path):
         """Ensure a WAV file is in a format librosa can read"""
@@ -553,6 +709,7 @@ def set_best_take():
         data = request.json
         txt_filename = data.get('txt_filename')
         audio_filename = data.get('audio_filename')
+        chunk_id = data.get('chunk_id', None)
 
         if not txt_filename or not audio_filename:
             return jsonify({'error': 'txt_filename and audio_filename are required'}), 400
@@ -560,13 +717,17 @@ def set_best_take():
         base_name = os.path.splitext(txt_filename)[0]
         updated = False
 
-        # Update all metadata files for this text file
+        # Update all metadata files for this text file (and chunk if specified)
         for filename in os.listdir(converter.audio_dir):
             if filename.startswith(base_name) and filename.endswith('.json'):
                 metadata_path = os.path.join(converter.audio_dir, filename)
 
                 with open(metadata_path, 'r') as f:
                     metadata = json.load(f)
+
+                # If chunk_id is specified, only update files for that chunk
+                if chunk_id is not None and metadata.get('chunk_id') != chunk_id:
+                    continue
 
                 # Set is_best_take based on whether this is the selected audio file
                 if metadata['audio_file'] == audio_filename:
@@ -587,6 +748,204 @@ def set_best_take():
     except Exception as e:
         import traceback
         print(f"Error setting best take: {str(e)}")
+        print(traceback.format_exc())
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/chunk-text', methods=['POST'])
+def chunk_text():
+    """Chunk text into manageable pieces"""
+    try:
+        data = request.json
+        text = data.get('text', '')
+        max_chunk_size = data.get('max_chunk_size', 1000)
+
+        if not text:
+            return jsonify({'error': 'Text is required'}), 400
+
+        chunks = converter.smart_chunk_text(text, max_chunk_size)
+        return jsonify({'chunks': chunks})
+
+    except Exception as e:
+        import traceback
+        print(f"Error chunking text: {str(e)}")
+        print(traceback.format_exc())
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/generate-chunk', methods=['POST'])
+def generate_chunk():
+    """Generate audio for a specific chunk of text"""
+    try:
+        import json
+        import time
+
+        print(f"\n=== Received chunk generation request ===")
+
+        if 'file' not in request.files:
+            return jsonify({'error': 'No file provided'}), 400
+
+        file = request.files['file']
+        filename = request.form.get('filename', file.filename)
+        chunk_id = int(request.form.get('chunk_id', 0))
+        chunk_text = request.form.get('chunk_text', '')
+
+        # Get optional parameters
+        language_id = request.form.get('language_id', 'en')
+        exaggeration = float(request.form.get('exaggeration', 0.5))
+        cfg_weight = float(request.form.get('cfg_weight', 0.5))
+        voice_sample_name = request.form.get('voice_sample', None)
+
+        # Construct voice sample path
+        audio_prompt_path = None
+        if voice_sample_name and voice_sample_name != 'none':
+            audio_prompt_path = os.path.join(converter.voice_samples_dir, voice_sample_name)
+            if not os.path.exists(audio_prompt_path):
+                print(f"Warning: Voice sample not found: {audio_prompt_path}")
+                audio_prompt_path = None
+
+        print(f"Generating chunk {chunk_id} for: {filename}")
+        print(f"Chunk text length: {len(chunk_text)} characters")
+        print(f"Parameters - Language: {language_id}, Exaggeration: {exaggeration}, CFG Weight: {cfg_weight}")
+
+        # Generate audio filename with timestamp and chunk ID
+        base_name = os.path.splitext(os.path.basename(filename))[0]
+        timestamp = int(time.time() * 1000)
+        audio_filename = f"{base_name}_chunk{chunk_id}_{timestamp}.wav"
+        audio_path = os.path.join(converter.audio_dir, audio_filename)
+
+        # Save metadata
+        metadata_filename = f"{base_name}_chunk{chunk_id}_{timestamp}.json"
+        metadata_path = os.path.join(converter.audio_dir, metadata_filename)
+        metadata = {
+            'text_file': filename,
+            'chunk_id': chunk_id,
+            'timestamp': timestamp,
+            'language_id': language_id,
+            'exaggeration': exaggeration,
+            'cfg_weight': cfg_weight,
+            'voice_sample': voice_sample_name,
+            'audio_file': audio_filename,
+            'text_preview': chunk_text[:200],
+            'is_best_take': False
+        }
+
+        # Generate audio
+        print(f"Generating audio for chunk {chunk_id}...")
+        converter.generate_audio(
+            chunk_text,
+            audio_path,
+            audio_prompt_path=audio_prompt_path,
+            language_id=language_id,
+            exaggeration=exaggeration,
+            cfg_weight=cfg_weight
+        )
+        print(f"Chunk audio generated successfully!")
+
+        # Save metadata
+        with open(metadata_path, 'w') as f:
+            json.dump(metadata, f, indent=2)
+
+        return jsonify({
+            'audio_url': f'/api/audio/{audio_filename}',
+            'audio_path': audio_path,
+            'metadata': metadata
+        })
+
+    except Exception as e:
+        import traceback
+        print(f"Error generating chunk audio: {str(e)}")
+        print(traceback.format_exc())
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/stitch-audio', methods=['POST'])
+def stitch_audio():
+    """Stitch together the best takes from all chunks"""
+    try:
+        import json
+        import time
+
+        data = request.json
+        txt_filename = data.get('txt_filename')
+        chunk_ids = data.get('chunk_ids', [])
+
+        if not txt_filename:
+            return jsonify({'error': 'txt_filename is required'}), 400
+
+        base_name = os.path.splitext(txt_filename)[0]
+        audio_paths = []
+
+        # Find the best take for each chunk in order
+        for chunk_id in chunk_ids:
+            best_audio = None
+            best_timestamp = 0
+
+            # Search for the best take for this chunk
+            for filename in os.listdir(converter.audio_dir):
+                if filename.startswith(base_name) and f'_chunk{chunk_id}_' in filename and filename.endswith('.json'):
+                    metadata_path = os.path.join(converter.audio_dir, filename)
+
+                    with open(metadata_path, 'r') as f:
+                        metadata = json.load(f)
+
+                    if metadata.get('is_best_take', False):
+                        audio_file = metadata['audio_file']
+                        audio_path = os.path.join(converter.audio_dir, audio_file)
+                        if os.path.exists(audio_path):
+                            best_audio = audio_path
+                            break
+
+            # If no best take found, use the most recent one
+            if not best_audio:
+                for filename in os.listdir(converter.audio_dir):
+                    if filename.startswith(base_name) and f'_chunk{chunk_id}_' in filename and filename.endswith('.json'):
+                        metadata_path = os.path.join(converter.audio_dir, filename)
+
+                        with open(metadata_path, 'r') as f:
+                            metadata = json.load(f)
+
+                        if metadata['timestamp'] > best_timestamp:
+                            best_timestamp = metadata['timestamp']
+                            audio_file = metadata['audio_file']
+                            audio_path = os.path.join(converter.audio_dir, audio_file)
+                            if os.path.exists(audio_path):
+                                best_audio = audio_path
+
+            if best_audio:
+                audio_paths.append(best_audio)
+            else:
+                return jsonify({'error': f'No audio found for chunk {chunk_id}'}), 400
+
+        # Create stitched audio filename
+        timestamp = int(time.time() * 1000)
+        stitched_filename = f"{base_name}_stitched_{timestamp}.wav"
+        stitched_path = os.path.join(converter.audio_dir, stitched_filename)
+
+        # Stitch the audio files
+        converter.stitch_audio_files(audio_paths, stitched_path)
+
+        # Save metadata for stitched audio
+        metadata_filename = f"{base_name}_stitched_{timestamp}.json"
+        metadata_path = os.path.join(converter.audio_dir, metadata_filename)
+        metadata = {
+            'text_file': txt_filename,
+            'timestamp': timestamp,
+            'audio_file': stitched_filename,
+            'is_stitched': True,
+            'chunk_count': len(chunk_ids),
+            'chunk_ids': chunk_ids
+        }
+
+        with open(metadata_path, 'w') as f:
+            json.dump(metadata, f, indent=2)
+
+        return jsonify({
+            'audio_url': f'/api/audio/{stitched_filename}',
+            'audio_path': stitched_path,
+            'metadata': metadata
+        })
+
+    except Exception as e:
+        import traceback
+        print(f"Error stitching audio: {str(e)}")
         print(traceback.format_exc())
         return jsonify({'error': str(e)}), 500
 
