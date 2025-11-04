@@ -6,7 +6,9 @@
       "Bash(python3:*)",
       "Bash(py:*)",
       "Bash(conda create:*)",
-      "Bash(python:*)"
+      "Bash(python:*)",
+      "Bash(dir:*)",
+      "Bash(del nul)"
     ],
     "deny": [],
     "ask": []

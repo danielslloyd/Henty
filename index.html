@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Text to Audio Converter - Chatterbox TTS</title>
+    <title>Chatterbox TTS - Professional Voice Synthesis</title>
     <style>
         * {
             margin: 0;
@@ -19,24 +19,20 @@
         }
 
         .container {
-            max-width: 1400px;
+            max-width: 1600px;
             margin: 0 auto;
-            background: white;
-            border-radius: 12px;
-            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
-            overflow: hidden;
         }
 
         .header {
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            color: white;
-            padding: 30px;
             text-align: center;
+            color: white;
+            margin-bottom: 30px;
         }
 
         .header h1 {
             font-size: 2.5em;
             margin-bottom: 10px;
+            text-shadow: 2px 2px 4px rgba(0,0,0,0.2);
         }
 
         .header p {
@@ -44,66 +40,66 @@
             opacity: 0.9;
         }
 
-        .controls {
-            padding: 30px;
-            background: #f8f9fa;
-            border-bottom: 1px solid #e0e0e0;
-        }
-
-        .control-group {
+        .main-controls {
+            background: white;
+            border-radius: 15px;
+            padding: 25px;
             margin-bottom: 20px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.2);
         }
 
-        .control-group:last-child {
+        .control-row {
+            display: flex;
+            gap: 15px;
+            align-items: flex-start;
+            margin-bottom: 15px;
+        }
+
+        .control-row:last-child {
             margin-bottom: 0;
         }
 
-        label {
-            display: block;
-            margin-bottom: 8px;
+        .control-row label {
+            font-size: 13px;
             font-weight: 600;
-            color: #333;
+            color: #666;
+            margin-bottom: 8px;
+            display: block;
         }
 
-        input[type="text"], select {
+        .folder-select {
+            flex: 1;
+        }
+
+        .voice-samples-section {
+            flex: 1;
+        }
+
+        .folder-select input[type="text"] {
             width: 100%;
-            padding: 12px;
-            border: 2px solid #ddd;
-            border-radius: 6px;
-            font-size: 16px;
+            padding: 12px 20px;
+            border: 2px solid #e0e0e0;
+            border-radius: 8px;
+            font-size: 14px;
             transition: border-color 0.3s;
         }
 
-        input[type="text"]:focus, select:focus {
+        .folder-select input[type="text"]:focus {
             outline: none;
             border-color: #667eea;
         }
 
-        input[type="file"] {
-            display: none;
-        }
-
-        .browse-btn-wrapper {
-            position: relative;
-            display: inline-block;
-            width: 100%;
-        }
-
-        .button-group {
-            display: flex;
-            gap: 10px;
-            margin-top: 15px;
-        }
-
-        button {
-            padding: 12px 24px;
+        .btn {
+            padding: 12px 30px;
             border: none;
-            border-radius: 6px;
-            font-size: 16px;
+            border-radius: 8px;
+            font-size: 14px;
             font-weight: 600;
             cursor: pointer;
             transition: all 0.3s;
-            flex: 1;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            white-space: nowrap;
         }
 
         .btn-primary {
@@ -117,579 +113,818 @@
         }
 
         .btn-secondary {
-            background: #6c757d;
-            color: white;
+            background: #f5f5f5;
+            color: #333;
         }
 
         .btn-secondary:hover {
-            background: #5a6268;
-            transform: translateY(-2px);
+            background: #e0e0e0;
         }
 
-        button:disabled {
-            opacity: 0.6;
-            cursor: not-allowed;
-            transform: none !important;
+        .btn-small {
+            padding: 8px 16px;
+            font-size: 12px;
         }
 
-        .status {
-            padding: 12px;
-            margin-top: 15px;
-            border-radius: 6px;
-            font-size: 14px;
-            display: none;
-        }
-
-        .status.success {
-            background: #d4edda;
-            color: #155724;
-            border: 1px solid #c3e6cb;
-        }
-
-        .status.error {
-            background: #f8d7da;
-            color: #721c24;
-            border: 1px solid #f5c6cb;
-        }
-
-        .status.info {
-            background: #d1ecf1;
-            color: #0c5460;
-            border: 1px solid #bee5eb;
-        }
-
-        .content {
-            display: grid;
-            grid-template-columns: 1fr 1fr;
-            gap: 30px;
-            padding: 30px;
-        }
-
-        .panel {
-            background: #f8f9fa;
+        .voice-samples-library {
+            background: #f9f9f9;
+            border: 2px solid #e0e0e0;
             border-radius: 8px;
-            padding: 20px;
-            min-height: 500px;
-        }
-
-        .panel h2 {
-            margin-bottom: 15px;
-            color: #333;
-            font-size: 1.5em;
-        }
-
-        .text-content {
-            width: 100%;
-            height: 450px;
             padding: 15px;
-            border: 2px solid #ddd;
-            border-radius: 6px;
-            font-family: 'Courier New', monospace;
-            font-size: 14px;
-            line-height: 1.6;
-            resize: none;
+            max-height: 200px;
+            overflow-y: auto;
+        }
+
+        .voice-sample-item {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            padding: 8px;
             background: white;
+            border-radius: 6px;
+            margin-bottom: 8px;
+        }
+
+        .voice-sample-item:last-child {
+            margin-bottom: 0;
+        }
+
+        .voice-sample-name {
+            flex: 1;
+            font-size: 13px;
+            color: #333;
+        }
+
+        .voice-sample-controls {
+            display: flex;
+            gap: 5px;
+        }
+
+        .status-bar {
+            background: white;
+            border-radius: 10px;
+            padding: 15px 20px;
+            margin-bottom: 20px;
+            display: none;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+        }
+
+        .status-bar.show {
+            display: block;
+        }
+
+        .status-bar.success { background: #4caf50; color: white; }
+        .status-bar.error { background: #f44336; color: white; }
+        .status-bar.info { background: #2196f3; color: white; }
+
+        .files-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(400px, 1fr));
+            gap: 20px;
+        }
+
+        .file-bubble {
+            background: white;
+            border-radius: 15px;
+            padding: 20px;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+            transition: all 0.3s;
+        }
+
+        .file-bubble.expanded {
+            grid-column: 1 / -1;
+        }
+
+        .file-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 15px;
+            cursor: pointer;
+        }
+
+        .file-title {
+            font-size: 16px;
+            font-weight: 600;
+            color: #333;
+            flex: 1;
+        }
+
+        .expand-icon {
+            font-size: 20px;
+            color: #667eea;
+            user-select: none;
+        }
+
+        .generated-audio-list {
+            margin-top: 15px;
+        }
+
+        .audio-item {
+            background: #f9f9f9;
+            border-radius: 8px;
+            padding: 12px;
+            margin-bottom: 10px;
+        }
+
+        .audio-item-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 8px;
+        }
+
+        .audio-item-title {
+            font-size: 13px;
+            font-weight: 600;
+            color: #555;
+        }
+
+        .audio-item-params {
+            font-size: 11px;
+            color: #888;
+            margin-bottom: 8px;
         }
 
         .audio-player {
             width: 100%;
-            margin-top: 20px;
         }
 
-        .audio-placeholder {
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            height: 450px;
-            background: white;
-            border: 2px dashed #ddd;
-            border-radius: 6px;
-            color: #999;
-            font-size: 18px;
-        }
-
-        .loading {
+        .file-expanded-content {
             display: none;
-            text-align: center;
-            padding: 20px;
         }
 
-        .loading.active {
+        .file-bubble.expanded .file-expanded-content {
             display: block;
         }
 
-        .spinner {
-            border: 4px solid #f3f3f3;
-            border-top: 4px solid #667eea;
+        .content-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 20px;
+            margin-top: 20px;
+        }
+
+        .text-display {
+            background: #f9f9f9;
+            border: 2px solid #e0e0e0;
+            border-radius: 8px;
+            padding: 15px;
+            max-height: 300px;
+            overflow-y: auto;
+            font-family: 'Courier New', monospace;
+            font-size: 13px;
+            line-height: 1.6;
+            white-space: pre-wrap;
+        }
+
+        .controls-panel {
+            background: #f9f9f9;
+            border: 2px solid #e0e0e0;
+            border-radius: 8px;
+            padding: 20px;
+        }
+
+        .control-group {
+            margin-bottom: 20px;
+        }
+
+        .control-group:last-child {
+            margin-bottom: 0;
+        }
+
+        .control-group label {
+            display: block;
+            font-size: 13px;
+            font-weight: 600;
+            color: #333;
+            margin-bottom: 8px;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+        .control-group input[type="range"] {
+            width: 100%;
+            height: 6px;
+            border-radius: 3px;
+            background: #e0e0e0;
+            outline: none;
+            -webkit-appearance: none;
+        }
+
+        .control-group input[type="range"]::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            width: 18px;
+            height: 18px;
             border-radius: 50%;
-            width: 40px;
-            height: 40px;
-            animation: spin 1s linear infinite;
-            margin: 0 auto 15px;
+            background: #667eea;
+            cursor: pointer;
+        }
+
+        .control-group input[type="range"]::-moz-range-thumb {
+            width: 18px;
+            height: 18px;
+            border-radius: 50%;
+            background: #667eea;
+            cursor: pointer;
+            border: none;
+        }
+
+        .control-group select {
+            width: 100%;
+            padding: 10px;
+            border: 2px solid #e0e0e0;
+            border-radius: 6px;
+            font-size: 14px;
+            background: white;
+            cursor: pointer;
+        }
+
+        .range-value {
+            display: inline-block;
+            float: right;
+            background: #667eea;
+            color: white;
+            padding: 2px 8px;
+            border-radius: 4px;
+            font-size: 12px;
+            font-weight: 600;
+        }
+
+        input[type="file"] {
+            display: none;
+        }
+
+        .empty-state {
+            text-align: center;
+            padding: 60px 20px;
+            color: white;
+        }
+
+        .modal {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0,0,0,0.7);
+            z-index: 1000;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .modal.show {
+            display: flex;
+        }
+
+        .modal-content {
+            background: white;
+            border-radius: 15px;
+            padding: 30px;
+            max-width: 500px;
+            width: 90%;
+        }
+
+        .modal-header {
+            font-size: 20px;
+            font-weight: 600;
+            margin-bottom: 20px;
+        }
+
+        .modal-body input {
+            width: 100%;
+            padding: 12px;
+            border: 2px solid #e0e0e0;
+            border-radius: 8px;
+            font-size: 14px;
+            margin-bottom: 15px;
+        }
+
+        .modal-footer {
+            display: flex;
+            gap: 10px;
+            justify-content: flex-end;
+        }
+
+        .recording-controls {
+            display: flex;
+            gap: 10px;
+            align-items: center;
+            margin-top: 10px;
+        }
+
+        .recording-indicator {
+            width: 12px;
+            height: 12px;
+            background: red;
+            border-radius: 50%;
+            animation: pulse 1s infinite;
+        }
+
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.3; }
+        }
+
+        .loading-spinner {
+            display: inline-block;
+            width: 20px;
+            height: 20px;
+            border: 3px solid rgba(255,255,255,.3);
+            border-radius: 50%;
+            border-top-color: white;
+            animation: spin 1s ease-in-out infinite;
         }
 
         @keyframes spin {
-            0% { transform: rotate(0deg); }
-            100% { transform: rotate(360deg); }
-        }
-
-        @media (max-width: 968px) {
-            .content {
-                grid-template-columns: 1fr;
-            }
+            to { transform: rotate(360deg); }
         }
     </style>
 </head>
 <body>
     <div class="container">
         <div class="header">
-            <h1>Text to Audio Converter</h1>
-            <p>Convert text files to audio using Chatterbox TTS from Hugging Face</p>
+            <h1>🎙️ Chatterbox TTS</h1>
+            <p>Professional Voice Synthesis with Multiple Generations</p>
         </div>
 
-        <div class="controls">
-            <div class="control-group">
-                <label for="directory">Directory Path</label>
-                <div style="display: flex; gap: 10px;">
-                    <input type="text" id="directory" placeholder="Click 'Browse Folder' or enter path manually" value="" readonly style="flex: 1;">
-                    <button class="btn-secondary" id="browseFolderBtn" style="flex: 0 0 auto; min-width: 150px;">Browse Folder</button>
+        <div class="main-controls">
+            <div class="control-row">
+                <div class="folder-select">
+                    <label>Text Files Folder</label>
+                    <div style="display: flex; gap: 10px;">
+                        <input type="text" id="folderPath" placeholder="No folder selected" readonly>
+                        <button class="btn btn-primary" id="browseFolderBtn">Browse</button>
+                    </div>
+                    <input type="file" id="folderInput" webkitdirectory directory multiple>
                 </div>
-                <input type="file" id="folderInput" webkitdirectory directory multiple style="display: none;">
-            </div>
 
-            <div class="control-group">
-                <label for="fileSelect">Select Text File</label>
-                <select id="fileSelect" disabled>
-                    <option value="">No files loaded</option>
-                </select>
+                <div class="voice-samples-section">
+                    <label>Voice Samples Library</label>
+                    <div style="display: flex; gap: 10px; margin-bottom: 10px;">
+                        <button class="btn btn-secondary" id="uploadVoiceBtn">Upload Audio</button>
+                        <button class="btn btn-secondary" id="recordVoiceBtn">Record</button>
+                        <button class="btn btn-secondary" id="refreshVoicesBtn">Refresh</button>
+                    </div>
+                    <div class="voice-samples-library" id="voiceSamplesList">
+                        <p style="color: #999; font-size: 13px; text-align: center;">No voice samples yet</p>
+                    </div>
+                    <input type="file" id="voiceUploadInput" accept="audio/*">
+                </div>
             </div>
-
-            <div class="button-group">
-                <button class="btn-primary" id="generateAllBtn" disabled>Generate Audio for All Files</button>
-            </div>
-
-            <div class="status" id="status"></div>
         </div>
 
-        <div class="loading" id="loading">
-            <div class="spinner"></div>
-            <p>Processing...</p>
-        </div>
+        <div class="status-bar" id="statusBar"></div>
 
-        <div class="content">
-            <div class="panel">
-                <h2>Text Content</h2>
-                <textarea class="text-content" id="textContent" readonly placeholder="Select a file to view its content..."></textarea>
+        <div class="files-grid" id="filesContainer">
+            <div class="empty-state">
+                <h2>No Files Loaded</h2>
+                <p>Click "Browse" to select a directory with .txt files</p>
             </div>
+        </div>
+    </div>
 
-            <div class="panel">
-                <h2>Generated Audio</h2>
-                <div id="audioContainer">
-                    <div class="audio-placeholder">
-                        Select a file to generate and play audio
+    <!-- Upload Voice Modal -->
+    <div class="modal" id="uploadModal">
+        <div class="modal-content">
+            <div class="modal-header">Upload Voice Sample</div>
+            <div class="modal-body">
+                <label>File Name:</label>
+                <input type="text" id="voiceFileName" placeholder="e.g., my_voice.wav">
+                <p style="font-size: 12px; color: #666;">Selected file: <span id="selectedFileName">None</span></p>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-secondary" onclick="closeUploadModal()">Cancel</button>
+                <button class="btn btn-primary" onclick="uploadVoiceSample()">Upload</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Record Voice Modal -->
+    <div class="modal" id="recordModal">
+        <div class="modal-content">
+            <div class="modal-header">Record Voice Sample</div>
+            <div class="modal-body">
+                <label>Recording Name:</label>
+                <input type="text" id="recordingName" placeholder="e.g., my_recording.wav">
+                <div class="recording-controls">
+                    <button class="btn btn-primary btn-small" id="startRecordBtn">Start Recording</button>
+                    <button class="btn btn-secondary btn-small" id="stopRecordBtn" disabled>Stop</button>
+                    <div id="recordingIndicator" style="display: none;">
+                        <div class="recording-indicator"></div>
                     </div>
                 </div>
+                <audio id="recordingPreview" controls style="width: 100%; margin-top: 15px; display: none;"></audio>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-secondary" onclick="closeRecordModal()">Cancel</button>
+                <button class="btn btn-primary" id="saveRecordBtn" disabled onclick="saveRecording()">Save</button>
             </div>
         </div>
     </div>
 
     <script>
         const API_URL = 'http://localhost:5000/api';
-
         let currentFiles = [];
-        let currentDirectory = '';
+        let voiceSamples = [];
+        let mediaRecorder;
+        let recordedChunks = [];
 
         // Elements
-        const directoryInput = document.getElementById('directory');
-        const fileSelect = document.getElementById('fileSelect');
+        const folderPath = document.getElementById('folderPath');
         const browseFolderBtn = document.getElementById('browseFolderBtn');
         const folderInput = document.getElementById('folderInput');
-        const generateAllBtn = document.getElementById('generateAllBtn');
-        const textContent = document.getElementById('textContent');
-        const audioContainer = document.getElementById('audioContainer');
-        const statusDiv = document.getElementById('status');
-        const loadingDiv = document.getElementById('loading');
+        const statusBar = document.getElementById('statusBar');
+        const filesContainer = document.getElementById('filesContainer');
+        const voiceSamplesList = document.getElementById('voiceSamplesList');
+        const uploadVoiceBtn = document.getElementById('uploadVoiceBtn');
+        const recordVoiceBtn = document.getElementById('recordVoiceBtn');
+        const refreshVoicesBtn = document.getElementById('refreshVoicesBtn');
+        const voiceUploadInput = document.getElementById('voiceUploadInput');
 
         // Show status message
         function showStatus(message, type = 'info') {
             console.log(`[Status ${type}]:`, message);
-            statusDiv.textContent = message;
-            statusDiv.className = `status ${type}`;
-            statusDiv.style.display = 'block';
-            // Don't auto-hide error messages
+            statusBar.textContent = message;
+            statusBar.className = `status-bar show ${type}`;
+
             if (type !== 'error') {
                 setTimeout(() => {
-                    statusDiv.style.display = 'none';
-                }, 10000);
+                    statusBar.classList.remove('show');
+                }, 5000);
             }
         }
 
-        // Show loading
-        function setLoading(isLoading) {
-            if (isLoading) {
-                loadingDiv.classList.add('active');
-            } else {
-                loadingDiv.classList.remove('active');
-            }
-        }
-
-        // Scan directory for text files
-        async function scanDirectory() {
-            const directory = directoryInput.value.trim();
-            if (!directory) {
-                showStatus('Please enter a directory path', 'error');
-                return;
-            }
-
-            setLoading(true);
+        // Load voice samples
+        async function loadVoiceSamples() {
             try {
-                const response = await fetch(`${API_URL}/scan`, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ directory })
-                });
-
+                const response = await fetch(`${API_URL}/voice-samples`);
                 const data = await response.json();
-
-                if (!response.ok) {
-                    throw new Error(data.error || 'Failed to scan directory');
-                }
-
-                currentFiles = data.files;
-                currentDirectory = directory;
-
-                // Update file select
-                fileSelect.innerHTML = '';
-                if (currentFiles.length === 0) {
-                    fileSelect.innerHTML = '<option value="">No .txt files found</option>';
-                    fileSelect.disabled = true;
-                    generateAllBtn.disabled = true;
-                    showStatus('No .txt files found in directory', 'info');
-                } else {
-                    currentFiles.forEach(file => {
-                        const option = document.createElement('option');
-                        option.value = file.path;
-                        option.textContent = file.name;
-                        fileSelect.appendChild(option);
-                    });
-                    fileSelect.disabled = false;
-                    generateAllBtn.disabled = false;
-                    showStatus(`Found ${currentFiles.length} text file(s)`, 'success');
-
-                    // Automatically load first file
-                    if (currentFiles.length > 0) {
-                        loadFile(currentFiles[0].path);
-                    }
-                }
+                voiceSamples = data.samples || [];
+                renderVoiceSamples();
             } catch (error) {
-                showStatus(`Error: ${error.message}`, 'error');
-                fileSelect.disabled = true;
-                generateAllBtn.disabled = true;
-            } finally {
-                setLoading(false);
+                console.error('Error loading voice samples:', error);
             }
         }
 
-        // Load file content and generate audio
-        async function loadFile(filePath) {
-            if (!filePath) return;
+        // Render voice samples
+        function renderVoiceSamples() {
+            if (voiceSamples.length === 0) {
+                voiceSamplesList.innerHTML = '<p style="color: #999; font-size: 13px; text-align: center;">No voice samples yet</p>';
+                return;
+            }
 
-            setLoading(true);
-            textContent.value = 'Loading...';
-            audioContainer.innerHTML = '<div class="audio-placeholder">Generating audio...</div>';
-
-            try {
-                // Read text content
-                const textResponse = await fetch(`${API_URL}/read`, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ file_path: filePath })
-                });
-
-                const textData = await textResponse.json();
-
-                if (!textResponse.ok) {
-                    throw new Error(textData.error || 'Failed to read file');
-                }
-
-                textContent.value = textData.content;
-
-                // Generate audio
-                const audioResponse = await fetch(`${API_URL}/generate`, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ file_path: filePath })
-                });
-
-                const audioData = await audioResponse.json();
-
-                if (!audioResponse.ok) {
-                    throw new Error(audioData.error || 'Failed to generate audio');
-                }
-
-                // Display audio player
-                const fullAudioUrl = `http://localhost:5000${audioData.audio_url}`;
-                audioContainer.innerHTML = `
-                    <audio controls class="audio-player">
-                        <source src="${fullAudioUrl}" type="audio/wav">
-                        Your browser does not support the audio element.
-                    </audio>
-                    <div style="margin-top: 15px; padding: 10px; background: #e7f3ff; border-radius: 6px; font-size: 14px;">
-                        <strong>Audio file:</strong> ${audioData.audio_url.split('/').pop()}
+            voiceSamplesList.innerHTML = voiceSamples.map(sample => `
+                <div class="voice-sample-item">
+                    <div class="voice-sample-name">${sample.name}</div>
+                    <div class="voice-sample-controls">
+                        <audio controls style="height: 30px;">
+                            <source src="http://localhost:5000${sample.url}" type="audio/wav">
+                        </audio>
                     </div>
-                `;
-
-                showStatus('Audio generated successfully!', 'success');
-            } catch (error) {
-                showStatus(`Error: ${error.message}`, 'error');
-                audioContainer.innerHTML = `<div class="audio-placeholder">Error generating audio</div>`;
-            } finally {
-                setLoading(false);
-            }
+                </div>
+            `).join('');
         }
 
-        // Generate audio for all files
-        async function generateAllAudio() {
-            if (!currentFiles || currentFiles.length === 0) {
-                showStatus('Please select a folder first', 'error');
-                return;
-            }
+        // Handle folder browse
+        browseFolderBtn.addEventListener('click', () => folderInput.click());
 
-            if (!confirm(`Generate audio for all ${currentFiles.length} file(s)?`)) {
-                return;
-            }
-
-            setLoading(true);
-            generateAllBtn.disabled = true;
-
-            try {
-                // Check if files are from browser selection
-                const hasBrowserFiles = currentFiles[0] && currentFiles[0].file;
-
-                if (hasBrowserFiles) {
-                    // Process browser-selected files
-                    let successful = 0;
-                    let failed = 0;
-                    let errors = [];
-
-                    console.log(`Starting batch processing of ${currentFiles.length} files`);
-
-                    for (let i = 0; i < currentFiles.length; i++) {
-                        const fileInfo = currentFiles[i];
-                        console.log(`Processing file ${i + 1}/${currentFiles.length}: ${fileInfo.name}`);
-
-                        try {
-                            const text = await fileInfo.file.text();
-                            const formData = new FormData();
-                            formData.append('file', fileInfo.file);
-                            formData.append('filename', fileInfo.name);
-
-                            showStatus(`Processing ${i + 1}/${currentFiles.length}: ${fileInfo.name}...`, 'info');
-
-                            const response = await fetch(`${API_URL}/generate-from-upload`, {
-                                method: 'POST',
-                                body: formData
-                            });
-
-                            const data = await response.json();
-
-                            if (response.ok) {
-                                successful++;
-                                console.log(`✓ Success: ${fileInfo.name}`);
-                            } else {
-                                failed++;
-                                const errorMsg = data.error || `HTTP ${response.status}`;
-                                console.error(`✗ Failed: ${fileInfo.name} - ${errorMsg}`);
-                                errors.push(`${fileInfo.name}: ${errorMsg}`);
-                            }
-                        } catch (error) {
-                            console.error(`✗ Error processing ${fileInfo.name}:`, error);
-                            failed++;
-                            errors.push(`${fileInfo.name}: ${error.message}`);
-                        }
-                    }
-
-                    const statusMsg = `Generated audio for ${successful}/${currentFiles.length} file(s). ${failed > 0 ? `Failed: ${failed}.` : ''}`;
-                    console.log('Batch processing complete:', statusMsg);
-
-                    if (errors.length > 0) {
-                        console.error('Errors:', errors);
-                        showStatus(`${statusMsg} Errors: ${errors.join('; ')}`, 'error');
-                    } else {
-                        showStatus(statusMsg, 'success');
-                    }
-                } else {
-                    // Process server-side files (legacy)
-                    const response = await fetch(`${API_URL}/generate-all`, {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ directory: currentDirectory })
-                    });
-
-                    const data = await response.json();
-
-                    if (!response.ok) {
-                        throw new Error(data.error || 'Failed to generate audio');
-                    }
-
-                    const successful = data.results.filter(r => r.status === 'success').length;
-                    const failed = data.results.filter(r => r.status === 'failed').length;
-
-                    showStatus(
-                        `Generated audio for ${successful} file(s). ${failed > 0 ? `Failed: ${failed}` : ''}`,
-                        failed > 0 ? 'info' : 'success'
-                    );
-                }
-            } catch (error) {
-                showStatus(`Error: ${error.message}`, 'error');
-            } finally {
-                setLoading(false);
-                generateAllBtn.disabled = false;
-            }
-        }
-
-        // Handle folder browse button
-        browseFolderBtn.addEventListener('click', () => {
-            folderInput.click();
-        });
-
-        // Handle folder selection
         folderInput.addEventListener('change', async (e) => {
             const files = Array.from(e.target.files);
             if (files.length === 0) return;
 
-            // Get the directory path from the first file
             const firstFile = files[0];
-            const path = firstFile.webkitRelativePath || firstFile.name;
-            const directory = path.substring(0, path.lastIndexOf('/'));
-
-            // Extract full path (this is tricky in browser, we'll use the parent folder name)
-            const folderPath = firstFile.webkitRelativePath.split('/')[0];
-
-            // Filter only .txt files
+            const folderName = firstFile.webkitRelativePath.split('/')[0];
             const txtFiles = files.filter(f => f.name.endsWith('.txt'));
 
             if (txtFiles.length === 0) {
-                showStatus('No .txt files found in the selected folder', 'info');
+                showStatus('No .txt files found', 'error');
                 return;
             }
 
-            // Update UI
-            directoryInput.value = folderPath;
-            currentDirectory = folderPath;
+            folderPath.value = folderName;
             currentFiles = txtFiles.map(f => ({
                 name: f.webkitRelativePath || f.name,
                 path: f.webkitRelativePath || f.name,
                 file: f
             }));
 
-            // Update file select
-            fileSelect.innerHTML = '';
-            currentFiles.forEach(fileInfo => {
-                const option = document.createElement('option');
-                option.value = fileInfo.path;
-                option.textContent = fileInfo.name;
-                fileSelect.appendChild(option);
-            });
-
-            fileSelect.disabled = false;
-            generateAllBtn.disabled = false;
-            showStatus(`Found ${currentFiles.length} text file(s)`, 'success');
-
-            // Automatically load first file
-            if (currentFiles.length > 0) {
-                await loadFileFromBrowser(currentFiles[0]);
-            }
+            showStatus(`Loaded ${currentFiles.length} text file(s)`, 'success');
+            renderFiles();
         });
 
-        // Load file from browser (client-side)
-        async function loadFileFromBrowser(fileInfo) {
-            console.log('Loading file:', fileInfo.name);
-            setLoading(true);
-            textContent.value = 'Loading...';
-            audioContainer.innerHTML = '<div class="audio-placeholder">Reading file...</div>';
+        // Render file bubbles
+        async function renderFiles() {
+            filesContainer.innerHTML = '';
+
+            for (let i = 0; i < currentFiles.length; i++) {
+                const fileInfo = currentFiles[i];
+                const text = await fileInfo.file.text();
+                const fileName = fileInfo.name.split('/').pop();
+
+                const bubble = document.createElement('div');
+                bubble.className = 'file-bubble';
+                bubble.id = `bubble_${i}`;
+                bubble.innerHTML = `
+                    <div class="file-header" onclick="toggleExpand(${i})">
+                        <div class="file-title">${fileName}</div>
+                        <div class="expand-icon">▼</div>
+                    </div>
+
+                    <div class="generated-audio-list" id="audioList_${i}">
+                        <p style="color: #999; font-size: 13px;">No audio generated yet</p>
+                    </div>
+
+                    <div class="file-expanded-content">
+                        <div class="content-grid">
+                            <div>
+                                <h3 style="margin-bottom: 10px; color: #333;">Text Content</h3>
+                                <div class="text-display">${text}</div>
+                            </div>
+                            <div>
+                                <h3 style="margin-bottom: 10px; color: #333;">Voice Controls</h3>
+                                <div class="controls-panel">
+                                    <div class="control-group">
+                                        <label>Voice Sample</label>
+                                        <select id="voice_${i}">
+                                            <option value="none">Default Voice</option>
+                                            ${voiceSamples.map(s => `<option value="${s.name}">${s.name}</option>`).join('')}
+                                        </select>
+                                    </div>
+                                    <div class="control-group">
+                                        <label>Language</label>
+                                        <select id="language_${i}">
+                                            <option value="en">English</option>
+                                            <option value="es">Spanish</option>
+                                            <option value="fr">French</option>
+                                            <option value="de">German</option>
+                                            <option value="it">Italian</option>
+                                            <option value="pt">Portuguese</option>
+                                            <option value="zh">Chinese</option>
+                                            <option value="ja">Japanese</option>
+                                            <option value="ko">Korean</option>
+                                        </select>
+                                    </div>
+                                    <div class="control-group">
+                                        <label>
+                                            Exaggeration
+                                            <span class="range-value" id="exag_val_${i}">0.5</span>
+                                        </label>
+                                        <input type="range" id="exaggeration_${i}" min="0" max="1" step="0.1" value="0.5"
+                                               oninput="document.getElementById('exag_val_${i}').textContent = this.value">
+                                    </div>
+                                    <div class="control-group">
+                                        <label>
+                                            CFG Weight
+                                            <span class="range-value" id="cfg_val_${i}">0.5</span>
+                                        </label>
+                                        <input type="range" id="cfg_weight_${i}" min="0" max="1" step="0.1" value="0.5"
+                                               oninput="document.getElementById('cfg_val_${i}').textContent = this.value">
+                                    </div>
+                                    <button class="btn btn-primary" onclick="generateAudio(${i})" style="width: 100%; margin-top: 10px;">
+                                        Generate New Audio
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                `;
+
+                filesContainer.appendChild(bubble);
+                await loadGeneratedAudio(i, fileName);
+            }
+        }
+
+        // Load generated audio for a file
+        async function loadGeneratedAudio(index, fileName) {
+            try {
+                const response = await fetch(`${API_URL}/generated-audio/${fileName}`);
+                const data = await response.json();
+                const audioList = document.getElementById(`audioList_${index}`);
+
+                if (data.generated_audio && data.generated_audio.length > 0) {
+                    audioList.innerHTML = data.generated_audio.map((item, idx) => {
+                        const meta = item.metadata;
+                        const date = new Date(meta.timestamp).toLocaleString();
+                        return `
+                            <div class="audio-item">
+                                <div class="audio-item-header">
+                                    <div class="audio-item-title">Generation #${data.generated_audio.length - idx}</div>
+                                    <small style="color: #999;">${date}</small>
+                                </div>
+                                <div class="audio-item-params">
+                                    Language: ${meta.language_id} | Exaggeration: ${meta.exaggeration} | CFG: ${meta.cfg_weight} | Voice: ${meta.voice_sample || 'Default'}
+                                </div>
+                                <audio controls class="audio-player">
+                                    <source src="http://localhost:5000${item.audio_url}" type="audio/wav">
+                                </audio>
+                            </div>
+                        `;
+                    }).join('');
+                }
+            } catch (error) {
+                console.error('Error loading generated audio:', error);
+            }
+        }
+
+        // Toggle expand/collapse
+        window.toggleExpand = function(index) {
+            const bubble = document.getElementById(`bubble_${index}`);
+            const allBubbles = document.querySelectorAll('.file-bubble');
+
+            if (bubble.classList.contains('expanded')) {
+                bubble.classList.remove('expanded');
+                bubble.querySelector('.expand-icon').textContent = '▼';
+            } else {
+                allBubbles.forEach(b => {
+                    b.classList.remove('expanded');
+                    b.querySelector('.expand-icon').textContent = '▼';
+                });
+                bubble.classList.add('expanded');
+                bubble.querySelector('.expand-icon').textContent = '▲';
+            }
+        };
+
+        // Generate audio
+        window.generateAudio = async function(index) {
+            const fileInfo = currentFiles[index];
+            const fileName = fileInfo.name.split('/').pop();
+
+            const voice = document.getElementById(`voice_${index}`).value;
+            const language = document.getElementById(`language_${index}`).value;
+            const exaggeration = document.getElementById(`exaggeration_${index}`).value;
+            const cfgWeight = document.getElementById(`cfg_weight_${index}`).value;
+
+            showStatus('Generating audio...', 'info');
 
             try {
-                // Read file content from browser
-                const text = await fileInfo.file.text();
-                console.log('File text length:', text.length);
-                textContent.value = text;
-
-                // For audio generation, we still need the server
-                // We'll need to send the file to the server
                 const formData = new FormData();
                 formData.append('file', fileInfo.file);
                 formData.append('filename', fileInfo.name);
+                formData.append('voice_sample', voice);
+                formData.append('language_id', language);
+                formData.append('exaggeration', exaggeration);
+                formData.append('cfg_weight', cfgWeight);
 
-                console.log('Sending file to server:', fileInfo.name);
-                audioContainer.innerHTML = '<div class="audio-placeholder">Generating audio... (this may take a minute)</div>';
-
-                const audioResponse = await fetch(`${API_URL}/generate-from-upload`, {
+                const response = await fetch(`${API_URL}/generate-from-upload`, {
                     method: 'POST',
                     body: formData
                 });
 
-                console.log('Response status:', audioResponse.status);
-                const audioData = await audioResponse.json();
-                console.log('Response data:', audioData);
+                const data = await response.json();
 
-                if (!audioResponse.ok) {
-                    const errorMsg = audioData.error || `Server error: ${audioResponse.status}`;
-                    throw new Error(errorMsg);
+                if (!response.ok) {
+                    throw new Error(data.error || `Server error: ${response.status}`);
                 }
 
-                // Display audio player
-                const fullAudioUrl = `http://localhost:5000${audioData.audio_url}`;
-                audioContainer.innerHTML = `
-                    <audio controls class="audio-player">
-                        <source src="${fullAudioUrl}" type="audio/wav">
-                        Your browser does not support the audio element.
-                    </audio>
-                    <div style="margin-top: 15px; padding: 10px; background: #e7f3ff; border-radius: 6px; font-size: 14px;">
-                        <strong>Audio file:</strong> ${audioData.audio_url.split('/').pop()}
-                    </div>
-                `;
-
                 showStatus('Audio generated successfully!', 'success');
+                await loadGeneratedAudio(index, fileName);
             } catch (error) {
-                console.error('Error in loadFileFromBrowser:', error);
-                const errorMsg = `Failed to generate audio: ${error.message}. Check console (F12) for details.`;
-                showStatus(errorMsg, 'error');
-                audioContainer.innerHTML = `<div class="audio-placeholder" style="color: #d32f2f; white-space: pre-wrap;">${errorMsg}</div>`;
-            } finally {
-                setLoading(false);
+                console.error('Error generating audio:', error);
+                showStatus(`Failed: ${error.message}`, 'error');
             }
-        }
+        };
 
-        // Handle file selection from dropdown
-        fileSelect.addEventListener('change', async (e) => {
-            const selectedPath = e.target.value;
-            if (!selectedPath) return;
-
-            const fileInfo = currentFiles.find(f => f.path === selectedPath);
-            if (fileInfo && fileInfo.file) {
-                // Browser-based file
-                await loadFileFromBrowser(fileInfo);
-            } else {
-                // Server-based file (legacy path)
-                await loadFile(selectedPath);
+        // Voice upload modal
+        uploadVoiceBtn.addEventListener('click', () => voiceUploadInput.click());
+        voiceUploadInput.addEventListener('change', (e) => {
+            if (e.target.files.length > 0) {
+                const file = e.target.files[0];
+                document.getElementById('selectedFileName').textContent = file.name;
+                document.getElementById('voiceFileName').value = file.name;
+                document.getElementById('uploadModal').classList.add('show');
             }
         });
 
-        generateAllBtn.addEventListener('click', generateAllAudio);
+        function closeUploadModal() {
+            document.getElementById('uploadModal').classList.remove('show');
+            voiceUploadInput.value = '';
+        }
 
-        // Check server status on load
-        async function checkServerStatus() {
+        async function uploadVoiceSample() {
+            const file = voiceUploadInput.files[0];
+            const fileName = document.getElementById('voiceFileName').value;
+
+            if (!file || !fileName) {
+                showStatus('Please provide a file and name', 'error');
+                return;
+            }
+
+            try {
+                const formData = new FormData();
+                formData.append('file', file);
+                formData.append('filename', fileName);
+
+                const response = await fetch(`${API_URL}/voice-samples/upload`, {
+                    method: 'POST',
+                    body: formData
+                });
+
+                if (!response.ok) throw new Error('Upload failed');
+
+                showStatus('Voice sample uploaded!', 'success');
+                closeUploadModal();
+                await loadVoiceSamples();
+            } catch (error) {
+                showStatus(`Upload failed: ${error.message}`, 'error');
+            }
+        }
+
+        // Recording
+        recordVoiceBtn.addEventListener('click', () => {
+            document.getElementById('recordModal').classList.add('show');
+        });
+
+        function closeRecordModal() {
+            if (mediaRecorder && mediaRecorder.state === 'recording') {
+                mediaRecorder.stop();
+            }
+            document.getElementById('recordModal').classList.remove('show');
+        }
+
+        document.getElementById('startRecordBtn').addEventListener('click', async () => {
+            try {
+                const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+                mediaRecorder = new MediaRecorder(stream);
+                recordedChunks = [];
+
+                mediaRecorder.ondataavailable = (e) => {
+                    if (e.data.size > 0) recordedChunks.push(e.data);
+                };
+
+                mediaRecorder.onstop = () => {
+                    const blob = new Blob(recordedChunks, { type: 'audio/wav' });
+                    const url = URL.createObjectURL(blob);
+                    document.getElementById('recordingPreview').src = url;
+                    document.getElementById('recordingPreview').style.display = 'block';
+                    document.getElementById('saveRecordBtn').disabled = false;
+                };
+
+                mediaRecorder.start();
+                document.getElementById('startRecordBtn').disabled = true;
+                document.getElementById('stopRecordBtn').disabled = false;
+                document.getElementById('recordingIndicator').style.display = 'block';
+            } catch (error) {
+                showStatus('Microphone access denied', 'error');
+            }
+        });
+
+        document.getElementById('stopRecordBtn').addEventListener('click', () => {
+            if (mediaRecorder && mediaRecorder.state === 'recording') {
+                mediaRecorder.stop();
+                document.getElementById('startRecordBtn').disabled = false;
+                document.getElementById('stopRecordBtn').disabled = true;
+                document.getElementById('recordingIndicator').style.display = 'none';
+            }
+        });
+
+        async function saveRecording() {
+            let name = document.getElementById('recordingName').value;
+            if (!name) {
+                showStatus('Please enter a recording name', 'error');
+                return;
+            }
+
+            // Ensure the name has .wav extension
+            if (!name.toLowerCase().endsWith('.wav')) {
+                name = name + '.wav';
+            }
+
+            try {
+                const blob = new Blob(recordedChunks, { type: 'audio/wav' });
+                const formData = new FormData();
+                formData.append('file', blob, name);
+                formData.append('filename', name);
+
+                const response = await fetch(`${API_URL}/voice-samples/upload`, {
+                    method: 'POST',
+                    body: formData
+                });
+
+                if (!response.ok) throw new Error('Save failed');
+
+                showStatus('Recording saved!', 'success');
+                closeRecordModal();
+                await loadVoiceSamples();
+            } catch (error) {
+                showStatus(`Save failed: ${error.message}`, 'error');
+            }
+        }
+
+        refreshVoicesBtn.addEventListener('click', loadVoiceSamples);
+
+        // Initialize
+        (async function init() {
+            await loadVoiceSamples();
             try {
                 const response = await fetch(`${API_URL}/status`);
                 const data = await response.json();
                 console.log('Server status:', data);
             } catch (error) {
-                showStatus('Unable to connect to server. Please start the server first.', 'error');
+                showStatus('Unable to connect to server', 'error');
             }
-        }
-
-        checkServerStatus();
+        })();
     </script>
 </body>
 </html>
