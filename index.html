@@ -250,6 +250,43 @@
             width: 100%;
         }
 
+        .best-take-control {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            margin-bottom: 8px;
+        }
+
+        .best-take-control input[type="radio"] {
+            cursor: pointer;
+            width: 16px;
+            height: 16px;
+        }
+
+        .best-take-control label {
+            cursor: pointer;
+            font-size: 12px;
+            color: #666;
+            user-select: none;
+        }
+
+        .best-take-badge {
+            display: inline-block;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 3px 10px;
+            border-radius: 12px;
+            font-size: 11px;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+        .audio-item.best-take {
+            border: 2px solid #667eea;
+            background: linear-gradient(to right, #f9f9f9, #f0f0ff);
+        }
+
         .file-expanded-content {
             display: none;
         }
@@ -707,11 +744,24 @@
                     audioList.innerHTML = data.generated_audio.map((item, idx) => {
                         const meta = item.metadata;
                         const date = new Date(meta.timestamp).toLocaleString();
+                        const isBestTake = meta.is_best_take || false;
+                        const bestTakeBadge = isBestTake ? '<span class="best-take-badge">Best Take</span>' : '';
+                        const audioItemClass = isBestTake ? 'audio-item best-take' : 'audio-item';
+
                         return `
-                            <div class="audio-item">
+                            <div class="${audioItemClass}">
                                 <div class="audio-item-header">
-                                    <div class="audio-item-title">Generation #${data.generated_audio.length - idx}</div>
+                                    <div class="audio-item-title">Generation #${data.generated_audio.length - idx} ${bestTakeBadge}</div>
                                     <small style="color: #999;">${date}</small>
+                                </div>
+                                <div class="best-take-control">
+                                    <input type="radio"
+                                           name="best_take_${index}"
+                                           id="radio_${index}_${idx}"
+                                           value="${item.audio_file}"
+                                           ${isBestTake ? 'checked' : ''}
+                                           onchange="setBestTake(${index}, '${fileName}', '${item.audio_file}')">
+                                    <label for="radio_${index}_${idx}">Mark as Best Take</label>
                                 </div>
                                 <div class="audio-item-params">
                                     Language: ${meta.language_id} | Exaggeration: ${meta.exaggeration} | CFG: ${meta.cfg_weight} | Voice: ${meta.voice_sample || 'Default'}
@@ -911,6 +961,36 @@
                 showStatus(`Save failed: ${error.message}`, 'error');
             }
         }
+
+        // Set best take for an audio file
+        window.setBestTake = async function(index, txtFilename, audioFilename) {
+            try {
+                showStatus('Setting best take...', 'info');
+
+                const response = await fetch(`${API_URL}/set-best-take`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        txt_filename: txtFilename,
+                        audio_filename: audioFilename
+                    })
+                });
+
+                const data = await response.json();
+
+                if (!response.ok) {
+                    throw new Error(data.error || 'Failed to set best take');
+                }
+
+                showStatus('Best take updated successfully!', 'success');
+                await loadGeneratedAudio(index, txtFilename);
+            } catch (error) {
+                console.error('Error setting best take:', error);
+                showStatus(`Failed: ${error.message}`, 'error');
+            }
+        };
 
         refreshVoicesBtn.addEventListener('click', loadVoiceSamples);
 

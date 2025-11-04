@@ -322,7 +322,8 @@ def generate_from_upload():
             'cfg_weight': cfg_weight,
             'voice_sample': voice_sample_name,
             'audio_file': audio_filename,
-            'text_preview': text[:200]
+            'text_preview': text[:200],
+            'is_best_take': False
         }
 
         print(f"Audio will be saved to: {audio_path}")
@@ -541,6 +542,51 @@ def list_generated_audio(txt_filename):
     except Exception as e:
         import traceback
         print(f"Error listing generated audio: {str(e)}")
+        print(traceback.format_exc())
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/set-best-take', methods=['POST'])
+def set_best_take():
+    """Set or unset an audio file as the best take for a text file"""
+    try:
+        import json
+        data = request.json
+        txt_filename = data.get('txt_filename')
+        audio_filename = data.get('audio_filename')
+
+        if not txt_filename or not audio_filename:
+            return jsonify({'error': 'txt_filename and audio_filename are required'}), 400
+
+        base_name = os.path.splitext(txt_filename)[0]
+        updated = False
+
+        # Update all metadata files for this text file
+        for filename in os.listdir(converter.audio_dir):
+            if filename.startswith(base_name) and filename.endswith('.json'):
+                metadata_path = os.path.join(converter.audio_dir, filename)
+
+                with open(metadata_path, 'r') as f:
+                    metadata = json.load(f)
+
+                # Set is_best_take based on whether this is the selected audio file
+                if metadata['audio_file'] == audio_filename:
+                    metadata['is_best_take'] = True
+                    updated = True
+                else:
+                    metadata['is_best_take'] = False
+
+                # Write updated metadata back
+                with open(metadata_path, 'w') as f:
+                    json.dump(metadata, f, indent=2)
+
+        if not updated:
+            return jsonify({'error': 'Audio file not found'}), 404
+
+        return jsonify({'success': True, 'message': 'Best take updated successfully'})
+
+    except Exception as e:
+        import traceback
+        print(f"Error setting best take: {str(e)}")
         print(traceback.format_exc())
         return jsonify({'error': str(e)}), 500
 
