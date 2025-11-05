@@ -766,12 +766,12 @@
         <div class="main-controls">
             <div class="control-row">
                 <div class="folder-select">
-                    <label>Text Files Folder</label>
+                    <label>Select Text File</label>
                     <div style="display: flex; gap: 10px;">
-                        <input type="text" id="folderPath" placeholder="No folder selected" readonly>
+                        <input type="text" id="folderPath" placeholder="No file selected" readonly>
                         <button class="btn btn-primary" id="browseFolderBtn">Browse</button>
                     </div>
-                    <input type="file" id="folderInput" webkitdirectory directory multiple>
+                    <input type="file" id="folderInput" accept=".txt">
                 </div>
 
                 <div class="voice-samples-section">
@@ -793,8 +793,8 @@
 
         <div class="files-grid" id="filesContainer">
             <div class="empty-state">
-                <h2>No Files Loaded</h2>
-                <p>Click "Browse" to select a directory with .txt files</p>
+                <h2>No File Loaded</h2>
+                <p>Click "Browse" to select a .txt file</p>
             </div>
         </div>
     </div>
@@ -1040,23 +1040,21 @@
             const files = Array.from(e.target.files);
             if (files.length === 0) return;
 
-            const firstFile = files[0];
-            const folderName = firstFile.webkitRelativePath.split('/')[0];
-            const txtFiles = files.filter(f => f.name.endsWith('.txt'));
+            const file = files[0];
 
-            if (txtFiles.length === 0) {
-                showStatus('No .txt files found', 'error');
+            if (!file.name.endsWith('.txt')) {
+                showStatus('Please select a .txt file', 'error');
                 return;
             }
 
-            folderPath.value = folderName;
-            currentFiles = txtFiles.map(f => ({
-                name: f.webkitRelativePath || f.name,
-                path: f.webkitRelativePath || f.name,
-                file: f
-            }));
+            folderPath.value = file.name;
+            currentFiles = [{
+                name: file.name,
+                path: file.name,
+                file: file
+            }];
 
-            showStatus(`Loaded ${currentFiles.length} text file(s)`, 'success');
+            showStatus('Text file loaded successfully', 'success');
             renderFiles();
         });
 
