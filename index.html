@@ -891,6 +891,10 @@
             </div>
         </div>
 
+        <!-- Hidden folder inputs for project management -->
+        <input type="file" id="newProjectFolderInput" webkitdirectory directory style="display: none;">
+        <input type="file" id="loadProjectFolderInput" webkitdirectory directory style="display: none;">
+
         <div class="status-bar" id="statusBar"></div>
 
         <div class="files-grid" id="filesContainer">
@@ -1005,23 +1009,6 @@
                     progressBar.style.width = '0%';
                     progressPercent.textContent = '0%';
                     progressInfo.textContent = 'Estimating time...';
-        function showProgressBar(charCount) {
-            const overlay = document.getElementById('progressOverlay');
-            const header = document.getElementById('progressHeader');
-            const progressBarFill = document.getElementById('progressBarFill');
-            const progressPercent = document.getElementById('progressPercent');
-            const progressTime = document.getElementById('progressTime');
-
-            // Add null checks to prevent errors
-            if (!overlay || !header || !progressBarFill || !progressPercent || !progressTime) {
-                console.error('Progress bar elements not found');
-                return;
-            }
-
-            header.textContent = `Generating Audio (${charCount} characters)...`;
-            progressBarFill.style.width = '0%';
-            progressPercent.textContent = '';
-            progressTime.textContent = 'Estimating time...';
 
                     // Auto-expand on start
                     const content = document.getElementById(`progressContent_${fileIndex}`);
@@ -1154,20 +1141,46 @@
         }
 
         window.showNewProjectDialog = function() {
-            const projectPath = prompt('Enter the folder path for the new project:');
-            if (!projectPath) return;
+            const input = document.getElementById('newProjectFolderInput');
+            input.value = ''; // Reset
 
-            const projectName = prompt('Enter the project name:', 'My Audiobook Project');
-            if (!projectName) return;
+            input.onchange = function(e) {
+                const files = e.target.files;
+                if (files.length === 0) return;
 
-            createProject(projectPath, projectName);
+                // Get the folder path from the first file
+                const folderPath = files[0].webkitRelativePath.split('/')[0];
+                const fullPath = files[0].path ? files[0].path.substring(0, files[0].path.lastIndexOf('\\')) : null;
+
+                // For browser compatibility, try to extract path
+                const projectPath = fullPath || folderPath;
+
+                const projectName = prompt('Enter the project name:', folderPath || 'My Audiobook Project');
+                if (!projectName) return;
+
+                createProject(projectPath, projectName);
+            };
+
+            input.click();
         };
 
         window.showLoadProjectDialog = function() {
-            const projectPath = prompt('Enter the path to the project folder:');
-            if (!projectPath) return;
+            const input = document.getElementById('loadProjectFolderInput');
+            input.value = ''; // Reset
 
-            loadProject(projectPath);
+            input.onchange = function(e) {
+                const files = e.target.files;
+                if (files.length === 0) return;
+
+                // Get the folder path from the first file
+                const folderPath = files[0].webkitRelativePath.split('/')[0];
+                const fullPath = files[0].path ? files[0].path.substring(0, files[0].path.lastIndexOf('\\')) : null;
+
+                const projectPath = fullPath || folderPath;
+                loadProject(projectPath);
+            };
+
+            input.click();
         };
 
         async function createProject(projectPath, projectName) {
@@ -1398,7 +1411,7 @@
             const response = await fetch(`${API_URL}/chunk-text`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ text, max_chunk_size: 1000 })
+                body: JSON.stringify({ text, max_chunk_size: 500 })
             });
             const data = await response.json();
             fileChunks[i] = data.chunks;

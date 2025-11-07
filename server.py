@@ -161,7 +161,7 @@ class TextToAudioConverter:
         except Exception as e:
             return f"Error reading file: {str(e)}"
 
-    def smart_chunk_text(self, text, max_chunk_size=1000):
+    def smart_chunk_text(self, text, max_chunk_size=500):
         """
         Smart text chunking that respects paragraph breaks, quotations, and sentence boundaries.
         Returns a list of dicts with chunk metadata.
@@ -868,11 +868,9 @@ def create_project():
         os.makedirs(project_path, exist_ok=True)
         texts_dir = os.path.join(project_path, 'texts')
         audio_dir = os.path.join(project_path, 'audio')
-        voice_samples_dir = os.path.join(project_path, 'voice_samples')
 
         os.makedirs(texts_dir, exist_ok=True)
         os.makedirs(audio_dir, exist_ok=True)
-        os.makedirs(voice_samples_dir, exist_ok=True)
 
         # Create project metadata
         project_metadata = {
@@ -891,7 +889,7 @@ def create_project():
         converter.current_project_path = project_path
         converter.current_project_metadata = project_metadata
         converter.audio_dir = audio_dir
-        converter.voice_samples_dir = voice_samples_dir
+        # Keep voice_samples_dir pointing to main folder (not project-specific)
 
         return jsonify({
             'success': True,
@@ -938,7 +936,7 @@ def load_project():
         converter.current_project_path = project_path
         converter.current_project_metadata = project_metadata
         converter.audio_dir = os.path.join(project_path, 'audio')
-        converter.voice_samples_dir = os.path.join(project_path, 'voice_samples')
+        # Keep voice_samples_dir pointing to main folder (not project-specific)
 
         # Get list of text files
         texts_dir = os.path.join(project_path, 'texts')
@@ -1096,7 +1094,7 @@ def chunk_text():
     try:
         data = request.json
         text = data.get('text', '')
-        max_chunk_size = data.get('max_chunk_size', 1000)
+        max_chunk_size = data.get('max_chunk_size', 500)
 
         if not text:
             return jsonify({'error': 'Text is required'}), 400

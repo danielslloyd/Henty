@@ -8,7 +8,8 @@
       "Bash(conda create:*)",
       "Bash(python:*)",
       "Bash(dir:*)",
-      "Bash(del nul)"
+      "Bash(del nul)",
+      "Bash(node -c:*)"
     ],
     "deny": [],
     "ask": []
