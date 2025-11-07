@@ -20,18 +20,11 @@ class TextToAudioConverter:
             print("Model loaded successfully!")
         return self.model
 
-    def find_txt_files(self, directory):
-        """Find all .txt files in the given directory"""
-        if not directory or not os.path.isdir(directory):
-            return []
-
-        txt_files = []
-        for root, dirs, files in os.walk(directory):
-            for file in files:
-                if file.endswith('.txt'):
-                    txt_files.append(os.path.join(root, file))
-
-        return sorted(txt_files)
+    def validate_txt_file(self, file_path):
+        """Validate that the file is a .txt file"""
+        if not file_path:
+            return False
+        return file_path.endswith('.txt') and os.path.isfile(file_path)
 
     def read_text_file(self, file_path):
         """Read the content of a text file"""
@@ -77,23 +70,19 @@ class TextToAudioConverter:
 # Create converter instance
 converter = TextToAudioConverter()
 
-def update_file_list(directory):
-    """Update the list of text files when directory changes"""
-    if not directory:
-        return gr.update(choices=[], value=None)
-
-    txt_files = converter.find_txt_files(directory)
-    if not txt_files:
-        return gr.update(choices=[], value=None)
-
-    # Show relative paths for cleaner display
-    display_files = [os.path.relpath(f, directory) for f in txt_files]
-    return gr.update(choices=list(zip(display_files, txt_files)), value=txt_files[0] if txt_files else None)
-
-def display_file_content(file_path, directory):
+def display_file_content(file_obj):
     """Display the selected file's text content and audio"""
-    if not file_path or not os.path.exists(file_path):
+    if not file_obj:
         return "No file selected", None
+
+    file_path = file_obj.name if hasattr(file_obj, 'name') else file_obj
+
+    if not os.path.exists(file_path):
+        return "File not found", None
+
+    # Validate it's a txt file
+    if not converter.validate_txt_file(file_path):
+        return "Please select a valid .txt file", None
 
     # Read text content
     text_content = converter.read_text_file(file_path)
@@ -103,21 +92,20 @@ def display_file_content(file_path, directory):
 
     return text_content, audio_path
 
-def generate_all_audio(directory, progress=gr.Progress()):
-    """Generate audio for all text files in the directory"""
-    if not directory:
-        return "Please select a directory first"
+def generate_audio_from_file(file_obj, progress=gr.Progress()):
+    """Generate audio for the selected text file"""
+    if not file_obj:
+        return "Please select a file first"
 
-    txt_files = converter.find_txt_files(directory)
-    if not txt_files:
-        return "No text files found in the directory"
+    file_path = file_obj.name if hasattr(file_obj, 'name') else file_obj
 
-    total_files = len(txt_files)
-    for i, txt_file in enumerate(txt_files):
-        progress((i + 1) / total_files, desc=f"Processing {os.path.basename(txt_file)}...")
-        converter.get_or_generate_audio(txt_file)
+    if not converter.validate_txt_file(file_path):
+        return "Please select a valid .txt file"
 
-    return f"Successfully generated audio for {total_files} file(s)!"
+    progress(0.5, desc=f"Processing {os.path.basename(file_path)}...")
+    converter.get_or_generate_audio(file_path)
+
+    return f"Successfully generated audio for {os.path.basename(file_path)}!"
 
 # Create Gradio interface
 with gr.Blocks(title="Text to Audio Converter - Chatterbox TTS") as demo:
@@ -126,20 +114,13 @@ with gr.Blocks(title="Text to Audio Converter - Chatterbox TTS") as demo:
 
     with gr.Row():
         with gr.Column(scale=1):
-            directory_input = gr.Textbox(
-                label="Directory Path",
-                placeholder="Enter the path to your directory containing .txt files",
-                value=os.getcwd()
-            )
-            browse_btn = gr.Button("Browse Directory")
-
-            file_dropdown = gr.Dropdown(
+            file_input = gr.File(
                 label="Select Text File",
-                choices=[],
-                interactive=True
+                file_types=[".txt"],
+                type="filepath"
             )
 
-            generate_all_btn = gr.Button("Generate Audio for All Files", variant="primary")
+            generate_btn = gr.Button("Generate Audio", variant="primary")
             status_text = gr.Textbox(label="Status", interactive=False)
 
     with gr.Row():
@@ -160,27 +141,15 @@ with gr.Blocks(title="Text to Audio Converter - Chatterbox TTS") as demo:
             )
 
     # Event handlers
-    directory_input.change(
-        fn=update_file_list,
-        inputs=[directory_input],
-        outputs=[file_dropdown]
-    )
-
-    browse_btn.click(
-        fn=update_file_list,
-        inputs=[directory_input],
-        outputs=[file_dropdown]
-    )
-
-    file_dropdown.change(
+    file_input.change(
         fn=display_file_content,
-        inputs=[file_dropdown, directory_input],
+        inputs=[file_input],
         outputs=[text_display, audio_player]
     )
 
-    generate_all_btn.click(
-        fn=generate_all_audio,
-        inputs=[directory_input],
+    generate_btn.click(
+        fn=generate_audio_from_file,
+        inputs=[file_input],
         outputs=[status_text]
     )
 
