@@ -287,6 +287,96 @@
             background: linear-gradient(to right, #f9f9f9, #f0f0ff);
         }
 
+        .delete-take-btn {
+            background: none;
+            border: none;
+            cursor: pointer;
+            font-size: 16px;
+            padding: 4px 8px;
+            color: #999;
+            transition: color 0.2s;
+        }
+
+        .delete-take-btn:hover {
+            color: #ff4444;
+        }
+
+        .audio-item-header-actions {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .inline-progress-section {
+            margin-top: 15px;
+            border-top: 1px solid #e0e0e0;
+            padding-top: 10px;
+        }
+
+        .inline-progress-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            cursor: pointer;
+            padding: 8px;
+            background: #f5f5f5;
+            border-radius: 6px;
+            margin-bottom: 10px;
+            user-select: none;
+        }
+
+        .inline-progress-header:hover {
+            background: #efefef;
+        }
+
+        .inline-progress-title {
+            font-size: 13px;
+            font-weight: 600;
+            color: #555;
+        }
+
+        .inline-progress-toggle {
+            font-size: 16px;
+            color: #667eea;
+        }
+
+        .inline-progress-content {
+            display: none;
+            padding: 10px;
+            background: #fafafa;
+            border-radius: 6px;
+        }
+
+        .inline-progress-content.expanded {
+            display: block;
+        }
+
+        .inline-progress-bar-wrapper {
+            background: #e0e0e0;
+            border-radius: 10px;
+            overflow: hidden;
+            height: 20px;
+            margin-bottom: 10px;
+        }
+
+        .inline-progress-bar-fill {
+            height: 100%;
+            background: linear-gradient(90deg, #667eea 0%, #764ba2 100%);
+            transition: width 0.3s ease;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: white;
+            font-size: 11px;
+            font-weight: 600;
+        }
+
+        .inline-progress-info {
+            font-size: 12px;
+            color: #666;
+            text-align: center;
+        }
+
         .file-expanded-content {
             display: none;
         }
@@ -763,6 +853,18 @@
             <p>Professional Voice Synthesis with Multiple Generations</p>
         </div>
 
+        <div class="project-section" style="background: linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%); padding: 20px; border-radius: 12px; margin-bottom: 20px;">
+            <h3 style="margin-bottom: 15px; color: #333;">📁 Project Management</h3>
+            <div id="projectInfo" style="margin-bottom: 15px; padding: 10px; background: white; border-radius: 8px; display: none;">
+                <strong>Current Project:</strong> <span id="projectName">None</span><br>
+                <small style="color: #666;">Path: <span id="projectPath">-</span></small>
+            </div>
+            <div style="display: flex; gap: 10px; flex-wrap: wrap;">
+                <button class="btn btn-primary" onclick="showNewProjectDialog()">New Project</button>
+                <button class="btn btn-secondary" onclick="showLoadProjectDialog()">Load Project</button>
+            </div>
+        </div>
+
         <div class="main-controls">
             <div class="control-row">
                 <div class="folder-select">
@@ -870,31 +972,66 @@
 
         // Progress tracking
         let progressPollInterval = null;
+        let currentGeneratingFileIndex = null;
+
+        // Toggle inline progress section
+        window.toggleInlineProgress = function(index) {
+            const content = document.getElementById(`progressContent_${index}`);
+            const toggle = document.getElementById(`progressToggle_${index}`);
+
+            if (content.classList.contains('expanded')) {
+                content.classList.remove('expanded');
+                toggle.textContent = '▶';
+            } else {
+                content.classList.add('expanded');
+                toggle.textContent = '▼';
+            }
+        };
 
         // ===== PROGRESS BAR FUNCTIONS =====
 
-        function showProgressBar(charCount) {
-            const overlay = document.getElementById('progressOverlay');
-            const header = document.getElementById('progressHeader');
-            const progressBarFill = document.getElementById('progressBarFill');
-            const progressPercent = document.getElementById('progressPercent');
-            const progressTime = document.getElementById('progressTime');
+        function showProgressBar(charCount, fileIndex = null) {
+            currentGeneratingFileIndex = fileIndex;
 
-            header.textContent = `Generating Audio (${charCount} characters)...`;
-            progressBarFill.style.width = '0%';
-            progressPercent.textContent = '';
-            progressTime.textContent = 'Estimating time...';
+            if (fileIndex !== null) {
+                // Show inline progress for this file
+                const progressSection = document.getElementById(`inlineProgress_${fileIndex}`);
+                const progressBar = document.getElementById(`progressBar_${fileIndex}`);
+                const progressPercent = document.getElementById(`progressPercent_${fileIndex}`);
+                const progressInfo = document.getElementById(`progressInfo_${fileIndex}`);
 
-            overlay.classList.add('show');
+                if (progressSection) {
+                    progressSection.style.display = 'block';
+                    progressBar.style.width = '0%';
+                    progressPercent.textContent = '0%';
+                    progressInfo.textContent = 'Estimating time...';
+
+                    // Auto-expand on start
+                    const content = document.getElementById(`progressContent_${fileIndex}`);
+                    const toggle = document.getElementById(`progressToggle_${fileIndex}`);
+                    if (content && !content.classList.contains('expanded')) {
+                        content.classList.add('expanded');
+                        toggle.textContent = '▼';
+                    }
+                }
+            }
 
             // Start polling for progress
             startProgressPolling();
         }
 
         function hideProgressBar() {
-            const overlay = document.getElementById('progressOverlay');
-            overlay.classList.remove('show');
+            if (currentGeneratingFileIndex !== null) {
+                // Hide inline progress
+                const progressSection = document.getElementById(`inlineProgress_${currentGeneratingFileIndex}`);
+                if (progressSection) {
+                    setTimeout(() => {
+                        progressSection.style.display = 'none';
+                    }, 2000); // Keep visible for 2 seconds after completion
+                }
+            }
             stopProgressPolling();
+            currentGeneratingFileIndex = null;
         }
 
         function startProgressPolling() {
@@ -924,56 +1061,34 @@
         }
 
         function updateProgressBar(progress) {
-            const progressBarFill = document.getElementById('progressBarFill');
-            const progressPercent = document.getElementById('progressPercent');
-            const progressTime = document.getElementById('progressTime');
-            const progressStats = document.getElementById('progressStats');
+            const fileIndex = currentGeneratingFileIndex;
 
-            if (progress.progress_percent !== undefined) {
-                // We have an estimate
-                const percent = Math.min(100, progress.progress_percent);
-                progressBarFill.style.width = `${percent}%`;
-                progressPercent.textContent = `${percent.toFixed(0)}%`;
+            if (fileIndex !== null) {
+                // Update inline progress
+                const progressBar = document.getElementById(`progressBar_${fileIndex}`);
+                const progressPercent = document.getElementById(`progressPercent_${fileIndex}`);
+                const progressInfo = document.getElementById(`progressInfo_${fileIndex}`);
 
-                const elapsed = progress.elapsed_seconds;
-                const remaining = progress.remaining_seconds;
+                if (progressBar && progressPercent && progressInfo) {
+                    if (progress.progress_percent !== undefined) {
+                        // We have an estimate
+                        const percent = Math.min(100, progress.progress_percent);
+                        progressBar.style.width = `${percent}%`;
+                        progressPercent.textContent = `${percent.toFixed(0)}%`;
 
-                progressTime.innerHTML = `
-                    <div>Elapsed: ${elapsed}s</div>
-                    <div class="time-estimate">Estimated remaining: ${remaining}s</div>
-                `;
+                        const elapsed = Math.round(progress.elapsed_seconds);
+                        const remaining = Math.round(progress.remaining_seconds);
 
-                progressStats.style.display = 'block';
-                progressStats.innerHTML = `
-                    <div class="progress-stats-row">
-                        <span>Characters:</span>
-                        <span>${progress.char_count}</span>
-                    </div>
-                    <div class="progress-stats-row">
-                        <span>Based on:</span>
-                        <span>${progress.based_on_samples} previous generations</span>
-                    </div>
-                `;
-            } else {
-                // No estimate available yet - show indeterminate
-                progressBarFill.style.width = '100%';
-                progressBarFill.innerHTML = '<div class="progress-bar-indeterminate"></div>';
+                        progressInfo.textContent = `Elapsed: ${elapsed}s | Remaining: ~${remaining}s`;
+                    } else {
+                        // No estimate available yet
+                        progressBar.style.width = '50%';
+                        progressPercent.textContent = '...';
 
-                progressTime.innerHTML = `
-                    <div>Elapsed: ${progress.elapsed_seconds}s</div>
-                    <div>No estimate available yet (need historical data)</div>
-                `;
-
-                progressStats.style.display = 'block';
-                progressStats.innerHTML = `
-                    <div class="progress-stats-row">
-                        <span>Characters:</span>
-                        <span>${progress.char_count}</span>
-                    </div>
-                    <div style="font-style: italic; color: #999; margin-top: 10px;">
-                        After the first few generations, we'll be able to estimate time accurately.
-                    </div>
-                `;
+                        const elapsed = Math.round(progress.elapsed_seconds);
+                        progressInfo.textContent = `Elapsed: ${elapsed}s | Estimating...`;
+                    }
+                }
             }
         }
 
@@ -999,6 +1114,97 @@
                 setTimeout(() => {
                     statusBar.classList.remove('show');
                 }, 5000);
+            }
+        }
+
+        // ===== PROJECT MANAGEMENT FUNCTIONS =====
+
+        async function loadProjectInfo() {
+            try {
+                const response = await fetch(`${API_URL}/project/info`);
+                const data = await response.json();
+
+                if (data.has_project) {
+                    document.getElementById('projectInfo').style.display = 'block';
+                    document.getElementById('projectName').textContent = data.metadata.name;
+                    document.getElementById('projectPath').textContent = data.project_path;
+                } else {
+                    document.getElementById('projectInfo').style.display = 'none';
+                }
+            } catch (error) {
+                console.error('Error loading project info:', error);
+            }
+        }
+
+        window.showNewProjectDialog = function() {
+            const projectPath = prompt('Enter the folder path for the new project:');
+            if (!projectPath) return;
+
+            const projectName = prompt('Enter the project name:', 'My Audiobook Project');
+            if (!projectName) return;
+
+            createProject(projectPath, projectName);
+        };
+
+        window.showLoadProjectDialog = function() {
+            const projectPath = prompt('Enter the path to the project folder:');
+            if (!projectPath) return;
+
+            loadProject(projectPath);
+        };
+
+        async function createProject(projectPath, projectName) {
+            try {
+                showStatus('Creating project...', 'info');
+
+                const response = await fetch(`${API_URL}/project/create`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ project_path: projectPath, project_name: projectName })
+                });
+
+                const data = await response.json();
+
+                if (!response.ok) {
+                    throw new Error(data.error || 'Failed to create project');
+                }
+
+                showStatus('Project created successfully!', 'success');
+                await loadProjectInfo();
+                await loadVoiceSamples();
+            } catch (error) {
+                console.error('Error creating project:', error);
+                showStatus(`Failed to create project: ${error.message}`, 'error');
+            }
+        }
+
+        async function loadProject(projectPath) {
+            try {
+                showStatus('Loading project...', 'info');
+
+                const response = await fetch(`${API_URL}/project/load`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ project_path: projectPath })
+                });
+
+                const data = await response.json();
+
+                if (!response.ok) {
+                    throw new Error(data.error || 'Failed to load project');
+                }
+
+                showStatus('Project loaded successfully!', 'success');
+                await loadProjectInfo();
+                await loadVoiceSamples();
+
+                // Show available text files
+                if (data.text_files && data.text_files.length > 0) {
+                    showStatus(`Project loaded with ${data.text_files.length} text file(s)`, 'info');
+                }
+            } catch (error) {
+                console.error('Error loading project:', error);
+                showStatus(`Failed to load project: ${error.message}`, 'error');
             }
         }
 
@@ -1091,6 +1297,23 @@
 
                 <div class="generated-audio-list" id="audioList_${i}">
                     <p style="color: #999; font-size: 13px;">No audio generated yet</p>
+                </div>
+
+                <div class="inline-progress-section" id="inlineProgress_${i}" style="display: none;">
+                    <div class="inline-progress-header" onclick="toggleInlineProgress(${i})">
+                        <div class="inline-progress-title">Generation Progress</div>
+                        <div class="inline-progress-toggle" id="progressToggle_${i}">▶</div>
+                    </div>
+                    <div class="inline-progress-content" id="progressContent_${i}">
+                        <div class="inline-progress-bar-wrapper">
+                            <div class="inline-progress-bar-fill" id="progressBar_${i}" style="width: 0%;">
+                                <span id="progressPercent_${i}">0%</span>
+                            </div>
+                        </div>
+                        <div class="inline-progress-info" id="progressInfo_${i}">
+                            Preparing...
+                        </div>
+                    </div>
                 </div>
 
                 <div class="file-expanded-content">
@@ -1235,7 +1458,12 @@
                 const audioList = document.getElementById(`audioList_${index}`);
 
                 if (data.generated_audio && data.generated_audio.length > 0) {
-                    audioList.innerHTML = data.generated_audio.map((item, idx) => {
+                    // Sort by timestamp (earliest first)
+                    const sortedAudio = [...data.generated_audio].sort((a, b) =>
+                        a.metadata.timestamp - b.metadata.timestamp
+                    );
+
+                    audioList.innerHTML = sortedAudio.map((item, idx) => {
                         const meta = item.metadata;
                         const date = new Date(meta.timestamp).toLocaleString();
                         const isBestTake = meta.is_best_take || false;
@@ -1245,8 +1473,11 @@
                         return `
                             <div class="${audioItemClass}">
                                 <div class="audio-item-header">
-                                    <div class="audio-item-title">Generation #${data.generated_audio.length - idx} ${bestTakeBadge}</div>
-                                    <small style="color: #999;">${date}</small>
+                                    <div class="audio-item-title">Generation #${idx + 1} ${bestTakeBadge}</div>
+                                    <div class="audio-item-header-actions">
+                                        <small style="color: #999;">${date}</small>
+                                        <button class="delete-take-btn" onclick="deleteTake(${index}, '${fileName}', '${item.audio_file}')" title="Delete this take">🗑️</button>
+                                    </div>
                                 </div>
                                 <div class="best-take-control">
                                     <input type="radio"
@@ -1305,7 +1536,7 @@
             const charCount = text.length;
 
             showStatus('Generating audio...', 'info');
-            showProgressBar(charCount);
+            showProgressBar(charCount, index);
 
             try {
                 const formData = new FormData();
@@ -1493,6 +1724,41 @@
             }
         };
 
+        // Delete a take (audio file)
+        window.deleteTake = async function(index, txtFilename, audioFilename) {
+            // Show confirmation dialog
+            if (!confirm(`Are you sure you want to delete this take?\n\nThis will permanently remove the audio file and cannot be undone.`)) {
+                return;
+            }
+
+            try {
+                showStatus('Deleting take...', 'info');
+
+                const response = await fetch(`${API_URL}/delete-take`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        txt_filename: txtFilename,
+                        audio_filename: audioFilename
+                    })
+                });
+
+                const data = await response.json();
+
+                if (!response.ok) {
+                    throw new Error(data.error || 'Failed to delete take');
+                }
+
+                showStatus('Take deleted successfully!', 'success');
+                await loadGeneratedAudio(index, txtFilename);
+            } catch (error) {
+                console.error('Error deleting take:', error);
+                showStatus(`Failed: ${error.message}`, 'error');
+            }
+        };
+
         // ===== CHUNK-RELATED FUNCTIONS =====
 
         // Render chunk bubbles in the middle pane
@@ -1651,37 +1917,47 @@
 
                 <h4 style="color: #333; margin: 20px 0 10px 0;">Generated Audio (${audioList.length})</h4>
                 <div id="chunkAudioList_${fileIndex}_${chunkId}">
-                    ${audioList.length > 0 ? audioList.map((item, idx) => {
-                        const meta = item.metadata;
-                        const date = new Date(meta.timestamp).toLocaleString();
-                        const isBestTake = meta.is_best_take || false;
-                        const bestTakeBadge = isBestTake ? '<span class="best-take-badge">Best Take</span>' : '';
-                        const audioItemClass = isBestTake ? 'audio-item best-take' : 'audio-item';
+                    ${audioList.length > 0 ? (() => {
+                        // Sort by timestamp (earliest first)
+                        const sortedAudio = [...audioList].sort((a, b) =>
+                            a.metadata.timestamp - b.metadata.timestamp
+                        );
 
-                        return `
-                            <div class="${audioItemClass}">
-                                <div class="audio-item-header">
-                                    <div class="audio-item-title">Generation #${audioList.length - idx} ${bestTakeBadge}</div>
-                                    <small style="color: #999;">${date}</small>
+                        return sortedAudio.map((item, idx) => {
+                            const meta = item.metadata;
+                            const date = new Date(meta.timestamp).toLocaleString();
+                            const isBestTake = meta.is_best_take || false;
+                            const bestTakeBadge = isBestTake ? '<span class="best-take-badge">Best Take</span>' : '';
+                            const audioItemClass = isBestTake ? 'audio-item best-take' : 'audio-item';
+
+                            return `
+                                <div class="${audioItemClass}">
+                                    <div class="audio-item-header">
+                                        <div class="audio-item-title">Generation #${idx + 1} ${bestTakeBadge}</div>
+                                        <div class="audio-item-header-actions">
+                                            <small style="color: #999;">${date}</small>
+                                            <button class="delete-take-btn" onclick="deleteChunkTake(${fileIndex}, ${chunkId}, '${fileName}', '${item.audio_file}')" title="Delete this take">🗑️</button>
+                                        </div>
+                                    </div>
+                                    <div class="best-take-control">
+                                        <input type="radio"
+                                               name="best_take_chunk_${fileIndex}_${chunkId}"
+                                               id="radio_chunk_${fileIndex}_${chunkId}_${idx}"
+                                               value="${item.audio_file}"
+                                               ${isBestTake ? 'checked' : ''}
+                                               onchange="setChunkBestTake(${fileIndex}, ${chunkId}, '${fileName}', '${item.audio_file}')">
+                                        <label for="radio_chunk_${fileIndex}_${chunkId}_${idx}">Mark as Best Take</label>
+                                    </div>
+                                    <div class="audio-item-params">
+                                        Language: ${meta.language_id} | Exaggeration: ${meta.exaggeration} | CFG: ${meta.cfg_weight} | Voice: ${meta.voice_sample || 'Default'}
+                                    </div>
+                                    <audio controls class="audio-player">
+                                        <source src="http://localhost:5000${item.audio_url}" type="audio/wav">
+                                    </audio>
                                 </div>
-                                <div class="best-take-control">
-                                    <input type="radio"
-                                           name="best_take_chunk_${fileIndex}_${chunkId}"
-                                           id="radio_chunk_${fileIndex}_${chunkId}_${idx}"
-                                           value="${item.audio_file}"
-                                           ${isBestTake ? 'checked' : ''}
-                                           onchange="setChunkBestTake(${fileIndex}, ${chunkId}, '${fileName}', '${item.audio_file}')">
-                                    <label for="radio_chunk_${fileIndex}_${chunkId}_${idx}">Mark as Best Take</label>
-                                </div>
-                                <div class="audio-item-params">
-                                    Language: ${meta.language_id} | Exaggeration: ${meta.exaggeration} | CFG: ${meta.cfg_weight} | Voice: ${meta.voice_sample || 'Default'}
-                                </div>
-                                <audio controls class="audio-player">
-                                    <source src="http://localhost:5000${item.audio_url}" type="audio/wav">
-                                </audio>
-                            </div>
-                        `;
-                    }).join('') : '<p style="color: #999; font-size: 13px;">No audio generated yet for this chunk</p>'}
+                            `;
+                        }).join('');
+                    })() : '<p style="color: #999; font-size: 13px;">No audio generated yet for this chunk</p>'}
                 </div>
             `;
         }
@@ -1700,7 +1976,7 @@
             const charCount = chunk.text.length;
 
             showStatus(`Generating audio for chunk #${chunkId + 1}...`, 'info');
-            showProgressBar(charCount);
+            showProgressBar(charCount, fileIndex);
 
             try {
                 const formData = new FormData();
@@ -1801,6 +2077,49 @@
             }
         };
 
+        // Delete a chunk take (audio file)
+        window.deleteChunkTake = async function(fileIndex, chunkId, txtFilename, audioFilename) {
+            // Show confirmation dialog
+            if (!confirm(`Are you sure you want to delete this take?\n\nThis will permanently remove the audio file and cannot be undone.`)) {
+                return;
+            }
+
+            try {
+                showStatus('Deleting take...', 'info');
+
+                const response = await fetch(`${API_URL}/delete-take`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        txt_filename: txtFilename,
+                        audio_filename: audioFilename
+                    })
+                });
+
+                const data = await response.json();
+
+                if (!response.ok) {
+                    throw new Error(data.error || 'Failed to delete take');
+                }
+
+                showStatus('Take deleted successfully!', 'success');
+
+                // Reload chunk audio
+                const fileName = currentFiles[fileIndex].name.split('/').pop();
+                await loadChunkAudio(fileIndex, fileName, chunkId);
+
+                // Re-render details if this chunk is selected
+                if (selectedChunks[fileIndex] === chunkId) {
+                    renderChunkDetails(fileIndex, chunkId);
+                }
+            } catch (error) {
+                console.error('Error deleting chunk take:', error);
+                showStatus(`Failed: ${error.message}`, 'error');
+            }
+        };
+
         // Stitch all best takes together
         window.stitchAllAudio = async function(fileIndex) {
             const fileName = currentFiles[fileIndex].name.split('/').pop();
@@ -1869,6 +2188,7 @@
 
         // Initialize
         (async function init() {
+            await loadProjectInfo();
             await loadVoiceSamples();
             try {
                 const response = await fetch(`${API_URL}/status`);

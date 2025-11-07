@@ -32,6 +32,10 @@ class TextToAudioConverter:
         # Load existing stats or initialize
         self.generation_stats = self.load_stats()
 
+        # Project management
+        self.current_project_path = None
+        self.current_project_metadata = None
+
     def load_model(self):
         """Load the Chatterbox TTS model"""
         if self.model is None:
@@ -843,6 +847,162 @@ def list_generated_audio(txt_filename):
         print(traceback.format_exc())
         return jsonify({'error': str(e)}), 500
 
+# ===== PROJECT MANAGEMENT ENDPOINTS =====
+
+@app.route('/api/project/create', methods=['POST'])
+def create_project():
+    """Create a new project in a user-selected folder"""
+    try:
+        import json
+        import shutil
+        from datetime import datetime
+
+        data = request.json
+        project_path = data.get('project_path')
+        project_name = data.get('project_name', 'Unnamed Project')
+
+        if not project_path:
+            return jsonify({'error': 'project_path is required'}), 400
+
+        # Create project directory structure
+        os.makedirs(project_path, exist_ok=True)
+        texts_dir = os.path.join(project_path, 'texts')
+        audio_dir = os.path.join(project_path, 'audio')
+        voice_samples_dir = os.path.join(project_path, 'voice_samples')
+
+        os.makedirs(texts_dir, exist_ok=True)
+        os.makedirs(audio_dir, exist_ok=True)
+        os.makedirs(voice_samples_dir, exist_ok=True)
+
+        # Create project metadata
+        project_metadata = {
+            'name': project_name,
+            'created_at': datetime.now().isoformat(),
+            'last_modified': datetime.now().isoformat(),
+            'version': '1.0'
+        }
+
+        # Save project metadata
+        project_file = os.path.join(project_path, 'project.json')
+        with open(project_file, 'w') as f:
+            json.dump(project_metadata, f, indent=2)
+
+        # Update converter paths
+        converter.current_project_path = project_path
+        converter.current_project_metadata = project_metadata
+        converter.audio_dir = audio_dir
+        converter.voice_samples_dir = voice_samples_dir
+
+        return jsonify({
+            'success': True,
+            'project_path': project_path,
+            'metadata': project_metadata
+        })
+
+    except Exception as e:
+        import traceback
+        print(f"Error creating project: {str(e)}")
+        print(traceback.format_exc())
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/project/load', methods=['POST'])
+def load_project():
+    """Load an existing project from a folder"""
+    try:
+        import json
+        from datetime import datetime
+
+        data = request.json
+        project_path = data.get('project_path')
+
+        if not project_path:
+            return jsonify({'error': 'project_path is required'}), 400
+
+        if not os.path.exists(project_path):
+            return jsonify({'error': 'Project path does not exist'}), 404
+
+        # Load project metadata
+        project_file = os.path.join(project_path, 'project.json')
+        if not os.path.exists(project_file):
+            return jsonify({'error': 'Not a valid project folder (project.json not found)'}), 400
+
+        with open(project_file, 'r') as f:
+            project_metadata = json.load(f)
+
+        # Update last modified
+        project_metadata['last_modified'] = datetime.now().isoformat()
+        with open(project_file, 'w') as f:
+            json.dump(project_metadata, f, indent=2)
+
+        # Update converter paths
+        converter.current_project_path = project_path
+        converter.current_project_metadata = project_metadata
+        converter.audio_dir = os.path.join(project_path, 'audio')
+        converter.voice_samples_dir = os.path.join(project_path, 'voice_samples')
+
+        # Get list of text files
+        texts_dir = os.path.join(project_path, 'texts')
+        text_files = []
+        if os.path.exists(texts_dir):
+            text_files = [f for f in os.listdir(texts_dir) if f.endswith('.txt')]
+
+        return jsonify({
+            'success': True,
+            'project_path': project_path,
+            'metadata': project_metadata,
+            'text_files': text_files
+        })
+
+    except Exception as e:
+        import traceback
+        print(f"Error loading project: {str(e)}")
+        print(traceback.format_exc())
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/project/info', methods=['GET'])
+def get_project_info():
+    """Get current project information"""
+    try:
+        if converter.current_project_path is None:
+            return jsonify({'has_project': False})
+
+        return jsonify({
+            'has_project': True,
+            'project_path': converter.current_project_path,
+            'metadata': converter.current_project_metadata
+        })
+
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/project/save-text', methods=['POST'])
+def save_text_to_project():
+    """Save a text file to the current project"""
+    try:
+        if converter.current_project_path is None:
+            return jsonify({'error': 'No project loaded'}), 400
+
+        data = request.json
+        filename = data.get('filename')
+        content = data.get('content')
+
+        if not filename or content is None:
+            return jsonify({'error': 'filename and content are required'}), 400
+
+        texts_dir = os.path.join(converter.current_project_path, 'texts')
+        file_path = os.path.join(texts_dir, filename)
+
+        with open(file_path, 'w', encoding='utf-8') as f:
+            f.write(content)
+
+        return jsonify({'success': True, 'file_path': file_path})
+
+    except Exception as e:
+        import traceback
+        print(f"Error saving text: {str(e)}")
+        print(traceback.format_exc())
+        return jsonify({'error': str(e)}), 500
+
 @app.route('/api/set-best-take', methods=['POST'])
 def set_best_take():
     """Set or unset an audio file as the best take for a text file"""
@@ -890,6 +1050,43 @@ def set_best_take():
     except Exception as e:
         import traceback
         print(f"Error setting best take: {str(e)}")
+        print(traceback.format_exc())
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/delete-take', methods=['POST'])
+def delete_take():
+    """Delete an audio file and its metadata"""
+    try:
+        import json
+        data = request.json
+        txt_filename = data.get('txt_filename')
+        audio_filename = data.get('audio_filename')
+
+        if not txt_filename or not audio_filename:
+            return jsonify({'error': 'txt_filename and audio_filename are required'}), 400
+
+        # Delete the audio file
+        audio_path = os.path.join(converter.audio_dir, audio_filename)
+        if os.path.exists(audio_path):
+            os.remove(audio_path)
+            print(f"Deleted audio file: {audio_path}")
+        else:
+            print(f"Audio file not found: {audio_path}")
+
+        # Delete the metadata file
+        metadata_filename = os.path.splitext(audio_filename)[0] + '.json'
+        metadata_path = os.path.join(converter.audio_dir, metadata_filename)
+        if os.path.exists(metadata_path):
+            os.remove(metadata_path)
+            print(f"Deleted metadata file: {metadata_path}")
+        else:
+            print(f"Metadata file not found: {metadata_path}")
+
+        return jsonify({'success': True, 'message': 'Take deleted successfully'})
+
+    except Exception as e:
+        import traceback
+        print(f"Error deleting take: {str(e)}")
         print(traceback.format_exc())
         return jsonify({'error': str(e)}), 500
 
