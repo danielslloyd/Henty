@@ -599,6 +599,12 @@
             line-height: 1.4;
         }
 
+        .chunk-nickname .chunk-preview {
+            color: #999;
+            font-weight: 400;
+            font-size: 11px;
+        }
+
         .chunk-meta {
             font-size: 11px;
             opacity: 0.7;
@@ -1072,6 +1078,7 @@
                 const progressBar = document.getElementById(`progressBar_${fileIndex}`);
                 const progressPercent = document.getElementById(`progressPercent_${fileIndex}`);
                 const progressInfo = document.getElementById(`progressInfo_${fileIndex}`);
+                const gpuStatsDiv = document.getElementById(`gpuStats_${fileIndex}`);
 
                 if (progressBar && progressPercent && progressInfo) {
                     if (progress.progress_percent !== undefined) {
@@ -1091,6 +1098,29 @@
 
                         const elapsed = Math.round(progress.elapsed_seconds);
                         progressInfo.textContent = `Elapsed: ${elapsed}s | Estimating...`;
+                    }
+
+                    // Update GPU stats if available
+                    if (gpuStatsDiv && progress.gpu_stats) {
+                        const gpu = progress.gpu_stats;
+                        let statsHtml = '<strong>GPU:</strong> ';
+                        const stats = [];
+
+                        if (gpu.memory_allocated_gb !== undefined) {
+                            stats.push(`Memory: ${gpu.memory_allocated_gb} GB`);
+                        }
+                        if (gpu.temperature_c !== undefined && gpu.temperature_c !== null) {
+                            stats.push(`Temp: ${gpu.temperature_c}°C`);
+                        }
+                        if (gpu.utilization_percent !== undefined && gpu.utilization_percent !== null) {
+                            stats.push(`Utilization: ${gpu.utilization_percent}%`);
+                        }
+
+                        if (stats.length > 0) {
+                            statsHtml += stats.join(' | ');
+                            gpuStatsDiv.innerHTML = statsHtml;
+                            gpuStatsDiv.style.display = 'block';
+                        }
                     }
                 }
             }
@@ -1343,6 +1373,9 @@
                         <div class="inline-progress-info" id="progressInfo_${i}">
                             Preparing...
                         </div>
+                        <div id="gpuStats_${i}" style="margin-top: 8px; padding: 8px; background: #f0f0f0; border-radius: 4px; font-size: 11px; color: #666; display: none;">
+                            <!-- GPU stats will be populated here -->
+                        </div>
                     </div>
                 </div>
 
@@ -1360,20 +1393,6 @@
                                     <select id="voice_${i}">
                                         <option value="none">Default Voice</option>
                                         ${voiceSamples.map(s => `<option value="${s.name}">${s.name}</option>`).join('')}
-                                    </select>
-                                </div>
-                                <div class="control-group">
-                                    <label>Language</label>
-                                    <select id="language_${i}">
-                                        <option value="en">English</option>
-                                        <option value="es">Spanish</option>
-                                        <option value="fr">French</option>
-                                        <option value="de">German</option>
-                                        <option value="it">Italian</option>
-                                        <option value="pt">Portuguese</option>
-                                        <option value="zh">Chinese</option>
-                                        <option value="ja">Japanese</option>
-                                        <option value="ko">Korean</option>
                                     </select>
                                 </div>
                                 <div class="control-group">
@@ -1519,7 +1538,7 @@
                                     <label for="radio_${index}_${idx}">Mark as Best Take</label>
                                 </div>
                                 <div class="audio-item-params">
-                                    Language: ${meta.language_id} | Exaggeration: ${meta.exaggeration} | CFG: ${meta.cfg_weight} | Voice: ${meta.voice_sample || 'Default'}
+                                    Exaggeration: ${meta.exaggeration} | CFG: ${meta.cfg_weight} | Voice: ${meta.voice_sample || 'Default'}
                                 </div>
                                 <audio controls class="audio-player">
                                     <source src="http://localhost:5000${item.audio_url}" type="audio/wav">
@@ -1557,7 +1576,6 @@
             const fileName = fileInfo.name.split('/').pop();
 
             const voice = document.getElementById(`voice_${index}`).value;
-            const language = document.getElementById(`language_${index}`).value;
             const exaggeration = document.getElementById(`exaggeration_${index}`).value;
             const cfgWeight = document.getElementById(`cfg_weight_${index}`).value;
 
@@ -1573,7 +1591,7 @@
                 formData.append('file', fileInfo.file);
                 formData.append('filename', fileInfo.name);
                 formData.append('voice_sample', voice);
-                formData.append('language_id', language);
+                formData.append('language_id', 'en');
                 formData.append('exaggeration', exaggeration);
                 formData.append('cfg_weight', cfgWeight);
 
@@ -1805,14 +1823,15 @@
                 const audioKey = `${fileIndex}_${chunk.id}`;
                 const audioCount = chunkAudio[audioKey]?.length || 0;
                 const hasAudio = audioCount > 0;
+                const preview = chunk.text.substring(0, 20) + (chunk.text.length > 20 ? '...' : '');
 
                 return `
                     <div class="chunk-bubble ${hasAudio ? 'has-audio' : ''}"
                          id="chunkBubble_${fileIndex}_${chunk.id}"
                          onclick="selectChunk(${fileIndex}, ${chunk.id})">
-                        <div class="chunk-nickname">${chunk.nickname}</div>
+                        <div class="chunk-nickname">Chunk #${chunk.id + 1} <span class="chunk-preview">${preview}</span></div>
                         <div class="chunk-meta">
-                            <span>Chunk #${chunk.id + 1} (${chunk.text.length} chars)</span>
+                            <span>${chunk.text.length} chars</span>
                             ${hasAudio ? `<span class="chunk-audio-count">${audioCount} audio</span>` : ''}
                         </div>
                     </div>
@@ -1911,20 +1930,6 @@
                         </select>
                     </div>
                     <div class="control-group">
-                        <label>Language</label>
-                        <select id="language_chunk_${fileIndex}_${chunkId}">
-                            <option value="en">English</option>
-                            <option value="es">Spanish</option>
-                            <option value="fr">French</option>
-                            <option value="de">German</option>
-                            <option value="it">Italian</option>
-                            <option value="pt">Portuguese</option>
-                            <option value="zh">Chinese</option>
-                            <option value="ja">Japanese</option>
-                            <option value="ko">Korean</option>
-                        </select>
-                    </div>
-                    <div class="control-group">
                         <label>
                             Exaggeration
                             <span class="range-value" id="exag_val_chunk_${fileIndex}_${chunkId}">0.5</span>
@@ -1979,7 +1984,7 @@
                                         <label for="radio_chunk_${fileIndex}_${chunkId}_${idx}">Mark as Best Take</label>
                                     </div>
                                     <div class="audio-item-params">
-                                        Language: ${meta.language_id} | Exaggeration: ${meta.exaggeration} | CFG: ${meta.cfg_weight} | Voice: ${meta.voice_sample || 'Default'}
+                                        Exaggeration: ${meta.exaggeration} | CFG: ${meta.cfg_weight} | Voice: ${meta.voice_sample || 'Default'}
                                     </div>
                                     <audio controls class="audio-player">
                                         <source src="http://localhost:5000${item.audio_url}" type="audio/wav">
@@ -1999,7 +2004,6 @@
             const chunk = fileChunks[fileIndex].find(c => c.id === chunkId);
 
             const voice = document.getElementById(`voice_chunk_${fileIndex}_${chunkId}`).value;
-            const language = document.getElementById(`language_chunk_${fileIndex}_${chunkId}`).value;
             const exaggeration = document.getElementById(`exaggeration_chunk_${fileIndex}_${chunkId}`).value;
             const cfgWeight = document.getElementById(`cfg_weight_chunk_${fileIndex}_${chunkId}`).value;
 
@@ -2015,7 +2019,7 @@
                 formData.append('chunk_id', chunkId);
                 formData.append('chunk_text', chunk.text);
                 formData.append('voice_sample', voice);
-                formData.append('language_id', language);
+                formData.append('language_id', 'en');
                 formData.append('exaggeration', exaggeration);
                 formData.append('cfg_weight', cfgWeight);
 

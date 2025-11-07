@@ -36,6 +36,16 @@ class TextToAudioConverter:
         self.current_project_path = None
         self.current_project_metadata = None
 
+    def get_relative_path(self, absolute_path, base_path=None):
+        """Convert absolute path to relative path within project"""
+        if base_path is None:
+            base_path = self.current_project_path or os.getcwd()
+        try:
+            return os.path.relpath(absolute_path, base_path)
+        except ValueError:
+            # On Windows, paths on different drives can't be made relative
+            return absolute_path
+
     def load_model(self):
         """Load the Chatterbox TTS model"""
         if self.model is None:
@@ -64,16 +74,29 @@ class TextToAudioConverter:
             print(f"Error saving stats: {e}")
 
     def get_gpu_usage(self):
-        """Get current GPU memory usage"""
+        """Get current GPU memory usage and temperature"""
         if self.device == "cuda" and torch.cuda.is_available():
             try:
                 gpu_mem_allocated = torch.cuda.memory_allocated(0) / (1024**3)  # GB
                 gpu_mem_reserved = torch.cuda.memory_reserved(0) / (1024**3)  # GB
                 gpu_utilization = torch.cuda.utilization(0) if hasattr(torch.cuda, 'utilization') else None
+
+                # Try to get GPU temperature using nvidia-smi
+                gpu_temp = None
+                try:
+                    import subprocess
+                    result = subprocess.run(['nvidia-smi', '--query-gpu=temperature.gpu', '--format=csv,noheader,nounits'],
+                                          capture_output=True, text=True, timeout=1)
+                    if result.returncode == 0:
+                        gpu_temp = int(result.stdout.strip())
+                except Exception:
+                    pass
+
                 return {
                     'memory_allocated_gb': round(gpu_mem_allocated, 2),
                     'memory_reserved_gb': round(gpu_mem_reserved, 2),
-                    'utilization_percent': gpu_utilization
+                    'utilization_percent': gpu_utilization,
+                    'temperature_c': gpu_temp
                 }
             except Exception as e:
                 print(f"Error getting GPU stats: {e}")
@@ -877,7 +900,8 @@ def create_project():
             'name': project_name,
             'created_at': datetime.now().isoformat(),
             'last_modified': datetime.now().isoformat(),
-            'version': '1.0'
+            'version': '1.0',
+            'note': 'All file references use relative paths for portability'
         }
 
         # Save project metadata
@@ -993,7 +1017,9 @@ def save_text_to_project():
         with open(file_path, 'w', encoding='utf-8') as f:
             f.write(content)
 
-        return jsonify({'success': True, 'file_path': file_path})
+        # Return relative path
+        relative_path = converter.get_relative_path(file_path)
+        return jsonify({'success': True, 'file_path': relative_path})
 
     except Exception as e:
         import traceback
@@ -1232,7 +1258,8 @@ def get_generation_progress():
         with converter.generation_lock:
             if converter.current_generation is None:
                 return jsonify({
-                    'in_progress': False
+                    'in_progress': False,
+                    'gpu_stats': converter.get_gpu_usage()
                 })
 
             current = converter.current_generation.copy()
@@ -1244,7 +1271,8 @@ def get_generation_progress():
             'in_progress': True,
             'char_count': current['char_count'],
             'elapsed_ms': int(elapsed_time * 1000),
-            'elapsed_seconds': round(elapsed_time, 1)
+            'elapsed_seconds': round(elapsed_time, 1),
+            'gpu_stats': converter.get_gpu_usage()
         }
 
         if estimated:
