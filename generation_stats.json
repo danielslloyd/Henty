@@ -1,0 +1,38 @@
+[
+  {
+    "timestamp": 1762530255615,
+    "char_count": 806,
+    "audio_duration_sec": 40.0,
+    "generation_time_ms": 153623,
+    "chars_per_second": 5.25,
+    "gpu_before": null,
+    "gpu_after": null
+  },
+  {
+    "timestamp": 1762530700505,
+    "char_count": 986,
+    "audio_duration_sec": 40.0,
+    "generation_time_ms": 151088,
+    "chars_per_second": 6.53,
+    "gpu_before": null,
+    "gpu_after": null
+  },
+  {
+    "timestamp": 1762531055027,
+    "char_count": 806,
+    "audio_duration_sec": 40.0,
+    "generation_time_ms": 141704,
+    "chars_per_second": 5.69,
+    "gpu_before": null,
+    "gpu_after": null
+  },
+  {
+    "timestamp": 1762531279677,
+    "char_count": 806,
+    "audio_duration_sec": 40.0,
+    "generation_time_ms": 140508,
+    "chars_per_second": 5.74,
+    "gpu_before": null,
+    "gpu_after": null
+  }
+]

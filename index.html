@@ -880,6 +880,12 @@
             const progressPercent = document.getElementById('progressPercent');
             const progressTime = document.getElementById('progressTime');
 
+            // Add null checks to prevent errors
+            if (!overlay || !header || !progressBarFill || !progressPercent || !progressTime) {
+                console.error('Progress bar elements not found');
+                return;
+            }
+
             header.textContent = `Generating Audio (${charCount} characters)...`;
             progressBarFill.style.width = '0%';
             progressPercent.textContent = '';
@@ -928,6 +934,12 @@
             const progressPercent = document.getElementById('progressPercent');
             const progressTime = document.getElementById('progressTime');
             const progressStats = document.getElementById('progressStats');
+
+            // Add null checks to prevent errors
+            if (!progressBarFill || !progressPercent || !progressTime || !progressStats) {
+                console.error('Progress bar elements not found in updateProgressBar');
+                return;
+            }
 
             if (progress.progress_percent !== undefined) {
                 // We have an estimate
