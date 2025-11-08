@@ -16,7 +16,7 @@
             font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
             background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
             min-height: 100vh;
-            padding: 20px;
+            padding: 10px;
         }
 
         .container {
@@ -27,25 +27,25 @@
         .header {
             text-align: center;
             color: white;
-            margin-bottom: 30px;
+            margin-bottom: 15px;
         }
 
         .header h1 {
-            font-size: 2.5em;
-            margin-bottom: 10px;
+            font-size: 1.25em;
+            margin-bottom: 5px;
             text-shadow: 2px 2px 4px rgba(0,0,0,0.2);
         }
 
         .header p {
-            font-size: 1.1em;
+            font-size: 0.55em;
             opacity: 0.9;
         }
 
         .main-controls {
             background: white;
             border-radius: 15px;
-            padding: 25px;
-            margin-bottom: 20px;
+            padding: 12px;
+            margin-bottom: 10px;
             box-shadow: 0 10px 30px rgba(0,0,0,0.2);
         }
 
@@ -187,7 +187,7 @@
         .file-bubble {
             background: white;
             border-radius: 15px;
-            padding: 20px;
+            padding: 10px;
             box-shadow: 0 4px 6px rgba(0,0,0,0.1);
             transition: all 0.3s;
         }
@@ -860,9 +860,8 @@
             <p>Professional Voice Synthesis with Multiple Generations</p>
         </div>
 
-        <div class="project-section" style="background: linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%); padding: 20px; border-radius: 12px; margin-bottom: 20px;">
-            <h3 style="margin-bottom: 15px; color: #333;">📁 Project Management</h3>
-            <div id="projectInfo" style="margin-bottom: 15px; padding: 10px; background: white; border-radius: 8px; display: none;">
+        <div class="project-section" style="background: linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%); padding: 10px; border-radius: 12px; margin-bottom: 10px;">
+            <div id="projectInfo" style="margin-bottom: 10px; padding: 8px; background: white; border-radius: 8px; display: none;">
                 <strong>Current Project:</strong> <span id="projectName">None</span><br>
                 <small style="color: #666;">Path: <span id="projectPath">-</span></small>
             </div>
@@ -881,6 +880,35 @@
                         <button class="btn btn-primary" id="browseFolderBtn">Browse</button>
                     </div>
                     <input type="file" id="folderInput" accept=".txt">
+
+                    <!-- Project Defaults Section -->
+                    <div style="margin-top: 15px; padding: 10px; background: #f0f0f0; border-radius: 8px;">
+                        <h4 style="font-size: 12px; color: #666; margin-bottom: 8px;">Project Defaults</h4>
+                        <div style="margin-bottom: 8px;">
+                            <label style="font-size: 11px; display: block; margin-bottom: 4px;">Voice Sample</label>
+                            <select id="project_voice_default" onchange="updateProjectDefaults()" style="width: 100%; font-size: 12px; padding: 6px; border: 2px solid #e0e0e0; border-radius: 6px;">
+                                <option value="none">Default Voice</option>
+                            </select>
+                        </div>
+                        <div style="margin-bottom: 8px;">
+                            <label style="font-size: 11px; display: block; margin-bottom: 4px;">
+                                Exaggeration
+                                <span class="range-value" id="project_exag_val" style="font-size: 11px;">0.5</span>
+                            </label>
+                            <input type="range" id="project_exaggeration_default" min="0" max="1" step="0.1" value="0.5"
+                                   oninput="document.getElementById('project_exag_val').textContent = this.value"
+                                   onchange="updateProjectDefaults()" style="width: 100%;">
+                        </div>
+                        <div style="margin-bottom: 0;">
+                            <label style="font-size: 11px; display: block; margin-bottom: 4px;">
+                                CFG Weight
+                                <span class="range-value" id="project_cfg_val" style="font-size: 11px;">0.5</span>
+                            </label>
+                            <input type="range" id="project_cfg_weight_default" min="0" max="1" step="0.1" value="0.5"
+                                   oninput="document.getElementById('project_cfg_val').textContent = this.value"
+                                   onchange="updateProjectDefaults()" style="width: 100%;">
+                        </div>
+                    </div>
                 </div>
 
                 <div class="voice-samples-section">
@@ -947,6 +975,23 @@
         </div>
     </div>
 
+    <!-- Edit Chunk Modal -->
+    <div class="modal" id="editChunkModal">
+        <div class="modal-content">
+            <div class="modal-header">Edit Chunk Text</div>
+            <div class="modal-body">
+                <textarea id="editChunkTextarea" style="width: 100%; min-height: 200px; padding: 12px; border: 2px solid #e0e0e0; border-radius: 8px; font-size: 14px; font-family: 'Courier New', monospace; resize: vertical;"></textarea>
+                <p style="font-size: 12px; color: #666; margin-top: 8px;">
+                    Character count: <span id="editChunkCharCount">0</span>
+                </p>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-secondary" onclick="closeEditChunkModal()">Cancel</button>
+                <button class="btn btn-primary" onclick="saveChunkEdit()">Save Changes</button>
+            </div>
+        </div>
+    </div>
+
     <!-- Progress Bar Overlay -->
     <div id="progressOverlay" class="progress-overlay">
         <div class="progress-container">
@@ -976,6 +1021,8 @@
         let fileChunks = {}; // Maps file index to chunk data
         let selectedChunks = {}; // Maps file index to selected chunk ID
         let chunkAudio = {}; // Maps "fileIndex_chunkId" to array of audio generations
+        let chunkOriginalTexts = {}; // Maps "fileIndex_chunkId" to original text for dirty flag comparison
+        let currentEditingChunk = null; // Stores {fileIndex, chunkId} for the chunk being edited
 
         // Project state
         let projectDefaults = {
@@ -1171,12 +1218,72 @@
                     // Load project defaults
                     if (data.metadata.default_audio_settings) {
                         projectDefaults = data.metadata.default_audio_settings;
+
+                        // Update UI controls with project defaults
+                        const exagControl = document.getElementById('project_exaggeration_default');
+                        const cfgControl = document.getElementById('project_cfg_weight_default');
+                        const voiceControl = document.getElementById('project_voice_default');
+
+                        if (exagControl) exagControl.value = projectDefaults.exaggeration;
+                        if (cfgControl) cfgControl.value = projectDefaults.cfg_weight;
+                        if (voiceControl) voiceControl.value = projectDefaults.voice_sample;
+
+                        // Update display values
+                        const exagVal = document.getElementById('project_exag_val');
+                        const cfgVal = document.getElementById('project_cfg_val');
+                        if (exagVal) exagVal.textContent = projectDefaults.exaggeration;
+                        if (cfgVal) cfgVal.textContent = projectDefaults.cfg_weight;
                     }
+
+                    // Load text files from project
+                    await loadProjectTextFiles();
                 } else {
                     document.getElementById('projectInfo').style.display = 'none';
+                    filesContainer.innerHTML = `
+                        <div class="empty-state">
+                            <h2>No Project Loaded</h2>
+                            <p>Create or load a project to get started</p>
+                        </div>
+                    `;
                 }
             } catch (error) {
                 console.error('Error loading project info:', error);
+            }
+        }
+
+        async function loadProjectTextFiles() {
+            try {
+                const response = await fetch(`${API_URL}/project/get-text-files`);
+                const data = await response.json();
+
+                if (!response.ok) {
+                    throw new Error(data.error || 'Failed to load text files');
+                }
+
+                const textFiles = data.text_files || [];
+
+                // Clear current files and render from project
+                filesContainer.innerHTML = '';
+
+                if (textFiles.length === 0) {
+                    filesContainer.innerHTML = `
+                        <div class="empty-state">
+                            <h2>No Files Added</h2>
+                            <p>Click "Browse" to add a .txt file to the project</p>
+                        </div>
+                    `;
+                    return;
+                }
+
+                // Render each text file
+                for (let i = 0; i < textFiles.length; i++) {
+                    const textFile = textFiles[i];
+                    await renderProjectTextFile(i, textFile);
+                }
+
+            } catch (error) {
+                console.error('Error loading project text files:', error);
+                showStatus(`Failed to load text files: ${error.message}`, 'error');
             }
         }
 
@@ -1268,6 +1375,11 @@
         function renderVoiceSamples() {
             if (voiceSamples.length === 0) {
                 voiceSamplesList.innerHTML = '<p style="color: #999; font-size: 13px; text-align: center;">No voice samples yet</p>';
+                // Update project defaults dropdown
+                const projectVoiceSelect = document.getElementById('project_voice_default');
+                if (projectVoiceSelect) {
+                    projectVoiceSelect.innerHTML = '<option value="none">Default Voice</option>';
+                }
                 return;
             }
 
@@ -1275,13 +1387,30 @@
                 <div class="voice-sample-item">
                     <div class="voice-sample-name">${sample.name}</div>
                     <div class="voice-sample-controls">
-                        <audio controls style="height: 30px;">
+                        <button class="btn btn-small" onclick="playVoiceSample('${sample.url}')" title="Play sample" style="padding: 4px 8px; font-size: 11px;">▶</button>
+                        <audio id="audio_${sample.name.replace(/[^a-zA-Z0-9]/g, '_')}" style="display: none;">
                             <source src="http://localhost:5000${sample.url}" type="audio/wav">
                         </audio>
                     </div>
                 </div>
             `).join('');
+
+            // Update project defaults dropdown
+            const projectVoiceSelect = document.getElementById('project_voice_default');
+            if (projectVoiceSelect) {
+                projectVoiceSelect.innerHTML = '<option value="none">Default Voice</option>' +
+                    voiceSamples.map(s => `<option value="${s.name}" ${projectDefaults.voice_sample === s.name ? 'selected' : ''}>${s.name}</option>`).join('');
+            }
         }
+
+        // Play voice sample function
+        window.playVoiceSample = function(url) {
+            const audio = new Audio(`http://localhost:5000${url}`);
+            audio.play().catch(err => {
+                console.error('Error playing audio:', err);
+                showStatus('Failed to play audio sample', 'error');
+            });
+        };
 
         // Handle folder browse
         browseFolderBtn.addEventListener('click', () => folderInput.click());
@@ -1297,35 +1426,113 @@
                 return;
             }
 
-            folderPath.value = file.name;
-            currentFiles = [{
-                name: file.name,
-                path: file.name,
-                file: file
-            }];
+            // Check if a project is loaded
+            const projectInfo = document.getElementById('projectInfo');
+            if (!projectInfo || projectInfo.style.display === 'none') {
+                showStatus('Please create or load a project first', 'error');
+                return;
+            }
 
-            showStatus('Text file loaded successfully', 'success');
-            renderFiles();
+            folderPath.value = file.name;
+
+            try {
+                showStatus('Adding text file to project...', 'info');
+
+                // Add file to project via API
+                const formData = new FormData();
+                formData.append('file', file);
+                formData.append('original_path', file.name);
+
+                const response = await fetch(`${API_URL}/project/add-text-file`, {
+                    method: 'POST',
+                    body: formData
+                });
+
+                const data = await response.json();
+
+                if (!response.ok) {
+                    throw new Error(data.error || 'Failed to add text file to project');
+                }
+
+                showStatus('Text file added to project successfully', 'success');
+
+                // Reload text files from project
+                await loadProjectTextFiles();
+
+            } catch (error) {
+                console.error('Error adding text file:', error);
+                showStatus(`Failed to add text file: ${error.message}`, 'error');
+            }
         });
 
-        // Render file bubbles
-        async function renderFiles() {
-            filesContainer.innerHTML = '';
+        // Render a text file from the project
+        async function renderProjectTextFile(index, textFile) {
+            const fileName = textFile.original_filename;
+            const chunks = textFile.chunks || [];
 
-            for (let i = 0; i < currentFiles.length; i++) {
-                const fileInfo = currentFiles[i];
-                const text = await fileInfo.file.text();
-                const fileName = fileInfo.name.split('/').pop();
+            // Store chunks in our state
+            fileChunks[index] = chunks;
 
-                // Check if text is long enough to warrant chunking (> 1500 characters)
-                const isLongFile = text.length > 1500;
+            // Initialize chunk audio storage and dirty flags
+            for (const chunk of chunks) {
+                const chunkKey = `${index}_${chunk.id}`;
+                // Load generated audios from chunk data
+                chunkAudio[chunkKey] = chunk.generated_audios || [];
+                chunkOriginalTexts[chunkKey] = chunk.text;
+            }
 
-                if (isLongFile) {
-                    await renderChunkedFile(i, fileInfo, text, fileName);
-                } else {
-                    await renderSimpleFile(i, fileInfo, text, fileName);
+            // Create highlighted text with spans for each chunk
+            let highlightedText = '';
+            for (const chunk of chunks) {
+                highlightedText += `<span class="text-chunk-span" data-chunk-id="${chunk.id}" onclick="selectChunk(${index}, ${chunk.id})" onmouseenter="highlightChunk(${index}, ${chunk.id})" onmouseleave="unhighlightChunk(${index}, ${chunk.id})">${chunk.text}</span>`;
+                if (chunk.id < chunks.length - 1) {
+                    highlightedText += '\n\n';
                 }
             }
+
+            const bubble = document.createElement('div');
+            bubble.className = 'file-bubble';
+            bubble.id = `bubble_${index}`;
+            bubble.dataset.textFileId = textFile.id; // Store text file ID for API calls
+
+            bubble.innerHTML = `
+                <div class="file-header" onclick="toggleExpand(${index})">
+                    <div class="file-title">${fileName} <span style="font-size: 11px; color: #999;">(${chunks.length} chunks)</span></div>
+                    <div class="expand-icon">▼</div>
+                </div>
+
+                <div class="file-expanded-content">
+                    <div class="chunked-layout">
+                        <!-- Left pane: Full text viewer -->
+                        <div class="text-viewer-pane">
+                            <h3>Full Text</h3>
+                            <div class="full-text-content" id="fullText_${index}">
+                                ${highlightedText}
+                            </div>
+                        </div>
+
+                        <!-- Middle pane: Chunk bubbles -->
+                        <div class="chunks-pane">
+                            <h3>Chunks (${chunks.length})</h3>
+                            <div id="chunksList_${index}">
+                                <!-- Populated by renderChunkBubbles -->
+                            </div>
+                        </div>
+
+                        <!-- Right pane: Selected chunk details -->
+                        <div class="chunk-details-pane">
+                            <div id="chunkDetails_${index}">
+                                <div class="no-chunk-selected">
+                                    Select a chunk to view details and generate audio
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            `;
+
+            filesContainer.appendChild(bubble);
+            renderChunkBubbles(index);
         }
 
         // Render simple (short) file with original layout
@@ -1419,9 +1626,12 @@
             const data = await response.json();
             fileChunks[i] = data.chunks;
 
-            // Initialize chunk audio storage
+            // Initialize chunk audio storage and dirty flags
             for (const chunk of data.chunks) {
-                chunkAudio[`${i}_${chunk.id}`] = [];
+                const chunkKey = `${i}_${chunk.id}`;
+                chunkAudio[chunkKey] = [];
+                chunk.dirty = false; // Initialize dirty flag
+                chunkOriginalTexts[chunkKey] = chunk.text; // Store original text
             }
 
             const bubble = document.createElement('div');
@@ -1898,41 +2108,31 @@
                 ` : ''}
 
                 <div style="margin-bottom: 15px;">
-                    <h3 style="color: #667eea; margin-bottom: 10px;">${chunk.nickname || `Chunk #${chunkId + 1}`}</h3>
-
-                    <div style="background: #f0f0f0; border-radius: 8px; padding: 10px; margin-bottom: 15px;">
-                        <h4 style="font-size: 12px; color: #666; margin-bottom: 8px;">Project Defaults</h4>
-                        <div class="controls-panel">
-                            <div class="control-group">
-                                <label style="font-size: 11px;">Voice Sample</label>
-                                <select id="project_voice_default" onchange="updateProjectDefaults()" style="font-size: 12px; padding: 4px;">
-                                    <option value="none">Default Voice</option>
-                                    ${voiceSamples.map(s => `<option value="${s.name}" ${projectDefaults.voice_sample === s.name ? 'selected' : ''}>${s.name}</option>`).join('')}
-                                </select>
-                            </div>
-                            <div class="control-group">
-                                <label style="font-size: 11px;">
-                                    Exaggeration
-                                    <span class="range-value" id="project_exag_val">${projectDefaults.exaggeration}</span>
-                                </label>
-                                <input type="range" id="project_exaggeration_default" min="0" max="1" step="0.1" value="${projectDefaults.exaggeration}"
-                                       oninput="document.getElementById('project_exag_val').textContent = this.value"
-                                       onchange="updateProjectDefaults()">
-                            </div>
-                            <div class="control-group">
-                                <label style="font-size: 11px;">
-                                    CFG Weight
-                                    <span class="range-value" id="project_cfg_val">${projectDefaults.cfg_weight}</span>
-                                </label>
-                                <input type="range" id="project_cfg_weight_default" min="0" max="1" step="0.1" value="${projectDefaults.cfg_weight}"
-                                       oninput="document.getElementById('project_cfg_val').textContent = this.value"
-                                       onchange="updateProjectDefaults()">
-                            </div>
-                        </div>
+                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
+                        <h3 style="color: #667eea; margin: 0;">${chunk.nickname || `Chunk #${chunkId + 1}`}</h3>
+                        <button class="btn btn-small" onclick="editChunkText(${fileIndex}, ${chunkId})" title="Edit chunk text" style="padding: 6px 12px;">
+                            ✏️ Edit
+                        </button>
                     </div>
 
+                    ${chunk.dirty ? `
+                        <div style="background: #fff3cd; border: 2px solid #ffc107; border-radius: 8px; padding: 10px; margin-bottom: 10px;">
+                            <div style="display: flex; justify-content: space-between; align-items: center;">
+                                <div>
+                                    <strong style="color: #856404;">⚠️ Text Modified</strong>
+                                    <p style="font-size: 11px; color: #856404; margin: 4px 0 0 0;">
+                                        Chunk text has been edited since audio generation. Generated audio may not match current text.
+                                    </p>
+                                </div>
+                                <button class="btn btn-small" onclick="dismissDirtyFlag(${fileIndex}, ${chunkId})" style="padding: 4px 8px; font-size: 11px;">
+                                    Dismiss
+                                </button>
+                            </div>
+                        </div>
+                    ` : ''}
+
                     <button class="btn" onclick="generateAllChunks(${fileIndex})" style="width: 100%; background: #ff9800; color: white; margin-bottom: 10px;">
-                        Generate All Chunks (Using Defaults)
+                        Generate All Chunks (Using Project Defaults)
                     </button>
                 </div>
 
@@ -2023,9 +2223,14 @@
 
         // Generate audio for a specific chunk
         window.generateChunkAudio = async function(fileIndex, chunkId) {
-            const fileInfo = currentFiles[fileIndex];
-            const fileName = fileInfo.name.split('/').pop();
             const chunk = fileChunks[fileIndex].find(c => c.id === chunkId);
+            const bubble = document.getElementById(`bubble_${fileIndex}`);
+            const textFileId = bubble ? bubble.dataset.textFileId : null;
+
+            if (!textFileId) {
+                showStatus('Error: Could not identify text file', 'error');
+                return;
+            }
 
             const voice = document.getElementById(`voice_chunk_${fileIndex}_${chunkId}`).value;
             const exaggeration = document.getElementById(`exaggeration_chunk_${fileIndex}_${chunkId}`).value;
@@ -2041,9 +2246,13 @@
             showGenerationPlaceholder(fileIndex, chunkId);
 
             try {
+                // Create a blob file from chunk text
+                const textBlob = new Blob([chunk.text], { type: 'text/plain' });
+                const textFile = new File([textBlob], `chunk_${chunkId}.txt`, { type: 'text/plain' });
+
                 const formData = new FormData();
-                formData.append('file', fileInfo.file);
-                formData.append('filename', fileInfo.name);
+                formData.append('file', textFile);
+                formData.append('filename', `chunk_${chunkId}.txt`);
                 formData.append('chunk_id', chunkId);
                 formData.append('chunk_text', chunk.text);
                 formData.append('voice_sample', voice);
@@ -2079,11 +2288,39 @@
                     throw new Error(data.error || `Server error: ${response.status}`);
                 }
 
+                // Save audio metadata to project
+                const audioMetadata = {
+                    audio_file: data.audio_file,
+                    audio_url: data.audio_url,
+                    timestamp: Date.now(),
+                    exaggeration: parseFloat(exaggeration),
+                    cfg_weight: parseFloat(cfgWeight),
+                    voice_sample: voice,
+                    is_best_take: false
+                };
+
+                const saveResponse = await fetch(`${API_URL}/project/add-audio-to-chunk`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        text_file_id: textFileId,
+                        chunk_id: chunkId,
+                        audio_metadata: audioMetadata
+                    })
+                });
+
+                const saveData = await saveResponse.json();
+
+                if (!saveResponse.ok) {
+                    console.error('Failed to save audio metadata to project:', saveData.error);
+                }
+
                 hideProgressBar();
                 showStatus(`Chunk #${chunkId + 1} audio generated successfully!`, 'success');
 
-                // Reload chunk audio
-                await loadChunkAudio(fileIndex, fileName, chunkId);
+                // Update local state from backend
+                chunk.generated_audios = saveData.chunk.generated_audios;
+                chunkAudio[chunkKey] = chunk.generated_audios;
 
                 // Update chunk bubbles
                 renderChunkBubbles(fileIndex);
@@ -2252,9 +2489,14 @@
 
         // Generate all chunks using project defaults
         window.generateAllChunks = async function(fileIndex) {
-            const fileInfo = currentFiles[fileIndex];
-            const fileName = fileInfo.name.split('/').pop();
             const chunks = fileChunks[fileIndex];
+            const bubble = document.getElementById(`bubble_${fileIndex}`);
+            const textFileId = bubble ? bubble.dataset.textFileId : null;
+
+            if (!textFileId) {
+                showStatus('Error: Could not identify text file', 'error');
+                return;
+            }
 
             if (!chunks || chunks.length === 0) {
                 showStatus('No chunks to generate', 'error');
@@ -2277,9 +2519,13 @@
 
                     showStatus(`Generating chunk ${i + 1}/${chunks.length}: ${chunk.nickname || `Chunk #${chunk.id + 1}`}...`, 'info');
 
+                    // Create a blob file from chunk text
+                    const textBlob = new Blob([chunk.text], { type: 'text/plain' });
+                    const textFile = new File([textBlob], `chunk_${chunk.id}.txt`, { type: 'text/plain' });
+
                     const formData = new FormData();
-                    formData.append('file', fileInfo.file);
-                    formData.append('filename', fileInfo.name);
+                    formData.append('file', textFile);
+                    formData.append('filename', `chunk_${chunk.id}.txt`);
                     formData.append('chunk_id', chunk.id);
                     formData.append('chunk_text', chunk.text);
                     formData.append('voice_sample', projectDefaults.voice_sample);
@@ -2315,8 +2561,36 @@
                         throw new Error(data.error || `Server error: ${response.status}`);
                     }
 
-                    // Reload chunk audio
-                    await loadChunkAudio(fileIndex, fileName, chunk.id);
+                    // Save audio metadata to project
+                    const audioMetadata = {
+                        audio_file: data.audio_file,
+                        audio_url: data.audio_url,
+                        timestamp: Date.now(),
+                        exaggeration: projectDefaults.exaggeration,
+                        cfg_weight: projectDefaults.cfg_weight,
+                        voice_sample: projectDefaults.voice_sample,
+                        is_best_take: false
+                    };
+
+                    const saveResponse = await fetch(`${API_URL}/project/add-audio-to-chunk`, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            text_file_id: textFileId,
+                            chunk_id: chunk.id,
+                            audio_metadata: audioMetadata
+                        })
+                    });
+
+                    const saveData = await saveResponse.json();
+
+                    if (!saveResponse.ok) {
+                        console.error('Failed to save audio metadata to project:', saveData.error);
+                    }
+
+                    // Update local state from backend
+                    chunk.generated_audios = saveData.chunk.generated_audios;
+                    chunkAudio[chunkKey] = chunk.generated_audios;
 
                     // Update chunk bubbles
                     renderChunkBubbles(fileIndex);
@@ -2474,6 +2748,174 @@
         };
 
         refreshVoicesBtn.addEventListener('click', loadVoiceSamples);
+
+        // ===== CHUNK EDITING FUNCTIONS =====
+
+        // Edit chunk text
+        window.editChunkText = function(fileIndex, chunkId) {
+            const chunk = fileChunks[fileIndex].find(c => c.id === chunkId);
+            if (!chunk) {
+                showStatus('Chunk not found', 'error');
+                return;
+            }
+
+            currentEditingChunk = { fileIndex, chunkId };
+            const textarea = document.getElementById('editChunkTextarea');
+            const charCount = document.getElementById('editChunkCharCount');
+
+            textarea.value = chunk.text;
+            charCount.textContent = chunk.text.length;
+
+            // Update character count on input
+            textarea.oninput = () => {
+                charCount.textContent = textarea.value.length;
+            };
+
+            document.getElementById('editChunkModal').classList.add('show');
+        };
+
+        // Close edit chunk modal
+        window.closeEditChunkModal = function() {
+            document.getElementById('editChunkModal').classList.remove('show');
+            currentEditingChunk = null;
+        };
+
+        // Save chunk edit
+        window.saveChunkEdit = async function() {
+            if (!currentEditingChunk) return;
+
+            const { fileIndex, chunkId } = currentEditingChunk;
+            const chunk = fileChunks[fileIndex].find(c => c.id === chunkId);
+            if (!chunk) return;
+
+            const textarea = document.getElementById('editChunkTextarea');
+            const newText = textarea.value;
+
+            // Check if text has changed
+            if (newText !== chunk.text) {
+                try {
+                    // Get text file ID
+                    const bubble = document.getElementById(`bubble_${fileIndex}`);
+                    const textFileId = bubble ? bubble.dataset.textFileId : null;
+
+                    if (!textFileId) {
+                        showStatus('Error: Could not identify text file', 'error');
+                        return;
+                    }
+
+                    // Call backend to update chunk text
+                    const response = await fetch(`${API_URL}/project/update-chunk-text`, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            text_file_id: textFileId,
+                            chunk_id: chunkId,
+                            new_text: newText
+                        })
+                    });
+
+                    const data = await response.json();
+
+                    if (!response.ok) {
+                        throw new Error(data.error || 'Failed to update chunk text');
+                    }
+
+                    // Update local state with backend response
+                    chunk.text = data.chunk.text;
+                    chunk.nickname = data.chunk.nickname;
+                    chunk.dirty = data.chunk.dirty;
+
+                    // Re-render the full text viewer
+                    rerenderFullText(fileIndex);
+
+                    // Re-render chunk bubbles
+                    renderChunkBubbles(fileIndex);
+
+                    // Re-render details if this chunk is selected
+                    if (selectedChunks[fileIndex] === chunkId) {
+                        renderChunkDetails(fileIndex, chunkId);
+                    }
+
+                    showStatus('Chunk text updated successfully', 'success');
+
+                } catch (error) {
+                    console.error('Error updating chunk text:', error);
+                    showStatus(`Failed to update chunk: ${error.message}`, 'error');
+                }
+            }
+
+            closeEditChunkModal();
+        };
+
+        // Dismiss dirty flag for a chunk
+        window.dismissDirtyFlag = async function(fileIndex, chunkId) {
+            const chunk = fileChunks[fileIndex].find(c => c.id === chunkId);
+            if (!chunk) return;
+
+            try {
+                // Get text file ID
+                const bubble = document.getElementById(`bubble_${fileIndex}`);
+                const textFileId = bubble ? bubble.dataset.textFileId : null;
+
+                if (!textFileId) {
+                    showStatus('Error: Could not identify text file', 'error');
+                    return;
+                }
+
+                // Call backend to dismiss dirty flag
+                const response = await fetch(`${API_URL}/project/dismiss-dirty-flag`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        text_file_id: textFileId,
+                        chunk_id: chunkId
+                    })
+                });
+
+                const data = await response.json();
+
+                if (!response.ok) {
+                    throw new Error(data.error || 'Failed to dismiss dirty flag');
+                }
+
+                // Update local state
+                chunk.dirty = data.chunk.dirty;
+
+                // Update original text to current text
+                const chunkKey = `${fileIndex}_${chunkId}`;
+                chunkOriginalTexts[chunkKey] = chunk.text;
+
+                // Re-render details if this chunk is selected
+                if (selectedChunks[fileIndex] === chunkId) {
+                    renderChunkDetails(fileIndex, chunkId);
+                }
+
+                showStatus('Dirty flag dismissed', 'success');
+
+            } catch (error) {
+                console.error('Error dismissing dirty flag:', error);
+                showStatus(`Failed to dismiss flag: ${error.message}`, 'error');
+            }
+        };
+
+        // Re-render full text viewer with updated chunks
+        function rerenderFullText(fileIndex) {
+            const chunks = fileChunks[fileIndex];
+            if (!chunks) return;
+
+            let highlightedText = '';
+            for (const chunk of chunks) {
+                highlightedText += `<span class="text-chunk-span ${selectedChunks[fileIndex] === chunk.id ? 'selected' : ''}" data-chunk-id="${chunk.id}" onclick="selectChunk(${fileIndex}, ${chunk.id})" onmouseenter="highlightChunk(${fileIndex}, ${chunk.id})" onmouseleave="unhighlightChunk(${fileIndex}, ${chunk.id})">${chunk.text}</span>`;
+                if (chunk.id < chunks.length - 1) {
+                    highlightedText += '\n\n';
+                }
+            }
+
+            const fullTextDiv = document.getElementById(`fullText_${fileIndex}`);
+            if (fullTextDiv) {
+                fullTextDiv.innerHTML = highlightedText;
+            }
+        }
 
         // Initialize
         (async function init() {
