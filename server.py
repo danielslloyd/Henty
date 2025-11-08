@@ -1051,6 +1051,197 @@ def update_project_defaults():
         print(traceback.format_exc())
         return jsonify({'error': str(e)}), 500
 
+@app.route('/api/project/add-text-file', methods=['POST'])
+def add_text_file_to_project():
+    """Add a text file to the project with chunking"""
+    try:
+        import json
+        from datetime import datetime
+        import uuid
+
+        if converter.current_project_path is None:
+            return jsonify({'error': 'No project loaded'}), 400
+
+        # Get file from request
+        if 'file' not in request.files:
+            return jsonify({'error': 'No file provided'}), 400
+
+        file = request.files['file']
+        if file.filename == '':
+            return jsonify({'error': 'No file selected'}), 400
+
+        # Read text content
+        text_content = file.read().decode('utf-8')
+        original_filename = file.filename
+        original_path = request.form.get('original_path', file.filename)
+
+        # Chunk the text
+        chunks = converter.smart_chunk_text(text_content, max_chunk_size=500)
+
+        # Create text file entry
+        text_file_entry = {
+            'id': str(uuid.uuid4()),
+            'original_filename': original_filename,
+            'original_path': original_path,
+            'added_at': datetime.now().isoformat(),
+            'full_text': text_content,
+            'chunks': []
+        }
+
+        # Add chunk structure with dirty flag and generated_audios
+        for chunk in chunks:
+            chunk['dirty'] = False
+            chunk['generated_audios'] = []
+            text_file_entry['chunks'].append(chunk)
+
+        # Add to project metadata
+        if 'text_files' not in converter.current_project_metadata:
+            converter.current_project_metadata['text_files'] = []
+
+        converter.current_project_metadata['text_files'].append(text_file_entry)
+        converter.current_project_metadata['last_modified'] = datetime.now().isoformat()
+        converter.current_project_metadata['version'] = '2.0'
+
+        # Save to file
+        project_file = os.path.join(converter.current_project_path, 'project.json')
+        with open(project_file, 'w') as f:
+            json.dump(converter.current_project_metadata, f, indent=2)
+
+        return jsonify({
+            'success': True,
+            'text_file': text_file_entry
+        })
+
+    except Exception as e:
+        import traceback
+        print(f"Error adding text file to project: {str(e)}")
+        print(traceback.format_exc())
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/project/get-text-files', methods=['GET'])
+def get_project_text_files():
+    """Get all text files in the current project"""
+    try:
+        if converter.current_project_path is None:
+            return jsonify({'error': 'No project loaded'}), 400
+
+        text_files = converter.current_project_metadata.get('text_files', [])
+
+        return jsonify({
+            'success': True,
+            'text_files': text_files
+        })
+
+    except Exception as e:
+        import traceback
+        print(f"Error getting project text files: {str(e)}")
+        print(traceback.format_exc())
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/project/update-chunk-text', methods=['POST'])
+def update_chunk_text():
+    """Update the text of a specific chunk and mark as dirty"""
+    try:
+        import json
+        from datetime import datetime
+
+        if converter.current_project_path is None:
+            return jsonify({'error': 'No project loaded'}), 400
+
+        data = request.json
+        text_file_id = data.get('text_file_id')
+        chunk_id = int(data.get('chunk_id'))
+        new_text = data.get('new_text')
+
+        # Find the text file
+        text_files = converter.current_project_metadata.get('text_files', [])
+        text_file = next((tf for tf in text_files if tf['id'] == text_file_id), None)
+
+        if not text_file:
+            return jsonify({'error': 'Text file not found'}), 404
+
+        # Find the chunk
+        chunk = next((c for c in text_file['chunks'] if c['id'] == chunk_id), None)
+
+        if not chunk:
+            return jsonify({'error': 'Chunk not found'}), 404
+
+        # Update chunk
+        chunk['text'] = new_text
+        chunk['nickname'] = new_text[:50].strip() + ('...' if len(new_text) > 50 else '')
+
+        # Mark as dirty if there are generated audios
+        if len(chunk.get('generated_audios', [])) > 0:
+            chunk['dirty'] = True
+
+        # Update project metadata
+        converter.current_project_metadata['last_modified'] = datetime.now().isoformat()
+
+        # Save to file
+        project_file = os.path.join(converter.current_project_path, 'project.json')
+        with open(project_file, 'w') as f:
+            json.dump(converter.current_project_metadata, f, indent=2)
+
+        return jsonify({
+            'success': True,
+            'chunk': chunk
+        })
+
+    except Exception as e:
+        import traceback
+        print(f"Error updating chunk text: {str(e)}")
+        print(traceback.format_exc())
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/project/dismiss-dirty-flag', methods=['POST'])
+def dismiss_dirty_flag():
+    """Dismiss the dirty flag for a chunk"""
+    try:
+        import json
+        from datetime import datetime
+
+        if converter.current_project_path is None:
+            return jsonify({'error': 'No project loaded'}), 400
+
+        data = request.json
+        text_file_id = data.get('text_file_id')
+        chunk_id = int(data.get('chunk_id'))
+
+        # Find the text file
+        text_files = converter.current_project_metadata.get('text_files', [])
+        text_file = next((tf for tf in text_files if tf['id'] == text_file_id), None)
+
+        if not text_file:
+            return jsonify({'error': 'Text file not found'}), 404
+
+        # Find the chunk
+        chunk = next((c for c in text_file['chunks'] if c['id'] == chunk_id), None)
+
+        if not chunk:
+            return jsonify({'error': 'Chunk not found'}), 404
+
+        # Dismiss dirty flag
+        chunk['dirty'] = False
+
+        # Update project metadata
+        converter.current_project_metadata['last_modified'] = datetime.now().isoformat()
+
+        # Save to file
+        project_file = os.path.join(converter.current_project_path, 'project.json')
+        with open(project_file, 'w') as f:
+            json.dump(converter.current_project_metadata, f, indent=2)
+
+        return jsonify({
+            'success': True,
+            'chunk': chunk
+        })
+
+    except Exception as e:
+        import traceback
+        print(f"Error dismissing dirty flag: {str(e)}")
+        print(traceback.format_exc())
+        return jsonify({'error': str(e)}), 500
+
 @app.route('/api/project/save-text', methods=['POST'])
 def save_text_to_project():
     """Save a text file to the current project"""
