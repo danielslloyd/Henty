@@ -1152,6 +1152,7 @@ def update_chunk_text():
         text_file_id = data.get('text_file_id')
         chunk_id = int(data.get('chunk_id'))
         new_text = data.get('new_text')
+        new_nickname = data.get('new_nickname')
 
         # Find the text file
         text_files = converter.current_project_metadata.get('text_files', [])
@@ -1168,7 +1169,11 @@ def update_chunk_text():
 
         # Update chunk
         chunk['text'] = new_text
-        chunk['nickname'] = new_text[:50].strip() + ('...' if len(new_text) > 50 else '')
+        # Use provided nickname if available, otherwise auto-generate from text
+        if new_nickname is not None:
+            chunk['nickname'] = new_nickname
+        else:
+            chunk['nickname'] = new_text[:50].strip() + ('...' if len(new_text) > 50 else '')
 
         # Mark as dirty if there are generated audios
         if len(chunk.get('generated_audios', [])) > 0:
