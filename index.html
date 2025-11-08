@@ -2747,22 +2747,19 @@
 
         // Stitch all best takes together
         window.stitchAllAudio = async function(fileIndex) {
-            const fileName = currentFiles[fileIndex].name.split('/').pop();
-            const chunks = fileChunks[fileIndex];
+            const textFile = currentFiles[fileIndex];
+            const textFileId = textFile.id;
 
-            showStatus('Stitching all chunks together...', 'info');
+            showStatus('Stitching all best takes together...', 'info');
 
             try {
-                const chunkIds = chunks.map(c => c.id);
-
-                const response = await fetch(`${API_URL}/stitch-audio`, {
+                const response = await fetch(`${API_URL}/project/stitch-best-takes`, {
                     method: 'POST',
                     headers: {
                         'Content-Type': 'application/json'
                     },
                     body: JSON.stringify({
-                        txt_filename: fileName,
-                        chunk_ids: chunkIds
+                        text_file_id: textFileId
                     })
                 });
 
@@ -2785,7 +2782,7 @@
                         <audio controls style="width: 100%; margin-bottom: 15px;">
                             <source src="${audioUrl}" type="audio/wav">
                         </audio>
-                        <a href="${audioUrl}" download="${data.metadata.audio_file}"
+                        <a href="${audioUrl}" download="${data.audio_file}"
                            class="btn btn-primary" style="width: 100%; display: block; text-align: center; text-decoration: none;">
                             Download Stitched Audio
                         </a>

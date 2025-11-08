@@ -1377,6 +1377,109 @@ def set_chunk_best_take():
         print(traceback.format_exc())
         return jsonify({'error': str(e)}), 500
 
+@app.route('/api/project/stitch-best-takes', methods=['POST'])
+def stitch_project_best_takes():
+    """Stitch together the best takes from all chunks in a text file within the current project"""
+    try:
+        import json
+        import time
+
+        if converter.current_project_path is None:
+            return jsonify({'error': 'No project loaded'}), 400
+
+        data = request.json
+        text_file_id = data.get('text_file_id')
+
+        if not text_file_id:
+            return jsonify({'error': 'text_file_id is required'}), 400
+
+        # Find the text file in project metadata
+        text_files = converter.current_project_metadata.get('text_files', [])
+        text_file = next((tf for tf in text_files if tf['id'] == text_file_id), None)
+
+        if not text_file:
+            return jsonify({'error': 'Text file not found in project'}), 404
+
+        # Get chunks sorted by ID
+        chunks = sorted(text_file.get('chunks', []), key=lambda c: c['id'])
+
+        if not chunks:
+            return jsonify({'error': 'No chunks found in text file'}), 400
+
+        # Collect audio paths for best takes
+        audio_paths = []
+        audio_dir = os.path.join(converter.current_project_path, 'audio')
+
+        for chunk in chunks:
+            generated_audios = chunk.get('generated_audios', [])
+
+            if not generated_audios:
+                return jsonify({'error': f'No audio generated for chunk {chunk["id"]}'}), 400
+
+            # Find best take
+            best_audio = None
+            for audio in generated_audios:
+                if audio.get('is_best_take', False):
+                    best_audio = audio
+                    break
+
+            # If no best take marked, use the most recent
+            if not best_audio:
+                best_audio = max(generated_audios, key=lambda a: a.get('timestamp', 0))
+
+            # Build audio file path
+            audio_file = best_audio['audio_file']
+            audio_path = os.path.join(audio_dir, audio_file)
+
+            if not os.path.exists(audio_path):
+                return jsonify({'error': f'Audio file not found: {audio_file}'}), 400
+
+            audio_paths.append(audio_path)
+
+        # Create stitched audio filename
+        timestamp = int(time.time() * 1000)
+        original_filename = text_file.get('original_filename', 'output')
+        base_name = os.path.splitext(original_filename)[0]
+        stitched_filename = f"{base_name}_stitched_{timestamp}.wav"
+        stitched_path = os.path.join(audio_dir, stitched_filename)
+
+        # Stitch the audio files
+        print(f"Stitching {len(audio_paths)} audio files...")
+        converter.stitch_audio_files(audio_paths, stitched_path)
+        print(f"Stitched audio saved to: {stitched_path}")
+
+        # Create metadata for stitched audio
+        stitched_metadata = {
+            'audio_file': stitched_filename,
+            'timestamp': timestamp,
+            'is_stitched': True,
+            'chunk_count': len(chunks),
+            'text_file_id': text_file_id
+        }
+
+        # Optionally save metadata to a JSON file
+        metadata_filename = f"{base_name}_stitched_{timestamp}.json"
+        metadata_path = os.path.join(audio_dir, metadata_filename)
+        with open(metadata_path, 'w') as f:
+            json.dump(stitched_metadata, f, indent=2)
+
+        # Return success with audio URL
+        audio_url = f'/api/project/audio/{stitched_filename}'
+
+        return jsonify({
+            'success': True,
+            'audio_url': audio_url,
+            'audio_file': stitched_filename,
+            'audio_path': stitched_path,
+            'metadata': stitched_metadata
+        })
+
+    except Exception as e:
+        import traceback
+        print(f"Error stitching project audio: {str(e)}")
+        print(traceback.format_exc())
+        return jsonify({'error': str(e)}), 500
+
 @app.route('/api/project/save-text', methods=['POST'])
 def save_text_to_project():
     """Save a text file to the current project"""
