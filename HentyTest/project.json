@@ -1,6 +1,7 @@
 {
   "name": "HentyTest",
-  "created_at": "2025-11-07T11:53:42.125706",
-  "last_modified": "2025-11-07T12:26:29.594922",
-  "version": "1.0"
+  "created_at": "2025-11-07T14:44:03.531675",
+  "last_modified": "2025-11-07T14:44:03.531675",
+  "version": "1.0",
+  "note": "All file references use relative paths for portability"
 }
