@@ -626,6 +626,31 @@
             background: rgba(255,255,255,0.2);
         }
 
+        .chunk-edit-btn {
+            background: transparent;
+            border: none;
+            color: #999;
+            font-size: 14px;
+            padding: 4px 8px;
+            cursor: pointer;
+            opacity: 0.6;
+            transition: opacity 0.2s, color 0.2s;
+            margin-left: 8px;
+        }
+
+        .chunk-edit-btn:hover {
+            opacity: 1;
+            color: #667eea;
+        }
+
+        .chunk-bubble.selected .chunk-edit-btn {
+            color: rgba(255,255,255,0.7);
+        }
+
+        .chunk-bubble.selected .chunk-edit-btn:hover {
+            color: white;
+        }
+
         .chunk-details-pane {
             max-height: 600px;
             overflow-y: auto;
@@ -978,12 +1003,20 @@
     <!-- Edit Chunk Modal -->
     <div class="modal" id="editChunkModal">
         <div class="modal-content">
-            <div class="modal-header">Edit Chunk Text</div>
+            <div class="modal-header">Edit Chunk</div>
             <div class="modal-body">
-                <textarea id="editChunkTextarea" style="width: 100%; min-height: 200px; padding: 12px; border: 2px solid #e0e0e0; border-radius: 8px; font-size: 14px; font-family: 'Courier New', monospace; resize: vertical;"></textarea>
-                <p style="font-size: 12px; color: #666; margin-top: 8px;">
-                    Character count: <span id="editChunkCharCount">0</span>
-                </p>
+                <div style="margin-bottom: 15px;">
+                    <label style="display: block; font-size: 13px; font-weight: 600; color: #333; margin-bottom: 5px;">Chunk Title</label>
+                    <input type="text" id="editChunkTitle" style="width: 100%; padding: 10px; border: 2px solid #e0e0e0; border-radius: 8px; font-size: 14px;" placeholder="Enter unique chunk title">
+                    <p id="editChunkTitleError" style="font-size: 12px; color: #d32f2f; margin-top: 5px; display: none;"></p>
+                </div>
+                <div>
+                    <label style="display: block; font-size: 13px; font-weight: 600; color: #333; margin-bottom: 5px;">Chunk Text</label>
+                    <textarea id="editChunkTextarea" style="width: 100%; min-height: 200px; padding: 12px; border: 2px solid #e0e0e0; border-radius: 8px; font-size: 14px; font-family: 'Courier New', monospace; resize: vertical;"></textarea>
+                    <p style="font-size: 12px; color: #666; margin-top: 8px;">
+                        Character count: <span id="editChunkCharCount">0</span>
+                    </p>
+                </div>
             </div>
             <div class="modal-footer">
                 <button class="btn btn-secondary" onclick="closeEditChunkModal()">Cancel</button>
@@ -1522,7 +1555,12 @@
 
                         <!-- Middle pane: Chunk bubbles -->
                         <div class="chunks-pane">
-                            <h3>Chunks (${chunks.length})</h3>
+                            <div style="display: flex; justify-content: space-between; align-items: center; position: sticky; top: 0; background: white; padding: 10px 0; margin: 0 0 15px 0; border-bottom: 2px solid #e0e0e0; z-index: 10;">
+                                <h3 style="margin: 0; color: #333;">Chunks (${chunks.length})</h3>
+                                <button class="btn" onclick="generateAllChunks(${index})" style="padding: 6px 12px; font-size: 12px; background: #ff9800; color: white;">
+                                    Generate All
+                                </button>
+                            </div>
                             <div id="chunksList_${index}">
                                 <!-- Populated by renderChunkBubbles -->
                             </div>
@@ -2026,12 +2064,16 @@
                 const audioCount = chunkAudio[audioKey]?.length || 0;
                 const hasAudio = audioCount > 0;
                 const preview = chunk.text.substring(0, 20) + (chunk.text.length > 20 ? '...' : '');
+                const displayName = chunk.nickname || `Chunk #${chunk.id + 1}`;
 
                 return `
                     <div class="chunk-bubble ${hasAudio ? 'has-audio' : ''}"
                          id="chunkBubble_${fileIndex}_${chunk.id}"
                          onclick="selectChunk(${fileIndex}, ${chunk.id})">
-                        <div class="chunk-nickname">Chunk #${chunk.id + 1} <span class="chunk-preview">${preview}</span></div>
+                        <div class="chunk-nickname" style="display: flex; align-items: center; justify-content: space-between;">
+                            <span>${displayName} <span class="chunk-preview">${preview}</span></span>
+                            <button class="chunk-edit-btn" onclick="event.stopPropagation(); editChunkText(${fileIndex}, ${chunk.id})" title="Edit chunk">✏️</button>
+                        </div>
                         <div class="chunk-meta">
                             <span>${chunk.text.length} chars</span>
                             ${hasAudio ? `<span class="chunk-audio-count">${audioCount} audio</span>` : ''}
@@ -2117,12 +2159,7 @@
                 ` : ''}
 
                 <div style="margin-bottom: 15px;">
-                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
-                        <h3 style="color: #667eea; margin: 0;">${chunk.nickname || `Chunk #${chunkId + 1}`}</h3>
-                        <button class="btn btn-small" onclick="editChunkText(${fileIndex}, ${chunkId})" title="Edit chunk text" style="padding: 6px 12px;">
-                            ✏️ Edit
-                        </button>
-                    </div>
+                    <h3 style="color: #667eea; margin: 0 0 10px 0;">${chunk.nickname || `Chunk #${chunkId + 1}`}</h3>
 
                     ${chunk.dirty ? `
                         <div style="background: #fff3cd; border: 2px solid #ffc107; border-radius: 8px; padding: 10px; margin-bottom: 10px;">
@@ -2139,43 +2176,8 @@
                             </div>
                         </div>
                     ` : ''}
-
-                    <button class="btn" onclick="generateAllChunks(${fileIndex})" style="width: 100%; background: #ff9800; color: white; margin-bottom: 10px;">
-                        Generate All Chunks (Using Project Defaults)
-                    </button>
                 </div>
 
-                <div class="controls-panel" style="margin-bottom: 15px;">
-                    <h4 style="font-size: 13px; color: #333; margin-bottom: 8px;">This Chunk Settings</h4>
-                    <div class="control-group">
-                        <label>Voice Sample</label>
-                        <select id="voice_chunk_${fileIndex}_${chunkId}">
-                            <option value="none">Default Voice</option>
-                            ${voiceSamples.map(s => `<option value="${s.name}" ${projectDefaults.voice_sample === s.name ? 'selected' : ''}>${s.name}</option>`).join('')}
-                        </select>
-                    </div>
-                    <div class="control-group">
-                        <label>
-                            Exaggeration
-                            <span class="range-value" id="exag_val_chunk_${fileIndex}_${chunkId}">${projectDefaults.exaggeration}</span>
-                        </label>
-                        <input type="range" id="exaggeration_chunk_${fileIndex}_${chunkId}" min="0" max="1" step="0.1" value="${projectDefaults.exaggeration}"
-                               oninput="document.getElementById('exag_val_chunk_${fileIndex}_${chunkId}').textContent = this.value">
-                    </div>
-                    <div class="control-group">
-                        <label>
-                            CFG Weight
-                            <span class="range-value" id="cfg_val_chunk_${fileIndex}_${chunkId}">${projectDefaults.cfg_weight}</span>
-                        </label>
-                        <input type="range" id="cfg_weight_chunk_${fileIndex}_${chunkId}" min="0" max="1" step="0.1" value="${projectDefaults.cfg_weight}"
-                               oninput="document.getElementById('cfg_val_chunk_${fileIndex}_${chunkId}').textContent = this.value">
-                    </div>
-                    <button class="btn btn-primary" onclick="generateChunkAudio(${fileIndex}, ${chunkId})" style="width: 100%;">
-                        Generate Audio for This Chunk
-                    </button>
-                </div>
-
-                <h4 style="color: #333; margin: 20px 0 10px 0;">Generated Audio (${audioList.length})</h4>
                 <div id="chunkAudioList_${fileIndex}_${chunkId}">
                     ${audioList.length > 0 ? (() => {
                         // Sort by timestamp (earliest first)
@@ -2224,7 +2226,40 @@
                                 </div>
                             `;
                         }).join('');
-                    })() : '<p style="color: #999; font-size: 13px;">No audio generated yet for this chunk</p>'}
+                    })() : '<p style="color: #999; font-size: 13px; margin-bottom: 10px;">No audio generated yet for this chunk</p>'}
+
+                    <!-- This Chunk Settings styled as audio-item -->
+                    <div class="audio-item" style="background: linear-gradient(135deg, #f5f7fa 0%, #e8eef5 100%); border: 2px solid #d0d8e0;">
+                        <div class="audio-item-header">
+                            <div class="audio-item-title" style="color: #667eea;">⚙️ This Chunk Settings</div>
+                        </div>
+                        <div class="control-group">
+                            <label>Voice Sample</label>
+                            <select id="voice_chunk_${fileIndex}_${chunkId}">
+                                <option value="none">Default Voice</option>
+                                ${voiceSamples.map(s => `<option value="${s.name}" ${projectDefaults.voice_sample === s.name ? 'selected' : ''}>${s.name}</option>`).join('')}
+                            </select>
+                        </div>
+                        <div class="control-group">
+                            <label>
+                                Exaggeration
+                                <span class="range-value" id="exag_val_chunk_${fileIndex}_${chunkId}">${projectDefaults.exaggeration}</span>
+                            </label>
+                            <input type="range" id="exaggeration_chunk_${fileIndex}_${chunkId}" min="0" max="1" step="0.1" value="${projectDefaults.exaggeration}"
+                                   oninput="document.getElementById('exag_val_chunk_${fileIndex}_${chunkId}').textContent = this.value">
+                        </div>
+                        <div class="control-group">
+                            <label>
+                                CFG Weight
+                                <span class="range-value" id="cfg_val_chunk_${fileIndex}_${chunkId}">${projectDefaults.cfg_weight}</span>
+                            </label>
+                            <input type="range" id="cfg_weight_chunk_${fileIndex}_${chunkId}" min="0" max="1" step="0.1" value="${projectDefaults.cfg_weight}"
+                                   oninput="document.getElementById('cfg_val_chunk_${fileIndex}_${chunkId}').textContent = this.value">
+                        </div>
+                        <button class="btn btn-primary" onclick="generateChunkAudio(${fileIndex}, ${chunkId})" style="width: 100%; margin-top: 8px;">
+                            Generate Audio for This Chunk
+                        </button>
+                    </div>
                 </div>
             `;
         }
@@ -2780,15 +2815,24 @@
             }
 
             currentEditingChunk = { fileIndex, chunkId };
+            const titleInput = document.getElementById('editChunkTitle');
             const textarea = document.getElementById('editChunkTextarea');
             const charCount = document.getElementById('editChunkCharCount');
+            const titleError = document.getElementById('editChunkTitleError');
 
+            titleInput.value = chunk.nickname || `Chunk #${chunkId + 1}`;
             textarea.value = chunk.text;
             charCount.textContent = chunk.text.length;
+            titleError.style.display = 'none';
 
             // Update character count on input
             textarea.oninput = () => {
                 charCount.textContent = textarea.value.length;
+            };
+
+            // Clear error when user types in title
+            titleInput.oninput = () => {
+                titleError.style.display = 'none';
             };
 
             document.getElementById('editChunkModal').classList.add('show');
@@ -2808,11 +2852,27 @@
             const chunk = fileChunks[fileIndex].find(c => c.id === chunkId);
             if (!chunk) return;
 
+            const titleInput = document.getElementById('editChunkTitle');
             const textarea = document.getElementById('editChunkTextarea');
+            const titleError = document.getElementById('editChunkTitleError');
+            const newTitle = titleInput.value.trim();
             const newText = textarea.value;
 
-            // Check if text has changed
-            if (newText !== chunk.text) {
+            // Validate title uniqueness
+            if (newTitle) {
+                const existingChunk = fileChunks[fileIndex].find(c =>
+                    c.id !== chunkId && (c.nickname || `Chunk #${c.id + 1}`) === newTitle
+                );
+                if (existingChunk) {
+                    titleError.textContent = 'This title is already used by another chunk. Please choose a unique title.';
+                    titleError.style.display = 'block';
+                    return;
+                }
+            }
+
+            // Check if text or title has changed
+            const currentTitle = chunk.nickname || `Chunk #${chunkId + 1}`;
+            if (newText !== chunk.text || newTitle !== currentTitle) {
                 try {
                     // Get text file ID
                     const bubble = document.getElementById(`bubble_${fileIndex}`);
@@ -2830,14 +2890,15 @@
                         body: JSON.stringify({
                             text_file_id: textFileId,
                             chunk_id: chunkId,
-                            new_text: newText
+                            new_text: newText,
+                            new_nickname: newTitle
                         })
                     });
 
                     const data = await response.json();
 
                     if (!response.ok) {
-                        throw new Error(data.error || 'Failed to update chunk text');
+                        throw new Error(data.error || 'Failed to update chunk');
                     }
 
                     // Update local state with backend response
@@ -2856,10 +2917,10 @@
                         renderChunkDetails(fileIndex, chunkId);
                     }
 
-                    showStatus('Chunk text updated successfully', 'success');
+                    showStatus('Chunk updated successfully', 'success');
 
                 } catch (error) {
-                    console.error('Error updating chunk text:', error);
+                    console.error('Error updating chunk:', error);
                     showStatus(`Failed to update chunk: ${error.message}`, 'error');
                 }
             }
