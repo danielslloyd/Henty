@@ -980,9 +980,17 @@
         let selectedChunks = {}; // Maps file index to selected chunk ID
         let chunkAudio = {}; // Maps "fileIndex_chunkId" to array of audio generations
 
+        // Project state
+        let projectDefaults = {
+            exaggeration: 0.5,
+            cfg_weight: 0.5,
+            voice_sample: 'none'
+        };
+
         // Progress tracking
         let progressPollInterval = null;
         let currentGeneratingFileIndex = null;
+        let activeGenerations = {}; // Maps "fileIndex_chunkId" to generation info (startTime, estimatedDuration, etc.)
 
         // Toggle inline progress section
         window.toggleInlineProgress = function(index) {
@@ -1162,6 +1170,11 @@
                     document.getElementById('projectInfo').style.display = 'block';
                     document.getElementById('projectName').textContent = data.metadata.name;
                     document.getElementById('projectPath').textContent = data.project_path;
+
+                    // Load project defaults
+                    if (data.metadata.default_audio_settings) {
+                        projectDefaults = data.metadata.default_audio_settings;
+                    }
                 } else {
                     document.getElementById('projectInfo').style.display = 'none';
                 }
@@ -1479,7 +1492,6 @@
 
                         <!-- Right pane: Selected chunk details -->
                         <div class="chunk-details-pane">
-                            <h3>Chunk Details</h3>
                             <div id="chunkDetails_${i}">
                                 <div class="no-chunk-selected">
                                     Select a chunk to view details and generate audio
@@ -1914,35 +1926,68 @@
                     </div>
                 ` : ''}
 
-                <h4 style="color: #667eea; margin-bottom: 15px;">Chunk #${chunkId + 1}</h4>
+                <div style="margin-bottom: 15px;">
+                    <h3 style="color: #667eea; margin-bottom: 10px;">${chunk.nickname || `Chunk #${chunkId + 1}`}</h3>
 
-                <div style="background: #f9f9f9; border: 2px solid #e0e0e0; border-radius: 8px; padding: 12px; margin-bottom: 15px;">
-                    <p style="font-size: 12px; color: #666; margin-bottom: 5px;">Text Preview:</p>
-                    <p style="font-size: 13px; font-family: 'Courier New', monospace; line-height: 1.5;">${chunk.text.substring(0, 150)}${chunk.text.length > 150 ? '...' : ''}</p>
+                    <div style="background: #f0f0f0; border-radius: 8px; padding: 10px; margin-bottom: 15px;">
+                        <h4 style="font-size: 12px; color: #666; margin-bottom: 8px;">Project Defaults</h4>
+                        <div class="controls-panel">
+                            <div class="control-group">
+                                <label style="font-size: 11px;">Voice Sample</label>
+                                <select id="project_voice_default" onchange="updateProjectDefaults()" style="font-size: 12px; padding: 4px;">
+                                    <option value="none">Default Voice</option>
+                                    ${voiceSamples.map(s => `<option value="${s.name}" ${projectDefaults.voice_sample === s.name ? 'selected' : ''}>${s.name}</option>`).join('')}
+                                </select>
+                            </div>
+                            <div class="control-group">
+                                <label style="font-size: 11px;">
+                                    Exaggeration
+                                    <span class="range-value" id="project_exag_val">${projectDefaults.exaggeration}</span>
+                                </label>
+                                <input type="range" id="project_exaggeration_default" min="0" max="1" step="0.1" value="${projectDefaults.exaggeration}"
+                                       oninput="document.getElementById('project_exag_val').textContent = this.value"
+                                       onchange="updateProjectDefaults()">
+                            </div>
+                            <div class="control-group">
+                                <label style="font-size: 11px;">
+                                    CFG Weight
+                                    <span class="range-value" id="project_cfg_val">${projectDefaults.cfg_weight}</span>
+                                </label>
+                                <input type="range" id="project_cfg_weight_default" min="0" max="1" step="0.1" value="${projectDefaults.cfg_weight}"
+                                       oninput="document.getElementById('project_cfg_val').textContent = this.value"
+                                       onchange="updateProjectDefaults()">
+                            </div>
+                        </div>
+                    </div>
+
+                    <button class="btn" onclick="generateAllChunks(${fileIndex})" style="width: 100%; background: #ff9800; color: white; margin-bottom: 10px;">
+                        Generate All Chunks (Using Defaults)
+                    </button>
                 </div>
 
                 <div class="controls-panel" style="margin-bottom: 15px;">
+                    <h4 style="font-size: 13px; color: #333; margin-bottom: 8px;">This Chunk Settings</h4>
                     <div class="control-group">
                         <label>Voice Sample</label>
                         <select id="voice_chunk_${fileIndex}_${chunkId}">
                             <option value="none">Default Voice</option>
-                            ${voiceSamples.map(s => `<option value="${s.name}">${s.name}</option>`).join('')}
+                            ${voiceSamples.map(s => `<option value="${s.name}" ${projectDefaults.voice_sample === s.name ? 'selected' : ''}>${s.name}</option>`).join('')}
                         </select>
                     </div>
                     <div class="control-group">
                         <label>
                             Exaggeration
-                            <span class="range-value" id="exag_val_chunk_${fileIndex}_${chunkId}">0.5</span>
+                            <span class="range-value" id="exag_val_chunk_${fileIndex}_${chunkId}">${projectDefaults.exaggeration}</span>
                         </label>
-                        <input type="range" id="exaggeration_chunk_${fileIndex}_${chunkId}" min="0" max="1" step="0.1" value="0.5"
+                        <input type="range" id="exaggeration_chunk_${fileIndex}_${chunkId}" min="0" max="1" step="0.1" value="${projectDefaults.exaggeration}"
                                oninput="document.getElementById('exag_val_chunk_${fileIndex}_${chunkId}').textContent = this.value">
                     </div>
                     <div class="control-group">
                         <label>
                             CFG Weight
-                            <span class="range-value" id="cfg_val_chunk_${fileIndex}_${chunkId}">0.5</span>
+                            <span class="range-value" id="cfg_val_chunk_${fileIndex}_${chunkId}">${projectDefaults.cfg_weight}</span>
                         </label>
-                        <input type="range" id="cfg_weight_chunk_${fileIndex}_${chunkId}" min="0" max="1" step="0.1" value="0.5"
+                        <input type="range" id="cfg_weight_chunk_${fileIndex}_${chunkId}" min="0" max="1" step="0.1" value="${projectDefaults.cfg_weight}"
                                oninput="document.getElementById('cfg_val_chunk_${fileIndex}_${chunkId}').textContent = this.value">
                     </div>
                     <button class="btn btn-primary" onclick="generateChunkAudio(${fileIndex}, ${chunkId})" style="width: 100%;">
@@ -1958,12 +2003,20 @@
                             a.metadata.timestamp - b.metadata.timestamp
                         );
 
+                        // Auto-select best take if only one audio exists
+                        const shouldAutoSelect = sortedAudio.length === 1 && !sortedAudio[0].metadata.is_best_take;
+
                         return sortedAudio.map((item, idx) => {
                             const meta = item.metadata;
                             const date = new Date(meta.timestamp).toLocaleString();
-                            const isBestTake = meta.is_best_take || false;
+                            const isBestTake = meta.is_best_take || shouldAutoSelect;
                             const bestTakeBadge = isBestTake ? '<span class="best-take-badge">Best Take</span>' : '';
                             const audioItemClass = isBestTake ? 'audio-item best-take' : 'audio-item';
+
+                            // Auto-select if needed
+                            if (shouldAutoSelect && idx === 0) {
+                                setTimeout(() => setChunkBestTake(${fileIndex}, ${chunkId}, '${fileName}', '${item.audio_file}'), 100);
+                            }
 
                             return `
                                 <div class="${audioItemClass}">
@@ -2008,9 +2061,13 @@
             const cfgWeight = document.getElementById(`cfg_weight_chunk_${fileIndex}_${chunkId}`).value;
 
             const charCount = chunk.text.length;
+            const chunkKey = `${fileIndex}_${chunkId}`;
 
             showStatus(`Generating audio for chunk #${chunkId + 1}...`, 'info');
             showProgressBar(charCount, fileIndex);
+
+            // Show placeholder
+            showGenerationPlaceholder(fileIndex, chunkId);
 
             try {
                 const formData = new FormData();
@@ -2023,10 +2080,27 @@
                 formData.append('exaggeration', exaggeration);
                 formData.append('cfg_weight', cfgWeight);
 
+                const startTime = Date.now();
+                const estimatedDuration = estimateGenerationTime(chunk.text.length);
+
+                // Track this generation
+                activeGenerations[chunkKey] = {
+                    startTime: startTime,
+                    estimatedDuration: estimatedDuration
+                };
+
+                // Start progress update interval
+                const progressInterval = setInterval(() => {
+                    updateGenerationPlaceholder(fileIndex, chunkId);
+                }, 500);
+
                 const response = await fetch(`${API_URL}/generate-chunk`, {
                     method: 'POST',
                     body: formData
                 });
+
+                clearInterval(progressInterval);
+                delete activeGenerations[chunkKey];
 
                 const data = await response.json();
 
@@ -2048,6 +2122,7 @@
                     renderChunkDetails(fileIndex, chunkId);
                 }
             } catch (error) {
+                delete activeGenerations[chunkKey];
                 hideProgressBar();
                 console.error('Error generating chunk audio:', error);
                 showStatus(`Failed: ${error.message}`, 'error');
@@ -2153,6 +2228,199 @@
                 showStatus(`Failed: ${error.message}`, 'error');
             }
         };
+
+        // Update project defaults
+        window.updateProjectDefaults = async function() {
+            try {
+                const exaggeration = document.getElementById('project_exaggeration_default').value;
+                const cfgWeight = document.getElementById('project_cfg_weight_default').value;
+                const voiceSample = document.getElementById('project_voice_default').value;
+
+                const response = await fetch(`${API_URL}/project/update-defaults`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        exaggeration: parseFloat(exaggeration),
+                        cfg_weight: parseFloat(cfgWeight),
+                        voice_sample: voiceSample
+                    })
+                });
+
+                const data = await response.json();
+
+                if (!response.ok) {
+                    throw new Error(data.error || 'Failed to update project defaults');
+                }
+
+                // Update local state
+                projectDefaults = data.default_audio_settings;
+                showStatus('Project defaults updated!', 'success');
+            } catch (error) {
+                console.error('Error updating project defaults:', error);
+                showStatus(`Failed: ${error.message}`, 'error');
+            }
+        };
+
+        // Generate all chunks using project defaults
+        window.generateAllChunks = async function(fileIndex) {
+            const fileInfo = currentFiles[fileIndex];
+            const fileName = fileInfo.name.split('/').pop();
+            const chunks = fileChunks[fileIndex];
+
+            if (!chunks || chunks.length === 0) {
+                showStatus('No chunks to generate', 'error');
+                return;
+            }
+
+            if (!confirm(`Generate audio for all ${chunks.length} chunks using project defaults?\n\nThis will process chunks sequentially.`)) {
+                return;
+            }
+
+            showStatus(`Starting batch generation for ${chunks.length} chunks...`, 'info');
+
+            for (let i = 0; i < chunks.length; i++) {
+                const chunk = chunks[i];
+                const chunkKey = `${fileIndex}_${chunk.id}`;
+
+                try {
+                    // Show placeholder in audio list
+                    showGenerationPlaceholder(fileIndex, chunk.id);
+
+                    showStatus(`Generating chunk ${i + 1}/${chunks.length}: ${chunk.nickname || `Chunk #${chunk.id + 1}`}...`, 'info');
+
+                    const formData = new FormData();
+                    formData.append('file', fileInfo.file);
+                    formData.append('filename', fileInfo.name);
+                    formData.append('chunk_id', chunk.id);
+                    formData.append('chunk_text', chunk.text);
+                    formData.append('voice_sample', projectDefaults.voice_sample);
+                    formData.append('language_id', 'en');
+                    formData.append('exaggeration', projectDefaults.exaggeration);
+                    formData.append('cfg_weight', projectDefaults.cfg_weight);
+
+                    const startTime = Date.now();
+                    const estimatedDuration = estimateGenerationTime(chunk.text.length);
+
+                    // Track this generation
+                    activeGenerations[chunkKey] = {
+                        startTime: startTime,
+                        estimatedDuration: estimatedDuration
+                    };
+
+                    // Start progress update interval
+                    const progressInterval = setInterval(() => {
+                        updateGenerationPlaceholder(fileIndex, chunk.id);
+                    }, 500);
+
+                    const response = await fetch(`${API_URL}/generate-chunk`, {
+                        method: 'POST',
+                        body: formData
+                    });
+
+                    clearInterval(progressInterval);
+                    delete activeGenerations[chunkKey];
+
+                    const data = await response.json();
+
+                    if (!response.ok) {
+                        throw new Error(data.error || `Server error: ${response.status}`);
+                    }
+
+                    // Reload chunk audio
+                    await loadChunkAudio(fileIndex, fileName, chunk.id);
+
+                    // Update chunk bubbles
+                    renderChunkBubbles(fileIndex);
+
+                    // Re-render details if this chunk is selected
+                    if (selectedChunks[fileIndex] === chunk.id) {
+                        renderChunkDetails(fileIndex, chunk.id);
+                    }
+
+                    showStatus(`Completed ${i + 1}/${chunks.length} chunks`, 'info');
+                } catch (error) {
+                    const chunkKey = `${fileIndex}_${chunk.id}`;
+                    delete activeGenerations[chunkKey];
+                    console.error(`Error generating chunk ${chunk.id}:`, error);
+                    showStatus(`Failed on chunk ${i + 1}: ${error.message}. Stopping batch generation.`, 'error');
+                    return;
+                }
+            }
+
+            showStatus(`Successfully generated audio for all ${chunks.length} chunks!`, 'success');
+        };
+
+        // Show generation placeholder
+        function showGenerationPlaceholder(fileIndex, chunkId) {
+            const listContainer = document.getElementById(`chunkAudioList_${fileIndex}_${chunkId}`);
+            if (!listContainer) return;
+
+            const placeholder = `
+                <div class="audio-item" id="generation_placeholder_${fileIndex}_${chunkId}" style="background: #fff3cd; border: 2px dashed #ffc107;">
+                    <div class="audio-item-header">
+                        <div class="audio-item-title">⏳ Generating...</div>
+                    </div>
+                    <div id="generation_progress_${fileIndex}_${chunkId}" style="padding: 10px; font-size: 13px; color: #666;">
+                        Estimating time...
+                    </div>
+                    <div style="width: 100%; background: #e0e0e0; border-radius: 4px; height: 8px; overflow: hidden;">
+                        <div id="generation_progress_bar_${fileIndex}_${chunkId}" style="width: 0%; background: linear-gradient(90deg, #667eea, #764ba2); height: 100%; transition: width 0.3s;"></div>
+                    </div>
+                </div>
+            `;
+
+            listContainer.innerHTML = placeholder + listContainer.innerHTML;
+        }
+
+        // Update generation placeholder with progress
+        function updateGenerationPlaceholder(fileIndex, chunkId) {
+            const chunkKey = `${fileIndex}_${chunkId}`;
+            const genInfo = activeGenerations[chunkKey];
+            if (!genInfo) return;
+
+            const progressText = document.getElementById(`generation_progress_${fileIndex}_${chunkId}`);
+            const progressBar = document.getElementById(`generation_progress_bar_${fileIndex}_${chunkId}`);
+            if (!progressText || !progressBar) return;
+
+            const elapsed = (Date.now() - genInfo.startTime) / 1000; // seconds
+            const estimated = genInfo.estimatedDuration;
+            const remaining = Math.max(0, estimated - elapsed);
+            const progress = Math.min(100, (elapsed / estimated) * 100);
+
+            progressText.innerHTML = `
+                <strong>Elapsed:</strong> ${formatTime(elapsed)} |
+                <strong>Remaining:</strong> ~${formatTime(remaining)} |
+                <strong>Estimated Total:</strong> ${formatTime(estimated)}
+            `;
+            progressBar.style.width = `${progress}%`;
+        }
+
+        // Estimate generation time based on character count
+        function estimateGenerationTime(charCount) {
+            // Use generation stats if available
+            const stats = JSON.parse(localStorage.getItem('generation_stats') || '[]');
+            if (stats.length > 0) {
+                // Calculate average time per character from recent generations
+                const avgTimePerChar = stats.reduce((sum, s) => sum + (s.generation_time / s.character_count), 0) / stats.length;
+                return charCount * avgTimePerChar;
+            }
+
+            // Default fallback: ~0.5 seconds per character
+            return charCount * 0.5;
+        }
+
+        // Format time in seconds to readable format
+        function formatTime(seconds) {
+            if (seconds < 60) {
+                return `${Math.round(seconds)}s`;
+            } else {
+                const mins = Math.floor(seconds / 60);
+                const secs = Math.round(seconds % 60);
+                return `${mins}m ${secs}s`;
+            }
+        }
 
         // Stitch all best takes together
         window.stitchAllAudio = async function(fileIndex) {
