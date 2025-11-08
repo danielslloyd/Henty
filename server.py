@@ -905,7 +905,10 @@ def create_project():
             'default_audio_settings': {
                 'exaggeration': 0.5,
                 'cfg_weight': 0.5,
-                'voice_sample': 'none'
+                'voice_sample': 'none',
+                'seed': 0,
+                'temperature': 0.8,
+                'ref_vad_trimming': False
             }
         }
 
@@ -961,7 +964,10 @@ def load_project():
             project_metadata['default_audio_settings'] = {
                 'exaggeration': 0.5,
                 'cfg_weight': 0.5,
-                'voice_sample': 'none'
+                'voice_sample': 'none',
+                'seed': 0,
+                'temperature': 0.8,
+                'ref_vad_trimming': False
             }
 
         # Update last modified
@@ -1023,6 +1029,9 @@ def update_project_defaults():
         exaggeration = float(data.get('exaggeration', 0.5))
         cfg_weight = float(data.get('cfg_weight', 0.5))
         voice_sample = data.get('voice_sample', 'none')
+        seed = int(data.get('seed', 0))
+        temperature = float(data.get('temperature', 0.8))
+        ref_vad_trimming = bool(data.get('ref_vad_trimming', False))
 
         # Update metadata
         if 'default_audio_settings' not in converter.current_project_metadata:
@@ -1031,7 +1040,10 @@ def update_project_defaults():
         converter.current_project_metadata['default_audio_settings'] = {
             'exaggeration': exaggeration,
             'cfg_weight': cfg_weight,
-            'voice_sample': voice_sample
+            'voice_sample': voice_sample,
+            'seed': seed,
+            'temperature': temperature,
+            'ref_vad_trimming': ref_vad_trimming
         }
         converter.current_project_metadata['last_modified'] = datetime.now().isoformat()
 
