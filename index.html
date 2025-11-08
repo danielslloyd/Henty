@@ -497,53 +497,6 @@
             margin-top: 20px;
         }
 
-        .text-viewer-pane {
-            background: #f9f9f9;
-            border: 2px solid #e0e0e0;
-            border-radius: 8px;
-            padding: 15px;
-            max-height: 600px;
-            overflow-y: auto;
-            position: relative;
-        }
-
-        .text-viewer-pane h3 {
-            position: sticky;
-            top: 0;
-            background: #f9f9f9;
-            padding: 10px 0;
-            margin: -15px -15px 15px -15px;
-            padding: 15px;
-            border-bottom: 2px solid #e0e0e0;
-            color: #333;
-            z-index: 10;
-        }
-
-        .full-text-content {
-            font-family: 'Courier New', monospace;
-            font-size: 13px;
-            line-height: 1.6;
-            white-space: pre-wrap;
-        }
-
-        .text-chunk-span {
-            transition: background-color 0.3s;
-            cursor: pointer;
-        }
-
-        .text-chunk-span:hover {
-            background-color: #e3f2fd;
-        }
-
-        .text-chunk-span.selected {
-            background-color: #bbdefb;
-            font-weight: 600;
-        }
-
-        .text-chunk-span.highlighted {
-            background-color: #fff9c4;
-        }
-
         .chunks-pane {
             max-height: 600px;
             overflow-y: auto;
@@ -1568,15 +1521,6 @@
                 chunkOriginalTexts[chunkKey] = chunk.text;
             }
 
-            // Create highlighted text with spans for each chunk
-            let highlightedText = '';
-            for (const chunk of chunks) {
-                highlightedText += `<span class="text-chunk-span" data-chunk-id="${chunk.id}" onclick="selectChunk(${index}, ${chunk.id})" onmouseenter="highlightChunk(${index}, ${chunk.id})" onmouseleave="unhighlightChunk(${index}, ${chunk.id})">${chunk.text}</span>`;
-                if (chunk.id < chunks.length - 1) {
-                    highlightedText += '\n\n';
-                }
-            }
-
             const bubble = document.createElement('div');
             bubble.className = 'file-bubble';
             bubble.id = `bubble_${index}`;
@@ -1590,15 +1534,7 @@
 
                 <div class="file-expanded-content">
                     <div class="chunked-layout">
-                        <!-- Left pane: Full text viewer -->
-                        <div class="text-viewer-pane">
-                            <h3>Full Text</h3>
-                            <div class="full-text-content" id="fullText_${index}">
-                                ${highlightedText}
-                            </div>
-                        </div>
-
-                        <!-- Middle pane: Chunk bubbles -->
+                        <!-- Left pane: Chunk bubbles -->
                         <div class="chunks-pane">
                             <div style="display: flex; justify-content: space-between; align-items: center; position: sticky; top: 0; background: white; padding: 10px 0; margin: 0 0 15px 0; border-bottom: 2px solid #e0e0e0; z-index: 10;">
                                 <h3 style="margin: 0; color: #333;">Chunks (${chunks.length})</h3>
@@ -1729,15 +1665,6 @@
             const bubble = document.createElement('div');
             bubble.className = 'file-bubble';
             bubble.id = `bubble_${i}`;
-
-            // Create highlighted text with spans for each chunk
-            let highlightedText = '';
-            for (const chunk of data.chunks) {
-                highlightedText += `<span class="text-chunk-span" data-chunk-id="${chunk.id}" onclick="selectChunk(${i}, ${chunk.id})" onmouseenter="highlightChunk(${i}, ${chunk.id})" onmouseleave="unhighlightChunk(${i}, ${chunk.id})">${chunk.text}</span>`;
-                if (chunk.id < data.chunks.length - 1) {
-                    highlightedText += '\n\n';
-                }
-            }
 
             bubble.innerHTML = `
                 <div class="file-header" onclick="toggleExpand(${i})">
@@ -2986,9 +2913,6 @@
                     chunk.nickname = data.chunk.nickname;
                     chunk.dirty = data.chunk.dirty;
 
-                    // Re-render the full text viewer
-                    rerenderFullText(fileIndex);
-
                     // Re-render chunk bubbles
                     renderChunkBubbles(fileIndex);
 
@@ -3058,25 +2982,6 @@
                 showStatus(`Failed to dismiss flag: ${error.message}`, 'error');
             }
         };
-
-        // Re-render full text viewer with updated chunks
-        function rerenderFullText(fileIndex) {
-            const chunks = fileChunks[fileIndex];
-            if (!chunks) return;
-
-            let highlightedText = '';
-            for (const chunk of chunks) {
-                highlightedText += `<span class="text-chunk-span ${selectedChunks[fileIndex] === chunk.id ? 'selected' : ''}" data-chunk-id="${chunk.id}" onclick="selectChunk(${fileIndex}, ${chunk.id})" onmouseenter="highlightChunk(${fileIndex}, ${chunk.id})" onmouseleave="unhighlightChunk(${fileIndex}, ${chunk.id})">${chunk.text}</span>`;
-                if (chunk.id < chunks.length - 1) {
-                    highlightedText += '\n\n';
-                }
-            }
-
-            const fullTextDiv = document.getElementById(`fullText_${fileIndex}`);
-            if (fullTextDiv) {
-                fullTextDiv.innerHTML = highlightedText;
-            }
-        }
 
         // Initialize
         (async function init() {
