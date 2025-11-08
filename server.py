@@ -901,7 +901,12 @@ def create_project():
             'created_at': datetime.now().isoformat(),
             'last_modified': datetime.now().isoformat(),
             'version': '1.0',
-            'note': 'All file references use relative paths for portability'
+            'note': 'All file references use relative paths for portability',
+            'default_audio_settings': {
+                'exaggeration': 0.5,
+                'cfg_weight': 0.5,
+                'voice_sample': 'none'
+            }
         }
 
         # Save project metadata
@@ -951,6 +956,14 @@ def load_project():
         with open(project_file, 'r') as f:
             project_metadata = json.load(f)
 
+        # Add default audio settings if not present (backwards compatibility)
+        if 'default_audio_settings' not in project_metadata:
+            project_metadata['default_audio_settings'] = {
+                'exaggeration': 0.5,
+                'cfg_weight': 0.5,
+                'voice_sample': 'none'
+            }
+
         # Update last modified
         project_metadata['last_modified'] = datetime.now().isoformat()
         with open(project_file, 'w') as f:
@@ -995,6 +1008,47 @@ def get_project_info():
         })
 
     except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/project/update-defaults', methods=['POST'])
+def update_project_defaults():
+    """Update project default audio settings"""
+    try:
+        from datetime import datetime
+
+        if converter.current_project_path is None:
+            return jsonify({'error': 'No project loaded'}), 400
+
+        data = request.json
+        exaggeration = float(data.get('exaggeration', 0.5))
+        cfg_weight = float(data.get('cfg_weight', 0.5))
+        voice_sample = data.get('voice_sample', 'none')
+
+        # Update metadata
+        if 'default_audio_settings' not in converter.current_project_metadata:
+            converter.current_project_metadata['default_audio_settings'] = {}
+
+        converter.current_project_metadata['default_audio_settings'] = {
+            'exaggeration': exaggeration,
+            'cfg_weight': cfg_weight,
+            'voice_sample': voice_sample
+        }
+        converter.current_project_metadata['last_modified'] = datetime.now().isoformat()
+
+        # Save to file
+        project_file = os.path.join(converter.current_project_path, 'project.json')
+        with open(project_file, 'w') as f:
+            json.dump(converter.current_project_metadata, f, indent=2)
+
+        return jsonify({
+            'success': True,
+            'default_audio_settings': converter.current_project_metadata['default_audio_settings']
+        })
+
+    except Exception as e:
+        import traceback
+        print(f"Error updating project defaults: {str(e)}")
+        print(traceback.format_exc())
         return jsonify({'error': str(e)}), 500
 
 @app.route('/api/project/save-text', methods=['POST'])
