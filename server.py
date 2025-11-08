@@ -1304,6 +1304,67 @@ def add_audio_to_chunk():
         print(traceback.format_exc())
         return jsonify({'error': str(e)}), 500
 
+@app.route('/api/project/set-chunk-best-take', methods=['POST'])
+def set_chunk_best_take():
+    """Set the best take for a chunk in the project"""
+    try:
+        if converter.current_project_path is None:
+            return jsonify({'error': 'No project loaded'}), 400
+
+        data = request.json
+        text_file_id = data.get('text_file_id')
+        chunk_id = data.get('chunk_id')
+        audio_filename = data.get('audio_filename')
+
+        if not text_file_id or chunk_id is None or not audio_filename:
+            return jsonify({'error': 'text_file_id, chunk_id, and audio_filename are required'}), 400
+
+        # Find the text file
+        text_file = next((tf for tf in converter.current_project_metadata.get('text_files', [])
+                         if tf['id'] == text_file_id), None)
+
+        if not text_file:
+            return jsonify({'error': 'Text file not found'}), 404
+
+        # Find the chunk
+        chunk = next((c for c in text_file['chunks'] if c['id'] == chunk_id), None)
+
+        if not chunk:
+            return jsonify({'error': 'Chunk not found'}), 404
+
+        # Update all audio items - set is_best_take to False
+        for audio in chunk.get('generated_audios', []):
+            audio['is_best_take'] = False
+
+        # Find and mark the selected audio as best take
+        selected_audio = next((a for a in chunk.get('generated_audios', [])
+                              if a['audio_file'] == audio_filename), None)
+
+        if not selected_audio:
+            return jsonify({'error': 'Audio file not found in chunk'}), 404
+
+        selected_audio['is_best_take'] = True
+
+        # Update project metadata
+        from datetime import datetime
+        converter.current_project_metadata['last_modified'] = datetime.now().isoformat()
+
+        # Save to file
+        project_file = os.path.join(converter.current_project_path, 'project.json')
+        with open(project_file, 'w') as f:
+            json.dump(converter.current_project_metadata, f, indent=2)
+
+        return jsonify({
+            'success': True,
+            'chunk': chunk
+        })
+
+    except Exception as e:
+        import traceback
+        print(f"Error setting chunk best take: {str(e)}")
+        print(traceback.format_exc())
+        return jsonify({'error': str(e)}), 500
+
 @app.route('/api/project/save-text', methods=['POST'])
 def save_text_to_project():
     """Save a text file to the current project"""

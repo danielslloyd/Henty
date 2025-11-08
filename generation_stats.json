@@ -151,5 +151,41 @@
     "chars_per_second": 6.08,
     "gpu_before": null,
     "gpu_after": null
+  },
+  {
+    "timestamp": 1762575807672,
+    "char_count": 24,
+    "audio_duration_sec": 2.36,
+    "generation_time_ms": 16181,
+    "chars_per_second": 1.48,
+    "gpu_before": null,
+    "gpu_after": null
+  },
+  {
+    "timestamp": 1762575936014,
+    "char_count": 24,
+    "audio_duration_sec": 2.16,
+    "generation_time_ms": 9061,
+    "chars_per_second": 2.65,
+    "gpu_before": null,
+    "gpu_after": null
+  },
+  {
+    "timestamp": 1762575974720,
+    "char_count": 24,
+    "audio_duration_sec": 2.56,
+    "generation_time_ms": 9855,
+    "chars_per_second": 2.44,
+    "gpu_before": null,
+    "gpu_after": null
+  },
+  {
+    "timestamp": 1762576223450,
+    "char_count": 24,
+    "audio_duration_sec": 2.48,
+    "generation_time_ms": 16399,
+    "chars_per_second": 1.46,
+    "gpu_before": null,
+    "gpu_after": null
   }
 ]
