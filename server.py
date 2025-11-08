@@ -1242,6 +1242,63 @@ def dismiss_dirty_flag():
         print(traceback.format_exc())
         return jsonify({'error': str(e)}), 500
 
+@app.route('/api/project/add-audio-to-chunk', methods=['POST'])
+def add_audio_to_chunk():
+    """Add generated audio metadata to a chunk in the project"""
+    try:
+        import json
+        from datetime import datetime
+
+        if converter.current_project_path is None:
+            return jsonify({'error': 'No project loaded'}), 400
+
+        data = request.json
+        text_file_id = data.get('text_file_id')
+        chunk_id = int(data.get('chunk_id'))
+        audio_metadata = data.get('audio_metadata')
+
+        if not text_file_id or chunk_id is None or not audio_metadata:
+            return jsonify({'error': 'text_file_id, chunk_id, and audio_metadata are required'}), 400
+
+        # Find the text file
+        text_files = converter.current_project_metadata.get('text_files', [])
+        text_file = next((tf for tf in text_files if tf['id'] == text_file_id), None)
+
+        if not text_file:
+            return jsonify({'error': 'Text file not found'}), 404
+
+        # Find the chunk
+        chunk = next((c for c in text_file['chunks'] if c['id'] == chunk_id), None)
+
+        if not chunk:
+            return jsonify({'error': 'Chunk not found'}), 404
+
+        # Initialize generated_audios if not present
+        if 'generated_audios' not in chunk:
+            chunk['generated_audios'] = []
+
+        # Add audio metadata to chunk
+        chunk['generated_audios'].append(audio_metadata)
+
+        # Update project metadata
+        converter.current_project_metadata['last_modified'] = datetime.now().isoformat()
+
+        # Save to file
+        project_file = os.path.join(converter.current_project_path, 'project.json')
+        with open(project_file, 'w') as f:
+            json.dump(converter.current_project_metadata, f, indent=2)
+
+        return jsonify({
+            'success': True,
+            'chunk': chunk
+        })
+
+    except Exception as e:
+        import traceback
+        print(f"Error adding audio to chunk: {str(e)}")
+        print(traceback.format_exc())
+        return jsonify({'error': str(e)}), 500
+
 @app.route('/api/project/save-text', methods=['POST'])
 def save_text_to_project():
     """Save a text file to the current project"""
