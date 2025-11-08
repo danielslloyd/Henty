@@ -1262,7 +1262,10 @@
 
                 const textFiles = data.text_files || [];
 
-                // Clear current files and render from project
+                // Clear current state
+                currentFiles = [];
+                fileChunks = {};
+                chunkAudio = {};
                 filesContainer.innerHTML = '';
 
                 if (textFiles.length === 0) {
@@ -1469,6 +1472,12 @@
         async function renderProjectTextFile(index, textFile) {
             const fileName = textFile.original_filename;
             const chunks = textFile.chunks || [];
+
+            // Store file info in currentFiles array
+            currentFiles[index] = {
+                name: fileName,
+                textFileId: textFile.id
+            };
 
             // Store chunks in our state
             fileChunks[index] = chunks;
@@ -2171,16 +2180,15 @@
                     ${audioList.length > 0 ? (() => {
                         // Sort by timestamp (earliest first)
                         const sortedAudio = [...audioList].sort((a, b) =>
-                            a.metadata.timestamp - b.metadata.timestamp
+                            (a.timestamp || 0) - (b.timestamp || 0)
                         );
 
                         // Auto-select best take if only one audio exists
-                        const shouldAutoSelect = sortedAudio.length === 1 && !sortedAudio[0].metadata.is_best_take;
+                        const shouldAutoSelect = sortedAudio.length === 1 && !sortedAudio[0].is_best_take;
 
                         return sortedAudio.map((item, idx) => {
-                            const meta = item.metadata;
-                            const date = new Date(meta.timestamp).toLocaleString();
-                            const isBestTake = meta.is_best_take || shouldAutoSelect;
+                            const date = new Date(item.timestamp).toLocaleString();
+                            const isBestTake = item.is_best_take || shouldAutoSelect;
                             const bestTakeBadge = isBestTake ? '<span class="best-take-badge">Best Take</span>' : '';
                             const audioItemClass = isBestTake ? 'audio-item best-take' : 'audio-item';
 
@@ -2208,7 +2216,7 @@
                                         <label for="radio_chunk_${fileIndex}_${chunkId}_${idx}">Mark as Best Take</label>
                                     </div>
                                     <div class="audio-item-params">
-                                        Exaggeration: ${meta.exaggeration} | CFG: ${meta.cfg_weight} | Voice: ${meta.voice_sample || 'Default'}
+                                        Exaggeration: ${item.exaggeration} | CFG: ${item.cfg_weight} | Voice: ${item.voice_sample || 'Default'}
                                     </div>
                                     <audio controls class="audio-player">
                                         <source src="http://localhost:5000${item.audio_url}" type="audio/wav">
@@ -2360,15 +2368,23 @@
             try {
                 showStatus('Setting best take...', 'info');
 
-                const response = await fetch(`${API_URL}/set-best-take`, {
+                // Get the text file ID from the bubble
+                const bubble = document.getElementById(`bubble_${fileIndex}`);
+                const textFileId = bubble ? bubble.dataset.textFileId : null;
+
+                if (!textFileId) {
+                    throw new Error('Text file ID not found');
+                }
+
+                const response = await fetch(`${API_URL}/project/set-chunk-best-take`, {
                     method: 'POST',
                     headers: {
                         'Content-Type': 'application/json'
                     },
                     body: JSON.stringify({
-                        txt_filename: txtFilename,
-                        audio_filename: audioFilename,
-                        chunk_id: chunkId
+                        text_file_id: textFileId,
+                        chunk_id: chunkId,
+                        audio_filename: audioFilename
                     })
                 });
 
@@ -2380,9 +2396,13 @@
 
                 showStatus('Best take updated successfully!', 'success');
 
-                // Reload chunk audio
-                const fileName = currentFiles[fileIndex].name.split('/').pop();
-                await loadChunkAudio(fileIndex, fileName, chunkId);
+                // Update local state
+                const chunk = fileChunks[fileIndex].find(c => c.id === chunkId);
+                if (chunk) {
+                    chunk.generated_audios = data.chunk.generated_audios;
+                    const chunkKey = `${fileIndex}_${chunkId}`;
+                    chunkAudio[chunkKey] = chunk.generated_audios;
+                }
 
                 // Re-render details if this chunk is selected
                 if (selectedChunks[fileIndex] === chunkId) {
