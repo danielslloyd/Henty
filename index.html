@@ -4,6 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Chatterbox TTS - Professional Voice Synthesis</title>
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🎤</text></svg>">
     <style>
         * {
             margin: 0;
@@ -897,10 +898,6 @@
             </div>
         </div>
 
-        <!-- Hidden folder inputs for project management -->
-        <input type="file" id="newProjectFolderInput" webkitdirectory directory style="display: none;">
-        <input type="file" id="loadProjectFolderInput" webkitdirectory directory style="display: none;">
-
         <div class="status-bar" id="statusBar"></div>
 
         <div class="files-grid" id="filesContainer">
@@ -1184,46 +1181,20 @@
         }
 
         window.showNewProjectDialog = function() {
-            const input = document.getElementById('newProjectFolderInput');
-            input.value = ''; // Reset
+            const projectPath = prompt('Enter the full folder path for the new project:\n(e.g., C:\\Users\\YourName\\Documents\\MyAudiobook)');
+            if (!projectPath) return;
 
-            input.onchange = function(e) {
-                const files = e.target.files;
-                if (files.length === 0) return;
+            const projectName = prompt('Enter the project name:', 'My Audiobook Project');
+            if (!projectName) return;
 
-                // Get the folder path from the first file
-                const folderPath = files[0].webkitRelativePath.split('/')[0];
-                const fullPath = files[0].path ? files[0].path.substring(0, files[0].path.lastIndexOf('\\')) : null;
-
-                // For browser compatibility, try to extract path
-                const projectPath = fullPath || folderPath;
-
-                const projectName = prompt('Enter the project name:', folderPath || 'My Audiobook Project');
-                if (!projectName) return;
-
-                createProject(projectPath, projectName);
-            };
-
-            input.click();
+            createProject(projectPath, projectName);
         };
 
         window.showLoadProjectDialog = function() {
-            const input = document.getElementById('loadProjectFolderInput');
-            input.value = ''; // Reset
+            const projectPath = prompt('Enter the full path to the project folder:\n(e.g., C:\\Users\\YourName\\Documents\\MyAudiobook)');
+            if (!projectPath) return;
 
-            input.onchange = function(e) {
-                const files = e.target.files;
-                if (files.length === 0) return;
-
-                // Get the folder path from the first file
-                const folderPath = files[0].webkitRelativePath.split('/')[0];
-                const fullPath = files[0].path ? files[0].path.substring(0, files[0].path.lastIndexOf('\\')) : null;
-
-                const projectPath = fullPath || folderPath;
-                loadProject(projectPath);
-            };
-
-            input.click();
+            loadProject(projectPath);
         };
 
         async function createProject(projectPath, projectName) {
@@ -1537,7 +1508,7 @@
                                     <div class="audio-item-title">Generation #${idx + 1} ${bestTakeBadge}</div>
                                     <div class="audio-item-header-actions">
                                         <small style="color: #999;">${date}</small>
-                                        <button class="delete-take-btn" onclick="deleteTake(${index}, '${fileName}', '${item.audio_file}')" title="Delete this take">🗑️</button>
+                                        <button class="delete-take-btn" onclick='deleteTake(${index}, "${fileName}", "${item.audio_file}")' title="Delete this take">🗑️</button>
                                     </div>
                                 </div>
                                 <div class="best-take-control">
@@ -1546,7 +1517,7 @@
                                            id="radio_${index}_${idx}"
                                            value="${item.audio_file}"
                                            ${isBestTake ? 'checked' : ''}
-                                           onchange="setBestTake(${index}, '${fileName}', '${item.audio_file}')">
+                                           onchange='setBestTake(${index}, "${fileName}", "${item.audio_file}")'>
                                     <label for="radio_${index}_${idx}">Mark as Best Take</label>
                                 </div>
                                 <div class="audio-item-params">
@@ -2015,7 +1986,7 @@
 
                             // Auto-select if needed
                             if (shouldAutoSelect && idx === 0) {
-                                setTimeout(() => setChunkBestTake(${fileIndex}, ${chunkId}, '${fileName}', '${item.audio_file}'), 100);
+                                setTimeout(() => setChunkBestTake(fileIndex, chunkId, fileName, item.audio_file), 100);
                             }
 
                             return `
@@ -2024,7 +1995,7 @@
                                         <div class="audio-item-title">Generation #${idx + 1} ${bestTakeBadge}</div>
                                         <div class="audio-item-header-actions">
                                             <small style="color: #999;">${date}</small>
-                                            <button class="delete-take-btn" onclick="deleteChunkTake(${fileIndex}, ${chunkId}, '${fileName}', '${item.audio_file}')" title="Delete this take">🗑️</button>
+                                            <button class="delete-take-btn" onclick='deleteChunkTake(${fileIndex}, ${chunkId}, "${fileName}", "${item.audio_file}")' title="Delete this take">🗑️</button>
                                         </div>
                                     </div>
                                     <div class="best-take-control">
@@ -2033,7 +2004,7 @@
                                                id="radio_chunk_${fileIndex}_${chunkId}_${idx}"
                                                value="${item.audio_file}"
                                                ${isBestTake ? 'checked' : ''}
-                                               onchange="setChunkBestTake(${fileIndex}, ${chunkId}, '${fileName}', '${item.audio_file}')">
+                                               onchange='setChunkBestTake(${fileIndex}, ${chunkId}, "${fileName}", "${item.audio_file}")'>
                                         <label for="radio_chunk_${fileIndex}_${chunkId}_${idx}">Mark as Best Take</label>
                                     </div>
                                     <div class="audio-item-params">
@@ -2232,6 +2203,22 @@
         // Update project defaults
         window.updateProjectDefaults = async function() {
             try {
+                // Check if a project is loaded
+                const projectInfo = document.getElementById('projectInfo');
+                if (projectInfo.style.display === 'none') {
+                    // No project loaded, just update local defaults without saving
+                    const exaggeration = document.getElementById('project_exaggeration_default').value;
+                    const cfgWeight = document.getElementById('project_cfg_weight_default').value;
+                    const voiceSample = document.getElementById('project_voice_default').value;
+
+                    projectDefaults = {
+                        exaggeration: parseFloat(exaggeration),
+                        cfg_weight: parseFloat(cfgWeight),
+                        voice_sample: voiceSample
+                    };
+                    return; // Don't show status message or try to save to project
+                }
+
                 const exaggeration = document.getElementById('project_exaggeration_default').value;
                 const cfgWeight = document.getElementById('project_cfg_weight_default').value;
                 const voiceSample = document.getElementById('project_voice_default').value;
