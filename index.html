@@ -2143,7 +2143,7 @@
                             const audioItemClass = isBestTake ? 'audio-item best-take' : 'audio-item';
 
                             // Auto-select if needed
-                            if (shouldAutoSelect && idx === 0) {
+                            if (shouldAutoSelect && idx === 0 && item.audio_file) {
                                 setTimeout(() => setChunkBestTake(fileIndex, chunkId, fileName, item.audio_file), 100);
                             }
 
@@ -2310,8 +2310,11 @@
                 showStatus(`Chunk #${chunkId + 1} audio generated successfully!`, 'success');
 
                 // Update local state from backend
-                chunk.generated_audios = saveData.chunk.generated_audios;
-                chunkAudio[chunkKey] = chunk.generated_audios;
+                const currentChunk = fileChunks[fileIndex].find(c => c.id === chunkId);
+                if (currentChunk) {
+                    currentChunk.generated_audios = saveData.chunk.generated_audios;
+                }
+                chunkAudio[chunkKey] = saveData.chunk.generated_audios;
 
                 // Update chunk bubbles
                 renderChunkBubbles(fileIndex);
@@ -2748,7 +2751,12 @@
         // Stitch all best takes together
         window.stitchAllAudio = async function(fileIndex) {
             const textFile = currentFiles[fileIndex];
-            const textFileId = textFile.id;
+            const textFileId = textFile.textFileId;
+
+            if (!textFileId) {
+                showStatus('Error: Text file ID not found', 'error');
+                return;
+            }
 
             showStatus('Stitching all best takes together...', 'info');
 

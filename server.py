@@ -310,14 +310,19 @@ class TextToAudioConverter:
             if not audio_paths:
                 raise ValueError("No audio files provided for stitching")
 
+            print(f"=== Starting audio stitching ===")
+            print(f"Total files to stitch: {len(audio_paths)}")
+
             # Load all audio files
             combined = None
-            for audio_path in audio_paths:
+            for i, audio_path in enumerate(audio_paths):
                 if not os.path.exists(audio_path):
                     print(f"Warning: Audio file not found: {audio_path}")
                     continue
 
+                print(f"Loading audio file {i+1}/{len(audio_paths)}: {os.path.basename(audio_path)}")
                 audio_segment = AudioSegment.from_wav(audio_path)
+                print(f"  - Duration: {len(audio_segment)}ms, Sample rate: {audio_segment.frame_rate}Hz, Channels: {audio_segment.channels}")
 
                 if combined is None:
                     combined = audio_segment
@@ -329,6 +334,8 @@ class TextToAudioConverter:
             if combined is None:
                 raise ValueError("No valid audio files found to stitch")
 
+            print(f"Final combined audio duration: {len(combined)}ms ({len(combined)/1000:.2f} seconds)")
+
             # Export the combined audio
             combined.export(output_path, format="wav")
             print(f"Successfully stitched {len(audio_paths)} audio files to: {output_path}")
@@ -336,6 +343,8 @@ class TextToAudioConverter:
 
         except Exception as e:
             print(f"Error stitching audio files: {str(e)}")
+            import traceback
+            traceback.print_exc()
             raise
 
     def ensure_valid_wav_format(self, wav_path):
@@ -730,6 +739,20 @@ def serve_audio(filename):
     except Exception as e:
         return jsonify({'error': str(e)}), 404
 
+@app.route('/api/project/audio/<path:filename>')
+def serve_project_audio(filename):
+    """Serve audio files from the current project"""
+    try:
+        if converter.current_project_path is None:
+            return jsonify({'error': 'No project loaded'}), 400
+
+        audio_dir = os.path.join(converter.current_project_path, 'audio')
+        print(f"Serving project audio: {filename} from {audio_dir}")
+        return send_from_directory(audio_dir, filename)
+    except Exception as e:
+        print(f"Error serving project audio: {str(e)}")
+        return jsonify({'error': str(e)}), 404
+
 @app.route('/api/status')
 def status():
     """Check server status"""
@@ -914,8 +937,8 @@ def create_project():
 
         # Save project metadata
         project_file = os.path.join(project_path, 'project.json')
-        with open(project_file, 'w') as f:
-            json.dump(project_metadata, f, indent=2)
+        with open(project_file, 'w', encoding='utf-8') as f:
+            json.dump(project_metadata, f, indent=2, ensure_ascii=False)
 
         # Update converter paths
         converter.current_project_path = project_path
@@ -956,7 +979,7 @@ def load_project():
         if not os.path.exists(project_file):
             return jsonify({'error': 'Not a valid project folder (project.json not found)'}), 400
 
-        with open(project_file, 'r') as f:
+        with open(project_file, 'r', encoding='utf-8') as f:
             project_metadata = json.load(f)
 
         # Add default audio settings if not present (backwards compatibility)
@@ -972,8 +995,8 @@ def load_project():
 
         # Update last modified
         project_metadata['last_modified'] = datetime.now().isoformat()
-        with open(project_file, 'w') as f:
-            json.dump(project_metadata, f, indent=2)
+        with open(project_file, 'w', encoding='utf-8') as f:
+            json.dump(project_metadata, f, indent=2, ensure_ascii=False)
 
         # Update converter paths
         converter.current_project_path = project_path
@@ -1049,8 +1072,8 @@ def update_project_defaults():
 
         # Save to file
         project_file = os.path.join(converter.current_project_path, 'project.json')
-        with open(project_file, 'w') as f:
-            json.dump(converter.current_project_metadata, f, indent=2)
+        with open(project_file, 'w', encoding='utf-8') as f:
+            json.dump(converter.current_project_metadata, f, indent=2, ensure_ascii=False)
 
         return jsonify({
             'success': True,
@@ -1116,8 +1139,8 @@ def add_text_file_to_project():
 
         # Save to file
         project_file = os.path.join(converter.current_project_path, 'project.json')
-        with open(project_file, 'w') as f:
-            json.dump(converter.current_project_metadata, f, indent=2)
+        with open(project_file, 'w', encoding='utf-8') as f:
+            json.dump(converter.current_project_metadata, f, indent=2, ensure_ascii=False)
 
         return jsonify({
             'success': True,
@@ -1196,8 +1219,8 @@ def update_chunk_text():
 
         # Save to file
         project_file = os.path.join(converter.current_project_path, 'project.json')
-        with open(project_file, 'w') as f:
-            json.dump(converter.current_project_metadata, f, indent=2)
+        with open(project_file, 'w', encoding='utf-8') as f:
+            json.dump(converter.current_project_metadata, f, indent=2, ensure_ascii=False)
 
         return jsonify({
             'success': True,
@@ -1245,8 +1268,8 @@ def dismiss_dirty_flag():
 
         # Save to file
         project_file = os.path.join(converter.current_project_path, 'project.json')
-        with open(project_file, 'w') as f:
-            json.dump(converter.current_project_metadata, f, indent=2)
+        with open(project_file, 'w', encoding='utf-8') as f:
+            json.dump(converter.current_project_metadata, f, indent=2, ensure_ascii=False)
 
         return jsonify({
             'success': True,
@@ -1302,8 +1325,8 @@ def add_audio_to_chunk():
 
         # Save to file
         project_file = os.path.join(converter.current_project_path, 'project.json')
-        with open(project_file, 'w') as f:
-            json.dump(converter.current_project_metadata, f, indent=2)
+        with open(project_file, 'w', encoding='utf-8') as f:
+            json.dump(converter.current_project_metadata, f, indent=2, ensure_ascii=False)
 
         return jsonify({
             'success': True,
@@ -1363,8 +1386,8 @@ def set_chunk_best_take():
 
         # Save to file
         project_file = os.path.join(converter.current_project_path, 'project.json')
-        with open(project_file, 'w') as f:
-            json.dump(converter.current_project_metadata, f, indent=2)
+        with open(project_file, 'w', encoding='utf-8') as f:
+            json.dump(converter.current_project_metadata, f, indent=2, ensure_ascii=False)
 
         return jsonify({
             'success': True,
@@ -1426,10 +1449,21 @@ def stitch_project_best_takes():
             # If no best take marked, use the most recent
             if not best_audio:
                 best_audio = max(generated_audios, key=lambda a: a.get('timestamp', 0))
+                print(f"Chunk {chunk['id']}: No best take marked, using most recent (timestamp: {best_audio.get('timestamp', 0)})")
+            else:
+                print(f"Chunk {chunk['id']}: Using best take (timestamp: {best_audio.get('timestamp', 0)})")
 
             # Build audio file path
+            if 'audio_file' not in best_audio:
+                print(f"ERROR: audio object missing 'audio_file' key. Audio object: {best_audio}")
+                return jsonify({'error': f'Chunk {chunk["id"]} has invalid audio metadata (missing audio_file)'}), 400
+
             audio_file = best_audio['audio_file']
             audio_path = os.path.join(audio_dir, audio_file)
+
+            print(f"Chunk {chunk['id']}: Selected audio file: {audio_file}")
+            print(f"Chunk {chunk['id']}: Full path: {audio_path}")
+            print(f"Chunk {chunk['id']}: File exists: {os.path.exists(audio_path)}")
 
             if not os.path.exists(audio_path):
                 return jsonify({'error': f'Audio file not found: {audio_file}'}), 400
