@@ -11,6 +11,7 @@ from pydub import AudioSegment
 import json
 import time
 import threading
+from scripts.gutenberg_processor import GutenbergProcessor
 
 app = Flask(__name__)
 CORS(app)
@@ -1924,6 +1925,52 @@ def stitch_audio():
     except Exception as e:
         import traceback
         print(f"Error stitching audio: {str(e)}")
+        print(traceback.format_exc())
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/process-gutenberg', methods=['POST'])
+def process_gutenberg():
+    """Process Project Gutenberg URLs and save to directory"""
+    try:
+        data = request.json
+        output_dir = data.get('output_dir')
+        urls = data.get('urls', [])
+
+        if not output_dir:
+            return jsonify({'error': 'output_dir is required'}), 400
+
+        if not urls or len(urls) == 0:
+            return jsonify({'error': 'At least one URL is required'}), 400
+
+        # Validate URLs
+        for url in urls:
+            if not url.strip():
+                return jsonify({'error': 'Empty URL provided'}), 400
+            if 'gutenberg.org' not in url.lower():
+                return jsonify({'error': f'URL does not appear to be from Project Gutenberg: {url}'}), 400
+
+        # Create processor and process URLs
+        processor = GutenbergProcessor(output_dir)
+        results = processor.process_urls(urls)
+
+        # Count successes and failures
+        successes = sum(1 for r in results.values() if 'error' not in r)
+        failures = sum(1 for r in results.values() if 'error' in r)
+        total_chapters = sum(r.get('count', 0) for r in results.values() if 'error' not in r)
+
+        return jsonify({
+            'success': True,
+            'output_dir': output_dir,
+            'processed': len(urls),
+            'successes': successes,
+            'failures': failures,
+            'total_chapters': total_chapters,
+            'results': results
+        })
+
+    except Exception as e:
+        import traceback
+        print(f"Error processing Gutenberg URLs: {str(e)}")
         print(traceback.format_exc())
         return jsonify({'error': str(e)}), 500
 

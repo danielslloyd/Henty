@@ -829,6 +829,123 @@
         @keyframes spin {
             to { transform: rotate(360deg); }
         }
+
+        /* Gutenberg Modal */
+        .modal-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.7);
+            z-index: 4000;
+            display: none;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .modal-overlay.show {
+            display: flex;
+        }
+
+        .modal-content {
+            background: white;
+            border-radius: 15px;
+            padding: 30px;
+            max-width: 600px;
+            width: 90%;
+            max-height: 80vh;
+            overflow-y: auto;
+            box-shadow: 0 10px 40px rgba(0, 0, 0, 0.3);
+        }
+
+        .modal-header {
+            font-size: 24px;
+            font-weight: 600;
+            color: #333;
+            margin-bottom: 20px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .modal-close {
+            background: none;
+            border: none;
+            font-size: 28px;
+            color: #999;
+            cursor: pointer;
+            padding: 0;
+            width: 30px;
+            height: 30px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .modal-close:hover {
+            color: #333;
+        }
+
+        .modal-body {
+            margin-bottom: 20px;
+        }
+
+        .form-group {
+            margin-bottom: 20px;
+        }
+
+        .form-group label {
+            display: block;
+            font-size: 14px;
+            font-weight: 600;
+            color: #333;
+            margin-bottom: 8px;
+        }
+
+        .form-group input[type="text"],
+        .form-group textarea {
+            width: 100%;
+            padding: 12px;
+            border: 2px solid #e0e0e0;
+            border-radius: 8px;
+            font-size: 14px;
+            font-family: inherit;
+        }
+
+        .form-group input[type="text"]:focus,
+        .form-group textarea:focus {
+            outline: none;
+            border-color: #667eea;
+        }
+
+        .form-group textarea {
+            resize: vertical;
+            min-height: 120px;
+        }
+
+        .form-group small {
+            display: block;
+            margin-top: 5px;
+            color: #666;
+            font-size: 12px;
+        }
+
+        .modal-footer {
+            display: flex;
+            gap: 10px;
+            justify-content: flex-end;
+        }
+
+        .btn-success {
+            background: linear-gradient(135deg, #11998e 0%, #38ef7d 100%);
+            color: white;
+        }
+
+        .btn-success:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 5px 15px rgba(17, 153, 142, 0.4);
+        }
     </style>
 </head>
 <body>
@@ -846,6 +963,7 @@
             <div style="display: flex; gap: 10px; flex-wrap: wrap;">
                 <button class="btn btn-primary" onclick="showNewProjectDialog()">New Project</button>
                 <button class="btn btn-secondary" onclick="showLoadProjectDialog()">Load Project</button>
+                <button class="btn btn-success" onclick="showGutenbergDialog()">📚 Process Gutenberg URLs</button>
             </div>
         </div>
 
@@ -2988,6 +3106,90 @@
             }
         };
 
+        // Gutenberg URL Processor Functions
+        function showGutenbergDialog() {
+            document.getElementById('gutenbergModal').classList.add('show');
+        }
+
+        function closeGutenbergDialog() {
+            document.getElementById('gutenbergModal').classList.remove('show');
+        }
+
+        async function processGutenbergUrls() {
+            const outputDir = document.getElementById('gutenbergOutputDir').value.trim();
+            const urlsText = document.getElementById('gutenbergUrls').value.trim();
+
+            if (!outputDir) {
+                showStatus('Please enter an output directory', 'error');
+                return;
+            }
+
+            if (!urlsText) {
+                showStatus('Please enter at least one URL', 'error');
+                return;
+            }
+
+            // Split URLs by newline and filter out empty lines
+            const urls = urlsText.split('\n')
+                .map(url => url.trim())
+                .filter(url => url.length > 0);
+
+            if (urls.length === 0) {
+                showStatus('No valid URLs found', 'error');
+                return;
+            }
+
+            try {
+                showStatus(`Processing ${urls.length} URL(s)...`, 'info');
+                closeGutenbergDialog();
+
+                const response = await fetch(`${API_URL}/process-gutenberg`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        output_dir: outputDir,
+                        urls: urls
+                    })
+                });
+
+                const data = await response.json();
+
+                if (!response.ok) {
+                    throw new Error(data.error || 'Failed to process URLs');
+                }
+
+                // Show detailed results
+                let message = `Successfully processed ${data.successes} of ${data.processed} book(s)\n`;
+                message += `Total chapters created: ${data.total_chapters}\n`;
+                message += `Output directory: ${data.output_dir}\n`;
+
+                if (data.failures > 0) {
+                    message += `\nFailed: ${data.failures} book(s) - check console for details`;
+                    console.log('Processing results:', data.results);
+                }
+
+                showStatus(message, data.failures > 0 ? 'warning' : 'success');
+
+                // Clear the form
+                document.getElementById('gutenbergOutputDir').value = '';
+                document.getElementById('gutenbergUrls').value = '';
+
+            } catch (error) {
+                console.error('Error processing Gutenberg URLs:', error);
+                showStatus(`Error: ${error.message}`, 'error');
+            }
+        }
+
+        // Close modal when clicking outside
+        document.addEventListener('click', function(event) {
+            const modal = document.getElementById('gutenbergModal');
+            if (event.target === modal) {
+                closeGutenbergDialog();
+            }
+        });
+
         // Initialize
         (async function init() {
             await loadProjectInfo();
@@ -3001,5 +3203,34 @@
             }
         })();
     </script>
+
+    <!-- Gutenberg URL Processor Modal -->
+    <div id="gutenbergModal" class="modal-overlay">
+        <div class="modal-content">
+            <div class="modal-header">
+                <span>📚 Process Gutenberg URLs</span>
+                <button class="modal-close" onclick="closeGutenbergDialog()">&times;</button>
+            </div>
+            <div class="modal-body">
+                <div class="form-group">
+                    <label>Output Directory</label>
+                    <input type="text" id="gutenbergOutputDir" placeholder="e.g., ./books">
+                    <small>Directory where processed text files will be saved</small>
+                </div>
+                <div class="form-group">
+                    <label>Gutenberg URLs</label>
+                    <textarea id="gutenbergUrls" placeholder="Enter URLs, one per line:
+https://www.gutenberg.org/cache/epub/4932/pg4932.txt
+https://www.gutenberg.org/cache/epub/1342/pg1342.txt"></textarea>
+                    <small>Enter Project Gutenberg text URLs, one per line</small>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-secondary" onclick="closeGutenbergDialog()">Cancel</button>
+                <button class="btn btn-success" onclick="processGutenbergUrls()">Process URLs</button>
+            </div>
+        </div>
+    </div>
+
 </body>
 </html>
