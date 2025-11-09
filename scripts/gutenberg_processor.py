@@ -4,9 +4,10 @@ Project Gutenberg Text Processor
 This script downloads and processes Project Gutenberg texts:
 1. Downloads text from URLs
 2. Strips Gutenberg headers/footers
-3. Processes line breaks (removes single, keeps multiple)
-4. Splits by chapter breaks (3+ line breaks)
-5. Saves to sequentially numbered files
+3. Extracts book title from content (within *** markers)
+4. Processes line breaks (removes single, keeps multiple)
+5. Splits by chapter breaks (3+ line breaks)
+6. Saves to sequentially numbered files in title-based subdirectories
 """
 
 import os
@@ -87,6 +88,41 @@ class GutenbergProcessor:
         # Extract the content
         content = text[start_pos:end_pos].strip()
         return content
+
+    def extract_title(self, text: str) -> str:
+        """
+        Extract the book title from text, typically found within *** markers
+
+        Args:
+            text: Text to search for title
+
+        Returns:
+            Sanitized title string or empty string if not found
+        """
+        # Look for text between *** markers (common Gutenberg title format)
+        # Pattern: *** TITLE *** or ***TITLE***
+        patterns = [
+            r'\*{3,}\s*([A-Z][^\*\n]{3,80}?)\s*\*{3,}',  # *** TITLE ***
+            r'\*{3,}\s*([^\*\n]{3,80}?)\s*\*{3,}',       # More flexible version
+        ]
+
+        for pattern in patterns:
+            matches = re.findall(pattern, text[:2000], re.MULTILINE)  # Search first 2000 chars
+            if matches:
+                title = matches[0].strip()
+                # Clean up the title for use as directory name
+                # Remove common prefixes
+                title = re.sub(r'^(THE|A|AN)\s+', '', title, flags=re.IGNORECASE)
+                # Remove special characters, keep alphanumeric and spaces
+                title = re.sub(r'[^\w\s-]', '', title)
+                # Replace spaces with underscores
+                title = re.sub(r'\s+', '_', title)
+                # Limit length
+                title = title[:50]
+                if title:
+                    return title
+
+        return ''
 
     def process_line_breaks(self, text: str) -> str:
         """
@@ -198,12 +234,18 @@ class GutenbergProcessor:
         print(f"Downloading: {url}")
         text = self.download_text(url)
 
-        # Extract book name
-        book_name = self.extract_book_name(url)
-        print(f"Processing book: {book_name}")
+        # Extract book ID from URL
+        book_id = self.extract_book_name(url)
 
         # Strip Gutenberg metadata
         text = self.strip_gutenberg_metadata(text)
+
+        # Extract title from the text content
+        title = self.extract_title(text)
+
+        # Use title if found, otherwise fallback to book ID
+        book_name = title if title else book_id
+        print(f"Processing book: {book_name} ({book_id})")
 
         # Process line breaks
         text = self.process_line_breaks(text)
