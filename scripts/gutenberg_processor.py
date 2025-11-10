@@ -339,14 +339,34 @@ def main():
     """Command-line interface for testing"""
     import sys
 
-    if len(sys.argv) < 3:
-        print("Usage: python gutenberg_processor.py <output_dir> <url1> [url2] ...")
-        print("\nExample:")
-        print("  python gutenberg_processor.py ./books https://www.gutenberg.org/cache/epub/4932/pg4932.txt")
+    if len(sys.argv) < 2:
+        print("Usage: python gutenberg_processor.py <url1> [url2] ... [--output-dir <dir>]")
+        print("\nExamples:")
+        print("  python gutenberg_processor.py https://www.gutenberg.org/cache/epub/4932/pg4932.txt")
+        print("  python gutenberg_processor.py https://www.gutenberg.org/cache/epub/4932/pg4932.txt --output-dir ./my_books")
+        print("\nDefaults to ./books if no output directory is specified")
         sys.exit(1)
 
-    output_dir = sys.argv[1]
-    urls = sys.argv[2:]
+    # Parse arguments
+    output_dir = "./books"  # Default output directory
+    urls = []
+
+    i = 1
+    while i < len(sys.argv):
+        if sys.argv[i] == "--output-dir":
+            if i + 1 < len(sys.argv):
+                output_dir = sys.argv[i + 1]
+                i += 2
+            else:
+                print("Error: --output-dir requires a directory path")
+                sys.exit(1)
+        else:
+            urls.append(sys.argv[i])
+            i += 1
+
+    if not urls:
+        print("Error: At least one URL is required")
+        sys.exit(1)
 
     processor = GutenbergProcessor(output_dir)
     results = processor.process_urls(urls)
