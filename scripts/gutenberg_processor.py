@@ -2,12 +2,13 @@
 Project Gutenberg Text Processor
 
 This script downloads and processes Project Gutenberg texts:
-1. Downloads text from URLs
-2. Strips Gutenberg headers/footers
-3. Extracts book title from content (within *** markers)
-4. Processes carriage returns + spaces (removes single CR, keeps multiple)
-5. Splits by chapter breaks (4+ consecutive CR+space pairs)
-6. Saves chapters to files named with first 40 characters in title-based subdirectories
+1. Verifies URL points to a valid .txt file (skips if not)
+2. Extracts title from "*** START OF THE PROJECT GUTENBERG EBOOK [title] ***"
+3. Removes everything before and including that string, replaces with [title]
+4. Removes everything after the END marker
+5. Removes all single carriage returns (keeping only text and newlines)
+6. Splits file whenever 4+ consecutive carriage returns are found
+7. Saves sections to files named with first 40 characters in folder named [title]
 """
 
 import os
@@ -44,38 +45,62 @@ class GutenbergProcessor:
 
     def download_text(self, url: str) -> str:
         """
-        Download text from a URL
+        Download text from a URL and verify it's a valid txt file
 
         Args:
             url: URL to download from
 
         Returns:
             Downloaded text content
+
+        Raises:
+            ValueError: If URL doesn't point to a valid txt file
         """
+        # Verify URL points to a .txt file
+        if not url.lower().endswith('.txt'):
+            raise ValueError(f"URL does not point to a .txt file: {url}")
+
         response = requests.get(url, timeout=30)
         response.raise_for_status()
+
+        # Verify content-type if available
+        content_type = response.headers.get('content-type', '')
+        if content_type and 'text' not in content_type.lower():
+            raise ValueError(f"URL does not return text content: {content_type}")
+
         return response.text
 
-    def strip_gutenberg_metadata(self, text: str) -> str:
+    def strip_gutenberg_metadata(self, text: str, title: str) -> str:
         """
-        Remove Project Gutenberg headers and footers
+        Remove everything before and including the START marker, replace with title.
+        Remove everything after the END marker.
 
         Args:
             text: Raw text from Gutenberg
+            title: Extracted title to place at the beginning
 
         Returns:
-            Text with metadata removed
+            Text with metadata removed and title at the start
         """
-        # Find start marker
-        start_pos = 0
-        for marker in self.START_MARKERS:
-            match = re.search(marker, text, re.IGNORECASE)
-            if match:
-                # Find the end of the line containing the marker
-                start_pos = text.find('\n', match.end())
-                if start_pos == -1:
-                    start_pos = match.end()
-                break
+        # Find the START marker
+        start_pattern = r'\*\*\*\s*START OF (?:THE|THIS) PROJECT GUTENBERG EBOOK\s+.+?\s*\*\*\*'
+        start_match = re.search(start_pattern, text, re.IGNORECASE)
+
+        if start_match:
+            # Find the end of the line containing the START marker
+            start_pos = text.find('\n', start_match.end())
+            if start_pos == -1:
+                start_pos = start_match.end()
+        else:
+            # Fallback to old method if START marker not found
+            start_pos = 0
+            for marker in self.START_MARKERS:
+                match = re.search(marker, text, re.IGNORECASE)
+                if match:
+                    start_pos = text.find('\n', match.end())
+                    if start_pos == -1:
+                        start_pos = match.end()
+                    break
 
         # Find end marker
         end_pos = len(text)
@@ -85,13 +110,18 @@ class GutenbergProcessor:
                 end_pos = match.start()
                 break
 
-        # Extract the content
+        # Extract the content after the START marker and before the END marker
         content = text[start_pos:end_pos].strip()
+
+        # Prepend the title to the content
+        if title:
+            content = f"{title}\n\n{content}"
+
         return content
 
     def extract_title(self, text: str) -> str:
         """
-        Extract the book title from text, typically found within *** markers
+        Extract the book title from the START OF PROJECT GUTENBERG EBOOK marker
 
         Args:
             text: Text to search for title
@@ -99,71 +129,65 @@ class GutenbergProcessor:
         Returns:
             Sanitized title string or empty string if not found
         """
-        # Look for text between *** markers (common Gutenberg title format)
-        # Pattern: *** TITLE *** or ***TITLE***
-        patterns = [
-            r'\*{3,}\s*([A-Z][^\*\n]{3,80}?)\s*\*{3,}',  # *** TITLE ***
-            r'\*{3,}\s*([^\*\n]{3,80}?)\s*\*{3,}',       # More flexible version
-        ]
+        # Look for: *** START OF THE PROJECT GUTENBERG EBOOK [TITLE] ***
+        # The title is between "EBOOK" and the closing "***"
+        pattern = r'\*\*\*\s*START OF (?:THE|THIS) PROJECT GUTENBERG EBOOK\s+(.+?)\s*\*\*\*'
 
-        for pattern in patterns:
-            matches = re.findall(pattern, text[:2000], re.MULTILINE)  # Search first 2000 chars
-            if matches:
-                title = matches[0].strip()
-                # Clean up the title for use as directory name
-                # Remove common prefixes
-                title = re.sub(r'^(THE|A|AN)\s+', '', title, flags=re.IGNORECASE)
-                # Remove special characters, keep alphanumeric and spaces
-                title = re.sub(r'[^\w\s-]', '', title)
-                # Replace spaces with underscores
-                title = re.sub(r'\s+', '_', title)
-                # Limit length
-                title = title[:50]
-                if title:
-                    return title
+        match = re.search(pattern, text, re.IGNORECASE)
+        if match:
+            title = match.group(1).strip()
+            # Clean up the title for use as directory name
+            # Remove special characters, keep alphanumeric and spaces
+            title = re.sub(r'[^\w\s-]', '', title)
+            # Replace spaces with underscores
+            title = re.sub(r'\s+', '_', title)
+            # Limit length
+            title = title[:50]
+            if title:
+                return title
 
         return ''
 
-    def process_line_breaks(self, text: str) -> str:
+    def process_carriage_returns(self, text: str) -> str:
         """
-        Process line breaks:
-        - More than 3 consecutive CR+space pairs mark chapter breaks
-        - Single CR+space is replaced with just space (CR removed)
+        Process carriage returns:
+        - Remove single carriage returns (not followed by another CR)
+        - Preserve 4+ consecutive carriage returns as section breaks
 
         Args:
             text: Text to process
 
         Returns:
-            Text with processed line breaks
+            Processed text
         """
-        # Replace 4+ CR+space pairs with a placeholder to preserve chapter breaks
-        text = re.sub(r'(\r ){4,}', '<<<CHAPTER_BREAK>>>', text)
+        # First, mark 4+ consecutive CRs with a placeholder to preserve them
+        # Pattern matches: \r\r\r\r or \r\n\r\n\r\n\r\n or mixed
+        text = re.sub(r'(?:\r\n?){4,}', '<<<SECTION_BREAK>>>', text)
 
-        # Replace single CR+space with just space (remove CR only)
-        text = re.sub(r'\r ', ' ', text)
+        # Now remove all remaining single carriage returns
+        # This removes \r that's not part of a 4+ sequence
+        text = text.replace('\r', '')
 
-        # Restore chapter breaks
-        text = text.replace('<<<CHAPTER_BREAK>>>', '\n\n\n')
-
+        # Return the text (section breaks will be split later)
         return text
 
-    def split_by_chapters(self, text: str) -> List[str]:
+    def split_by_section_breaks(self, text: str) -> List[str]:
         """
-        Split text into chapters based on 3+ consecutive line breaks
+        Split text into sections based on the section break markers.
 
         Args:
-            text: Text to split
+            text: Text with section break markers
 
         Returns:
-            List of chapter texts
+            List of text sections
         """
-        # Split on 3+ line breaks
-        chapters = re.split(r'\n{3,}', text)
+        # Split on the section break markers
+        sections = text.split('<<<SECTION_BREAK>>>')
 
-        # Filter out empty chapters and strip whitespace
-        chapters = [ch.strip() for ch in chapters if ch.strip()]
+        # Filter out empty sections and strip whitespace
+        sections = [section.strip() for section in sections if section.strip()]
 
-        return chapters
+        return sections
 
     def save_chapters(self, chapters: List[str], book_name: str) -> List[str]:
         """
@@ -248,35 +272,39 @@ class GutenbergProcessor:
         Returns:
             Tuple of (book_name, list of saved file paths)
         """
-        # Download text
+        # Download text (verifies it's a valid .txt file)
         print(f"Downloading: {url}")
-        text = self.download_text(url)
+        try:
+            text = self.download_text(url)
+        except ValueError as e:
+            print(f"Skipping {url}: {e}")
+            raise
 
-        # Extract book ID from URL
-        book_id = self.extract_book_name(url)
-
-        # Strip Gutenberg metadata
-        text = self.strip_gutenberg_metadata(text)
-
-        # Extract title from the text content
+        # Extract title from the raw text (before stripping metadata)
         title = self.extract_title(text)
 
-        # Use title if found, otherwise fallback to book ID
-        book_name = title if title else book_id
-        print(f"Processing book: {book_name} ({book_id})")
+        if not title:
+            print(f"Warning: Could not extract title from {url}")
+            # Extract book ID from URL as fallback
+            title = self.extract_book_name(url)
 
-        # Process line breaks
-        text = self.process_line_breaks(text)
+        print(f"Processing book: {title}")
 
-        # Split into chapters
-        chapters = self.split_by_chapters(text)
-        print(f"Found {len(chapters)} chapters")
+        # Strip Gutenberg metadata and replace with title
+        text = self.strip_gutenberg_metadata(text, title)
 
-        # Save chapters
-        saved_files = self.save_chapters(chapters, book_name)
-        print(f"Saved {len(saved_files)} files to {book_name}/")
+        # Process carriage returns (remove singles, preserve 4+ as section breaks)
+        text = self.process_carriage_returns(text)
 
-        return book_name, saved_files
+        # Split into sections by section break markers
+        sections = self.split_by_section_breaks(text)
+        print(f"Found {len(sections)} sections")
+
+        # Save sections (using title as the folder name)
+        saved_files = self.save_chapters(sections, title)
+        print(f"Saved {len(saved_files)} files to {title}/")
+
+        return title, saved_files
 
     def process_urls(self, urls: List[str]) -> dict:
         """

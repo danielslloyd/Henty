@@ -40,3 +40,5 @@ Thumbs.db
 generated_audio/
 voice_samples/
 *.wav
+books/
+generation_stats.json
