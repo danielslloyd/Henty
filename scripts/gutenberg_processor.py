@@ -5,9 +5,9 @@ This script downloads and processes Project Gutenberg texts:
 1. Downloads text from URLs
 2. Strips Gutenberg headers/footers
 3. Extracts book title from content (within *** markers)
-4. Processes line breaks (removes single, keeps multiple)
-5. Splits by chapter breaks (3+ line breaks)
-6. Saves to sequentially numbered files in title-based subdirectories
+4. Processes carriage returns + spaces (removes single CR, keeps multiple)
+5. Splits by chapter breaks (4+ consecutive CR+space pairs)
+6. Saves chapters to files named with first 40 characters in title-based subdirectories
 """
 
 import os
@@ -127,8 +127,8 @@ class GutenbergProcessor:
     def process_line_breaks(self, text: str) -> str:
         """
         Process line breaks:
-        - Remove single line breaks (join paragraphs)
-        - Keep multiple line breaks (paragraph/chapter separators)
+        - More than 3 consecutive CR+space pairs mark chapter breaks
+        - Single CR+space is replaced with just space (CR removed)
 
         Args:
             text: Text to process
@@ -136,19 +136,13 @@ class GutenbergProcessor:
         Returns:
             Text with processed line breaks
         """
-        # Replace 3+ line breaks with a placeholder to preserve chapter breaks
-        text = re.sub(r'\n{3,}', '<<<CHAPTER_BREAK>>>', text)
+        # Replace 4+ CR+space pairs with a placeholder to preserve chapter breaks
+        text = re.sub(r'(\r ){4,}', '<<<CHAPTER_BREAK>>>', text)
 
-        # Replace 2 line breaks with a placeholder to preserve paragraph breaks
-        text = re.sub(r'\n{2}', '<<<PARA_BREAK>>>', text)
+        # Replace single CR+space with just space (remove CR only)
+        text = re.sub(r'\r ', ' ', text)
 
-        # Remove single line breaks (join continued lines)
-        text = re.sub(r'(?<!\n)\n(?!\n)', ' ', text)
-
-        # Restore paragraph breaks (2 line breaks)
-        text = text.replace('<<<PARA_BREAK>>>', '\n\n')
-
-        # Restore chapter breaks (3+ line breaks become 3)
+        # Restore chapter breaks
         text = text.replace('<<<CHAPTER_BREAK>>>', '\n\n\n')
 
         return text
@@ -173,7 +167,7 @@ class GutenbergProcessor:
 
     def save_chapters(self, chapters: List[str], book_name: str) -> List[str]:
         """
-        Save chapters to numbered files
+        Save chapters to files named with first 40 characters of chapter text
 
         Args:
             chapters: List of chapter texts
@@ -188,9 +182,33 @@ class GutenbergProcessor:
         book_dir = os.path.join(self.output_dir, book_name)
         os.makedirs(book_dir, exist_ok=True)
 
+        # Track used filenames to handle duplicates
+        used_filenames = set()
+
         # Save each chapter
         for i, chapter in enumerate(chapters, start=1):
-            filename = f"{i:03d}.txt"
+            # Get first 40 characters of chapter text
+            first_chars = chapter[:40].strip()
+
+            # Sanitize for filename: remove special characters, keep alphanumeric and spaces
+            sanitized = re.sub(r'[^\w\s-]', '', first_chars)
+            # Replace spaces with underscores
+            sanitized = re.sub(r'\s+', '_', sanitized)
+            # Remove leading/trailing underscores
+            sanitized = sanitized.strip('_')
+
+            # If sanitized name is empty, use chapter number
+            if not sanitized:
+                sanitized = f"chapter_{i}"
+
+            # Handle duplicate filenames by adding number suffix
+            filename = f"{sanitized}.txt"
+            counter = 1
+            while filename in used_filenames:
+                filename = f"{sanitized}_{counter}.txt"
+                counter += 1
+
+            used_filenames.add(filename)
             filepath = os.path.join(book_dir, filename)
 
             with open(filepath, 'w', encoding='utf-8') as f:
