@@ -151,8 +151,8 @@ class GutenbergProcessor:
     def process_carriage_returns(self, text: str) -> str:
         """
         Process carriage returns:
-        - Remove single carriage returns (not followed by another CR)
-        - Preserve 4+ consecutive carriage returns as section breaks
+        - Remove single line breaks (not followed by another line break)
+        - Preserve 4+ consecutive line breaks as section breaks
 
         Args:
             text: Text to process
@@ -160,13 +160,16 @@ class GutenbergProcessor:
         Returns:
             Processed text
         """
-        # First, mark 4+ consecutive CRs with a placeholder to preserve them
-        # Pattern matches: \r\r\r\r or \r\n\r\n\r\n\r\n or mixed
-        text = re.sub(r'(?:\r\n?){4,}', '<<<SECTION_BREAK>>>', text)
+        # First, mark 4+ consecutive line breaks with a placeholder to preserve them
+        # Pattern matches: \r\n\r\n\r\n\r\n (4 or more) or \n\n\n\n or mixed
+        text = re.sub(r'(?:\r\n|\n|\r){4,}', '<<<SECTION_BREAK>>>', text)
 
-        # Now remove all remaining single carriage returns
-        # This removes \r that's not part of a 4+ sequence
-        text = text.replace('\r', '')
+        # Now remove all remaining single line breaks
+        # Replace single \r\n or \n or \r with a space to join lines
+        text = re.sub(r'(?:\r\n|\n|\r)', ' ', text)
+
+        # Clean up multiple spaces
+        text = re.sub(r' +', ' ', text)
 
         # Return the text (section breaks will be split later)
         return text

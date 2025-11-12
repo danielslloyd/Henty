@@ -3116,13 +3116,8 @@
         }
 
         async function processGutenbergUrls() {
-            const outputDir = document.getElementById('gutenbergOutputDir').value.trim();
+            const outputDir = document.getElementById('gutenbergOutputDir').value.trim() || './books';
             const urlsText = document.getElementById('gutenbergUrls').value.trim();
-
-            if (!outputDir) {
-                showStatus('Please enter an output directory', 'error');
-                return;
-            }
 
             if (!urlsText) {
                 showStatus('Please enter at least one URL', 'error');
@@ -3213,9 +3208,9 @@
             </div>
             <div class="modal-body">
                 <div class="form-group">
-                    <label>Output Directory</label>
-                    <input type="text" id="gutenbergOutputDir" placeholder="e.g., ./books">
-                    <small>Directory where processed text files will be saved</small>
+                    <label>Output Directory (optional)</label>
+                    <input type="text" id="gutenbergOutputDir" placeholder="./books (default)">
+                    <small>Directory where processed text files will be saved. Defaults to ./books if left empty.</small>
                 </div>
                 <div class="form-group">
                     <label>Gutenberg URLs</label>
