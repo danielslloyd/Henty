@@ -151,7 +151,8 @@ class GutenbergProcessor:
     def process_carriage_returns(self, text: str) -> str:
         """
         Process carriage returns:
-        - Remove single line breaks (not followed by another line break)
+        - Remove single line breaks (within paragraphs)
+        - Preserve double line breaks (between paragraphs)
         - Preserve 4+ consecutive line breaks as section breaks
 
         Args:
@@ -160,13 +161,21 @@ class GutenbergProcessor:
         Returns:
             Processed text
         """
-        # First, mark 4+ consecutive line breaks with a placeholder to preserve them
-        # Pattern matches: \r\n\r\n\r\n\r\n (4 or more) or \n\n\n\n or mixed
-        text = re.sub(r'(?:\r\n|\n|\r){4,}', '<<<SECTION_BREAK>>>', text)
+        # Normalize all line endings to \n for easier processing
+        text = text.replace('\r\n', '\n').replace('\r', '\n')
 
-        # Now remove all remaining single line breaks
-        # Replace single \r\n or \n or \r with a space to join lines
-        text = re.sub(r'(?:\r\n|\n|\r)', ' ', text)
+        # First, mark 4+ consecutive line breaks with a placeholder to preserve them as section breaks
+        text = re.sub(r'\n{4,}', '<<<SECTION_BREAK>>>', text)
+
+        # Mark double line breaks (paragraph breaks) with a temporary placeholder
+        text = text.replace('\n\n', '<<<PARAGRAPH_BREAK>>>')
+
+        # Now remove all remaining single line breaks (these are just wrapping within paragraphs)
+        # Replace them with a space to join lines
+        text = text.replace('\n', ' ')
+
+        # Restore paragraph breaks as double newlines
+        text = text.replace('<<<PARAGRAPH_BREAK>>>', '\n\n')
 
         # Clean up multiple spaces
         text = re.sub(r' +', ' ', text)
