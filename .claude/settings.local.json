@@ -9,7 +9,9 @@
       "Bash(python:*)",
       "Bash(dir:*)",
       "Bash(del nul)",
-      "Bash(node -c:*)"
+      "Bash(node -c:*)",
+      "Bash(git pull:*)",
+      "Bash(git add:*)"
     ],
     "deny": [],
     "ask": []
