@@ -1024,12 +1024,12 @@
                         </div>
                     </div>
 
-                    <label>Select Text File</label>
+                    <label>Select Text File(s)</label>
                     <div style="display: flex; gap: 10px;">
-                        <input type="text" id="folderPath" placeholder="No file selected" readonly>
+                        <input type="text" id="folderPath" placeholder="No files selected" readonly>
                         <button class="btn btn-primary" id="browseFolderBtn">Browse</button>
                     </div>
-                    <input type="file" id="folderInput" accept=".txt">
+                    <input type="file" id="folderInput" accept=".txt" multiple>
                 </div>
 
                 <div class="voice-samples-section">
@@ -1576,10 +1576,11 @@
             const files = Array.from(e.target.files);
             if (files.length === 0) return;
 
-            const file = files[0];
+            // Filter to only .txt files
+            const txtFiles = files.filter(file => file.name.endsWith('.txt'));
 
-            if (!file.name.endsWith('.txt')) {
-                showStatus('Please select a .txt file', 'error');
+            if (txtFiles.length === 0) {
+                showStatus('Please select at least one .txt file', 'error');
                 return;
             }
 
@@ -1590,35 +1591,62 @@
                 return;
             }
 
-            folderPath.value = file.name;
+            // Update the display to show count of files
+            if (txtFiles.length === 1) {
+                folderPath.value = txtFiles[0].name;
+            } else {
+                folderPath.value = `${txtFiles.length} files selected`;
+            }
 
             try {
-                showStatus('Adding text file to project...', 'info');
+                showStatus(`Adding ${txtFiles.length} text file(s) to project...`, 'info');
 
-                // Add file to project via API
-                const formData = new FormData();
-                formData.append('file', file);
-                formData.append('original_path', file.name);
+                // Add files to project in order via API
+                // Files are already in the order they were selected in the file browser
+                let successCount = 0;
+                let failCount = 0;
 
-                const response = await fetch(`${API_URL}/project/add-text-file`, {
-                    method: 'POST',
-                    body: formData
-                });
+                for (const file of txtFiles) {
+                    try {
+                        const formData = new FormData();
+                        formData.append('file', file);
+                        formData.append('original_path', file.name);
 
-                const data = await response.json();
+                        const response = await fetch(`${API_URL}/project/add-text-file`, {
+                            method: 'POST',
+                            body: formData
+                        });
 
-                if (!response.ok) {
-                    throw new Error(data.error || 'Failed to add text file to project');
+                        const data = await response.json();
+
+                        if (!response.ok) {
+                            throw new Error(data.error || 'Failed to add text file');
+                        }
+
+                        successCount++;
+                    } catch (error) {
+                        console.error(`Error adding ${file.name}:`, error);
+                        failCount++;
+                    }
                 }
 
-                showStatus('Text file added to project successfully', 'success');
+                // Show results
+                if (failCount === 0) {
+                    showStatus(`Successfully added ${successCount} text file(s) to project`, 'success');
+                } else {
+                    showStatus(`Added ${successCount} file(s), ${failCount} failed`, 'warning');
+                }
 
                 // Reload text files from project
                 await loadProjectTextFiles();
 
+                // Clear the input
+                folderInput.value = '';
+                folderPath.value = '';
+
             } catch (error) {
-                console.error('Error adding text file:', error);
-                showStatus(`Failed to add text file: ${error.message}`, 'error');
+                console.error('Error adding text files:', error);
+                showStatus(`Failed to add text files: ${error.message}`, 'error');
             }
         });
 

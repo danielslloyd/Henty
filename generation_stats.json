@@ -1,275 +1,5 @@
 [
   {
-    "timestamp": 1762635829110,
-    "char_count": 134,
-    "audio_duration_sec": 6.44,
-    "generation_time_ms": 18951,
-    "chars_per_second": 7.07,
-    "gpu_before": null,
-    "gpu_after": null
-  },
-  {
-    "timestamp": 1762635864732,
-    "char_count": 265,
-    "audio_duration_sec": 12.2,
-    "generation_time_ms": 35044,
-    "chars_per_second": 7.56,
-    "gpu_before": null,
-    "gpu_after": null
-  },
-  {
-    "timestamp": 1762635935321,
-    "char_count": 463,
-    "audio_duration_sec": 22.52,
-    "generation_time_ms": 70018,
-    "chars_per_second": 6.61,
-    "gpu_before": null,
-    "gpu_after": null
-  },
-  {
-    "timestamp": 1762635977194,
-    "char_count": 306,
-    "audio_duration_sec": 14.56,
-    "generation_time_ms": 41252,
-    "chars_per_second": 7.42,
-    "gpu_before": null,
-    "gpu_after": null
-  },
-  {
-    "timestamp": 1762636038679,
-    "char_count": 407,
-    "audio_duration_sec": 20.68,
-    "generation_time_ms": 60909,
-    "chars_per_second": 6.68,
-    "gpu_before": null,
-    "gpu_after": null
-  },
-  {
-    "timestamp": 1762636104596,
-    "char_count": 421,
-    "audio_duration_sec": 21.8,
-    "generation_time_ms": 65293,
-    "chars_per_second": 6.45,
-    "gpu_before": null,
-    "gpu_after": null
-  },
-  {
-    "timestamp": 1762636170890,
-    "char_count": 452,
-    "audio_duration_sec": 21.4,
-    "generation_time_ms": 65676,
-    "chars_per_second": 6.88,
-    "gpu_before": null,
-    "gpu_after": null
-  },
-  {
-    "timestamp": 1762636242489,
-    "char_count": 452,
-    "audio_duration_sec": 22.68,
-    "generation_time_ms": 70978,
-    "chars_per_second": 6.37,
-    "gpu_before": null,
-    "gpu_after": null
-  },
-  {
-    "timestamp": 1762636299194,
-    "char_count": 382,
-    "audio_duration_sec": 19.08,
-    "generation_time_ms": 56072,
-    "chars_per_second": 6.81,
-    "gpu_before": null,
-    "gpu_after": null
-  },
-  {
-    "timestamp": 1762636317101,
-    "char_count": 114,
-    "audio_duration_sec": 5.88,
-    "generation_time_ms": 17277,
-    "chars_per_second": 6.6,
-    "gpu_before": null,
-    "gpu_after": null
-  },
-  {
-    "timestamp": 1762636386189,
-    "char_count": 474,
-    "audio_duration_sec": 22.08,
-    "generation_time_ms": 68510,
-    "chars_per_second": 6.92,
-    "gpu_before": null,
-    "gpu_after": null
-  },
-  {
-    "timestamp": 1762636405784,
-    "char_count": 136,
-    "audio_duration_sec": 6.44,
-    "generation_time_ms": 18971,
-    "chars_per_second": 7.17,
-    "gpu_before": null,
-    "gpu_after": null
-  },
-  {
-    "timestamp": 1762916774825,
-    "char_count": 434,
-    "audio_duration_sec": 22.2,
-    "generation_time_ms": 80847,
-    "chars_per_second": 5.37,
-    "gpu_before": null,
-    "gpu_after": null
-  },
-  {
-    "timestamp": 1762916838570,
-    "char_count": 403,
-    "audio_duration_sec": 20.6,
-    "generation_time_ms": 63114,
-    "chars_per_second": 6.39,
-    "gpu_before": null,
-    "gpu_after": null
-  },
-  {
-    "timestamp": 1762916897175,
-    "char_count": 388,
-    "audio_duration_sec": 19.36,
-    "generation_time_ms": 57982,
-    "chars_per_second": 6.69,
-    "gpu_before": null,
-    "gpu_after": null
-  },
-  {
-    "timestamp": 1762916951671,
-    "char_count": 375,
-    "audio_duration_sec": 18.32,
-    "generation_time_ms": 53918,
-    "chars_per_second": 6.96,
-    "gpu_before": null,
-    "gpu_after": null
-  },
-  {
-    "timestamp": 1762917031193,
-    "char_count": 479,
-    "audio_duration_sec": 25.24,
-    "generation_time_ms": 78952,
-    "chars_per_second": 6.07,
-    "gpu_before": null,
-    "gpu_after": null
-  },
-  {
-    "timestamp": 1762917045772,
-    "char_count": 90,
-    "audio_duration_sec": 4.56,
-    "generation_time_ms": 13955,
-    "chars_per_second": 6.45,
-    "gpu_before": null,
-    "gpu_after": null
-  },
-  {
-    "timestamp": 1762917118002,
-    "char_count": 437,
-    "audio_duration_sec": 22.36,
-    "generation_time_ms": 71647,
-    "chars_per_second": 6.1,
-    "gpu_before": null,
-    "gpu_after": null
-  },
-  {
-    "timestamp": 1762917156829,
-    "char_count": 300,
-    "audio_duration_sec": 13.24,
-    "generation_time_ms": 38194,
-    "chars_per_second": 7.85,
-    "gpu_before": null,
-    "gpu_after": null
-  },
-  {
-    "timestamp": 1762917199420,
-    "char_count": 288,
-    "audio_duration_sec": 14.72,
-    "generation_time_ms": 42010,
-    "chars_per_second": 6.86,
-    "gpu_before": null,
-    "gpu_after": null
-  },
-  {
-    "timestamp": 1762917260181,
-    "char_count": 382,
-    "audio_duration_sec": 19.92,
-    "generation_time_ms": 60185,
-    "chars_per_second": 6.35,
-    "gpu_before": null,
-    "gpu_after": null
-  },
-  {
-    "timestamp": 1762917317993,
-    "char_count": 431,
-    "audio_duration_sec": 19.6,
-    "generation_time_ms": 57182,
-    "chars_per_second": 7.54,
-    "gpu_before": null,
-    "gpu_after": null
-  },
-  {
-    "timestamp": 1762917392028,
-    "char_count": 441,
-    "audio_duration_sec": 23.08,
-    "generation_time_ms": 73456,
-    "chars_per_second": 6.0,
-    "gpu_before": null,
-    "gpu_after": null
-  },
-  {
-    "timestamp": 1762917404678,
-    "char_count": 77,
-    "audio_duration_sec": 3.68,
-    "generation_time_ms": 12024,
-    "chars_per_second": 6.4,
-    "gpu_before": null,
-    "gpu_after": null
-  },
-  {
-    "timestamp": 1762917431576,
-    "char_count": 165,
-    "audio_duration_sec": 9.48,
-    "generation_time_ms": 26322,
-    "chars_per_second": 6.27,
-    "gpu_before": null,
-    "gpu_after": null
-  },
-  {
-    "timestamp": 1762917481556,
-    "char_count": 377,
-    "audio_duration_sec": 16.96,
-    "generation_time_ms": 49396,
-    "chars_per_second": 7.63,
-    "gpu_before": null,
-    "gpu_after": null
-  },
-  {
-    "timestamp": 1762917524698,
-    "char_count": 301,
-    "audio_duration_sec": 14.96,
-    "generation_time_ms": 42556,
-    "chars_per_second": 7.07,
-    "gpu_before": null,
-    "gpu_after": null
-  },
-  {
-    "timestamp": 1762917600578,
-    "char_count": 493,
-    "audio_duration_sec": 24.68,
-    "generation_time_ms": 75309,
-    "chars_per_second": 6.55,
-    "gpu_before": null,
-    "gpu_after": null
-  },
-  {
-    "timestamp": 1762917641658,
-    "char_count": 261,
-    "audio_duration_sec": 14.28,
-    "generation_time_ms": 40456,
-    "chars_per_second": 6.45,
-    "gpu_before": null,
-    "gpu_after": null
-  },
-  {
     "timestamp": 1762917679754,
     "char_count": 309,
     "audio_duration_sec": 13.2,
@@ -896,6 +626,276 @@
     "audio_duration_sec": 22.44,
     "generation_time_ms": 87564,
     "chars_per_second": 5.0,
+    "gpu_before": null,
+    "gpu_after": null
+  },
+  {
+    "timestamp": 1763139073091,
+    "char_count": 77,
+    "audio_duration_sec": 3.48,
+    "generation_time_ms": 24219,
+    "chars_per_second": 3.18,
+    "gpu_before": null,
+    "gpu_after": null
+  },
+  {
+    "timestamp": 1763139115472,
+    "char_count": 27,
+    "audio_duration_sec": 1.64,
+    "generation_time_ms": 8156,
+    "chars_per_second": 3.31,
+    "gpu_before": null,
+    "gpu_after": null
+  },
+  {
+    "timestamp": 1763139144805,
+    "char_count": 45,
+    "audio_duration_sec": 2.96,
+    "generation_time_ms": 10971,
+    "chars_per_second": 4.1,
+    "gpu_before": null,
+    "gpu_after": null
+  },
+  {
+    "timestamp": 1763139210221,
+    "char_count": 42,
+    "audio_duration_sec": 2.8,
+    "generation_time_ms": 10701,
+    "chars_per_second": 3.92,
+    "gpu_before": null,
+    "gpu_after": null
+  },
+  {
+    "timestamp": 1763139342518,
+    "char_count": 363,
+    "audio_duration_sec": 18.52,
+    "generation_time_ms": 59886,
+    "chars_per_second": 6.06,
+    "gpu_before": null,
+    "gpu_after": null
+  },
+  {
+    "timestamp": 1763139497110,
+    "char_count": 425,
+    "audio_duration_sec": 20.96,
+    "generation_time_ms": 68891,
+    "chars_per_second": 6.17,
+    "gpu_before": null,
+    "gpu_after": null
+  },
+  {
+    "timestamp": 1763140641577,
+    "char_count": 24,
+    "audio_duration_sec": 2.36,
+    "generation_time_ms": 10270,
+    "chars_per_second": 2.34,
+    "gpu_before": null,
+    "gpu_after": null
+  },
+  {
+    "timestamp": 1763140735052,
+    "char_count": 495,
+    "audio_duration_sec": 25.4,
+    "generation_time_ms": 92897,
+    "chars_per_second": 5.33,
+    "gpu_before": null,
+    "gpu_after": null
+  },
+  {
+    "timestamp": 1763140780954,
+    "char_count": 269,
+    "audio_duration_sec": 13.92,
+    "generation_time_ms": 45268,
+    "chars_per_second": 5.94,
+    "gpu_before": null,
+    "gpu_after": null
+  },
+  {
+    "timestamp": 1763140841749,
+    "char_count": 363,
+    "audio_duration_sec": 18.0,
+    "generation_time_ms": 60184,
+    "chars_per_second": 6.03,
+    "gpu_before": null,
+    "gpu_after": null
+  },
+  {
+    "timestamp": 1763140872124,
+    "char_count": 194,
+    "audio_duration_sec": 9.2,
+    "generation_time_ms": 29799,
+    "chars_per_second": 6.51,
+    "gpu_before": null,
+    "gpu_after": null
+  },
+  {
+    "timestamp": 1763140943116,
+    "char_count": 412,
+    "audio_duration_sec": 20.64,
+    "generation_time_ms": 70418,
+    "chars_per_second": 5.85,
+    "gpu_before": null,
+    "gpu_after": null
+  },
+  {
+    "timestamp": 1763141028318,
+    "char_count": 483,
+    "audio_duration_sec": 25.56,
+    "generation_time_ms": 84570,
+    "chars_per_second": 5.71,
+    "gpu_before": null,
+    "gpu_after": null
+  },
+  {
+    "timestamp": 1763141067854,
+    "char_count": 272,
+    "audio_duration_sec": 13.2,
+    "generation_time_ms": 38917,
+    "chars_per_second": 6.99,
+    "gpu_before": null,
+    "gpu_after": null
+  },
+  {
+    "timestamp": 1763141129416,
+    "char_count": 413,
+    "audio_duration_sec": 19.72,
+    "generation_time_ms": 60943,
+    "chars_per_second": 6.78,
+    "gpu_before": null,
+    "gpu_after": null
+  },
+  {
+    "timestamp": 1763141168111,
+    "char_count": 252,
+    "audio_duration_sec": 12.92,
+    "generation_time_ms": 38069,
+    "chars_per_second": 6.62,
+    "gpu_before": null,
+    "gpu_after": null
+  },
+  {
+    "timestamp": 1763141232941,
+    "char_count": 390,
+    "audio_duration_sec": 20.96,
+    "generation_time_ms": 64248,
+    "chars_per_second": 6.07,
+    "gpu_before": null,
+    "gpu_after": null
+  },
+  {
+    "timestamp": 1763141292886,
+    "char_count": 380,
+    "audio_duration_sec": 19.44,
+    "generation_time_ms": 59311,
+    "chars_per_second": 6.41,
+    "gpu_before": null,
+    "gpu_after": null
+  },
+  {
+    "timestamp": 1763141332385,
+    "char_count": 249,
+    "audio_duration_sec": 13.4,
+    "generation_time_ms": 38914,
+    "chars_per_second": 6.4,
+    "gpu_before": null,
+    "gpu_after": null
+  },
+  {
+    "timestamp": 1763141433888,
+    "char_count": 490,
+    "audio_duration_sec": 30.0,
+    "generation_time_ms": 100930,
+    "chars_per_second": 4.85,
+    "gpu_before": null,
+    "gpu_after": null
+  },
+  {
+    "timestamp": 1763141472648,
+    "char_count": 251,
+    "audio_duration_sec": 13.04,
+    "generation_time_ms": 38133,
+    "chars_per_second": 6.58,
+    "gpu_before": null,
+    "gpu_after": null
+  },
+  {
+    "timestamp": 1763141530851,
+    "char_count": 366,
+    "audio_duration_sec": 17.88,
+    "generation_time_ms": 57567,
+    "chars_per_second": 6.36,
+    "gpu_before": null,
+    "gpu_after": null
+  },
+  {
+    "timestamp": 1763141597634,
+    "char_count": 424,
+    "audio_duration_sec": 21.16,
+    "generation_time_ms": 66218,
+    "chars_per_second": 6.4,
+    "gpu_before": null,
+    "gpu_after": null
+  },
+  {
+    "timestamp": 1763141617569,
+    "char_count": 140,
+    "audio_duration_sec": 6.28,
+    "generation_time_ms": 19303,
+    "chars_per_second": 7.25,
+    "gpu_before": null,
+    "gpu_after": null
+  },
+  {
+    "timestamp": 1763141688062,
+    "char_count": 397,
+    "audio_duration_sec": 22.56,
+    "generation_time_ms": 69865,
+    "chars_per_second": 5.68,
+    "gpu_before": null,
+    "gpu_after": null
+  },
+  {
+    "timestamp": 1763141760824,
+    "char_count": 477,
+    "audio_duration_sec": 22.6,
+    "generation_time_ms": 72131,
+    "chars_per_second": 6.61,
+    "gpu_before": null,
+    "gpu_after": null
+  },
+  {
+    "timestamp": 1763141785413,
+    "char_count": 163,
+    "audio_duration_sec": 8.08,
+    "generation_time_ms": 23961,
+    "chars_per_second": 6.8,
+    "gpu_before": null,
+    "gpu_after": null
+  },
+  {
+    "timestamp": 1763141849214,
+    "char_count": 436,
+    "audio_duration_sec": 20.28,
+    "generation_time_ms": 63166,
+    "chars_per_second": 6.9,
+    "gpu_before": null,
+    "gpu_after": null
+  },
+  {
+    "timestamp": 1763141915805,
+    "char_count": 443,
+    "audio_duration_sec": 21.0,
+    "generation_time_ms": 65962,
+    "chars_per_second": 6.72,
+    "gpu_before": null,
+    "gpu_after": null
+  },
+  {
+    "timestamp": 1763141969444,
+    "char_count": 327,
+    "audio_duration_sec": 17.24,
+    "generation_time_ms": 53006,
+    "chars_per_second": 6.17,
     "gpu_before": null,
     "gpu_after": null
   }
