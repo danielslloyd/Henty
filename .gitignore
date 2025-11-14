@@ -42,3 +42,4 @@ voice_samples/
 *.wav
 books/
 generation_stats.json
+Projects/

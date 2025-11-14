@@ -1455,11 +1455,15 @@ def stitch_project_best_takes():
                 print(f"Chunk {chunk['id']}: Using best take (timestamp: {best_audio.get('timestamp', 0)})")
 
             # Build audio file path
-            if 'audio_file' not in best_audio:
-                print(f"ERROR: audio object missing 'audio_file' key. Audio object: {best_audio}")
-                return jsonify({'error': f'Chunk {chunk["id"]} has invalid audio metadata (missing audio_file)'}), 400
-
-            audio_file = best_audio['audio_file']
+            # Handle both 'audio_file' (filename) and 'audio_url' (URL path)
+            if 'audio_file' in best_audio:
+                audio_file = best_audio['audio_file']
+            elif 'audio_url' in best_audio:
+                # Extract filename from URL like '/api/audio/filename.wav'
+                audio_file = best_audio['audio_url'].split('/')[-1]
+            else:
+                print(f"ERROR: audio object missing 'audio_file' or 'audio_url' key. Audio object: {best_audio}")
+                return jsonify({'error': f'Chunk {chunk["id"]} has invalid audio metadata'}), 400
             audio_path = os.path.join(audio_dir, audio_file)
 
             print(f"Chunk {chunk['id']}: Selected audio file: {audio_file}")
