@@ -179,9 +179,9 @@
         .status-bar.info { background: #2196f3; color: white; }
 
         .files-grid {
-            display: grid;
-            grid-template-columns: repeat(auto-fill, minmax(400px, 1fr));
-            gap: 20px;
+            display: flex;
+            flex-direction: column;
+            gap: 15px;
         }
 
         .file-bubble {
@@ -190,10 +190,11 @@
             padding: 10px;
             box-shadow: 0 4px 6px rgba(0,0,0,0.1);
             transition: all 0.3s;
+            width: 100%;
         }
 
         .file-bubble.expanded {
-            grid-column: 1 / -1;
+            /* No special grid styling needed now */
         }
 
         .file-header {
@@ -487,6 +488,96 @@
             text-align: center;
             padding: 60px 20px;
             color: white;
+        }
+
+        /* Project Settings Collapsible */
+        .project-settings-container {
+            background: white;
+            border-radius: 15px;
+            padding: 15px;
+            margin-bottom: 15px;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+            display: none; /* Hidden by default */
+        }
+
+        .project-settings-container.show {
+            display: block;
+        }
+
+        .project-settings-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            cursor: pointer;
+            padding: 8px 0;
+            user-select: none;
+        }
+
+        .project-settings-header:hover {
+            opacity: 0.8;
+        }
+
+        .project-settings-title {
+            font-size: 14px;
+            font-weight: 600;
+            color: #333;
+        }
+
+        .project-settings-toggle {
+            font-size: 18px;
+            color: #667eea;
+            transition: transform 0.3s;
+        }
+
+        .project-settings-toggle.expanded {
+            transform: rotate(180deg);
+        }
+
+        .project-settings-content {
+            display: none;
+            padding-top: 15px;
+            border-top: 1px solid #e0e0e0;
+            margin-top: 10px;
+        }
+
+        .project-settings-content.expanded {
+            display: block;
+        }
+
+        .project-settings-summary {
+            font-size: 11px;
+            color: #999;
+            margin-top: 5px;
+        }
+
+        .settings-row {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 20px;
+            margin-bottom: 15px;
+        }
+
+        .text-upload-section {
+            background: white;
+            border-radius: 15px;
+            padding: 15px;
+            margin-bottom: 15px;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+        }
+
+        .outdated-audio-flag {
+            display: inline-block;
+            color: #d32f2f;
+            font-size: 16px;
+            font-weight: bold;
+            margin-left: 8px;
+            cursor: help;
+            animation: pulse 1.5s ease-in-out infinite;
+        }
+
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.5; }
         }
 
         /* Chunked file layout */
@@ -968,19 +1059,27 @@
             </div>
         </div>
 
-        <div class="main-controls">
-            <div class="control-row">
-                <div class="folder-select">
-                    <!-- Project Defaults Section -->
-                    <div style="padding: 10px; background: #f0f0f0; border-radius: 8px; margin-bottom: 15px;">
-                        <h4 style="font-size: 12px; color: #666; margin-bottom: 8px;">Project Default Settings</h4>
-                        <div style="margin-bottom: 8px;">
+        <!-- Project Settings (Collapsible) -->
+        <div class="project-settings-container" id="projectSettingsContainer">
+            <div class="project-settings-header" onclick="toggleProjectSettings()">
+                <div>
+                    <div class="project-settings-title">Project Default Settings</div>
+                    <div class="project-settings-summary" id="projectSettingsSummary">Voice: Default | Exag: 0.5 | CFG: 0.5</div>
+                </div>
+                <div class="project-settings-toggle" id="projectSettingsToggle">▼</div>
+            </div>
+            <div class="project-settings-content" id="projectSettingsContent">
+                <div class="settings-row">
+                    <!-- Left Column: Generation Settings -->
+                    <div>
+                        <h4 style="font-size: 12px; color: #666; margin-bottom: 12px;">Generation Settings</h4>
+                        <div style="margin-bottom: 12px;">
                             <label style="font-size: 11px; display: block; margin-bottom: 4px;">Voice Sample</label>
-                            <select id="project_voice_default" onchange="updateProjectDefaults()" style="width: 100%; font-size: 12px; padding: 6px; border: 2px solid #e0e0e0; border-radius: 6px;">
+                            <select id="project_voice_default" onchange="updateProjectDefaults()" style="width: 100%; font-size: 12px; padding: 8px; border: 2px solid #e0e0e0; border-radius: 6px;">
                                 <option value="none">Default Voice</option>
                             </select>
                         </div>
-                        <div style="margin-bottom: 8px;">
+                        <div style="margin-bottom: 12px;">
                             <label style="font-size: 11px; display: block; margin-bottom: 4px;">
                                 Exaggeration
                                 <span class="range-value" id="project_exag_val" style="font-size: 11px;">0.5</span>
@@ -989,7 +1088,7 @@
                                    oninput="document.getElementById('project_exag_val').textContent = this.value"
                                    onchange="updateProjectDefaults()" style="width: 100%;">
                         </div>
-                        <div style="margin-bottom: 8px;">
+                        <div style="margin-bottom: 12px;">
                             <label style="font-size: 11px; display: block; margin-bottom: 4px;">
                                 CFG Weight
                                 <span class="range-value" id="project_cfg_val" style="font-size: 11px;">0.5</span>
@@ -998,16 +1097,16 @@
                                    oninput="document.getElementById('project_cfg_val').textContent = this.value"
                                    onchange="updateProjectDefaults()" style="width: 100%;">
                         </div>
-                        <div style="margin-bottom: 8px;">
+                        <div style="margin-bottom: 12px;">
                             <label style="font-size: 11px; display: block; margin-bottom: 4px;">
                                 Random Seed
                                 <span class="range-value" id="project_seed_val" style="font-size: 11px;">0</span>
                             </label>
                             <input type="number" id="project_seed_default" min="0" max="999999" step="1" value="0"
                                    oninput="document.getElementById('project_seed_val').textContent = this.value"
-                                   onchange="updateProjectDefaults()" style="width: 100%; font-size: 12px; padding: 6px; border: 2px solid #e0e0e0; border-radius: 6px;">
+                                   onchange="updateProjectDefaults()" style="width: 100%; font-size: 12px; padding: 8px; border: 2px solid #e0e0e0; border-radius: 6px;">
                         </div>
-                        <div style="margin-bottom: 8px;">
+                        <div style="margin-bottom: 12px;">
                             <label style="font-size: 11px; display: block; margin-bottom: 4px;">
                                 Temperature
                                 <span class="range-value" id="project_temp_val" style="font-size: 11px;">0.8</span>
@@ -1016,44 +1115,66 @@
                                    oninput="document.getElementById('project_temp_val').textContent = this.value"
                                    onchange="updateProjectDefaults()" style="width: 100%;">
                         </div>
-                        <div style="margin-bottom: 0;">
+                        <div style="margin-bottom: 12px;">
                             <label style="font-size: 11px; display: flex; align-items: center; gap: 8px;">
                                 <input type="checkbox" id="project_ref_vad_default" onchange="updateProjectDefaults()" style="width: auto; margin: 0;">
                                 <span>Enable Ref VAD Trimming</span>
                             </label>
                         </div>
+
+                        <!-- Preface Audio Setting -->
+                        <div style="margin-top: 20px; padding-top: 15px; border-top: 1px solid #e0e0e0;">
+                            <h4 style="font-size: 12px; color: #666; margin-bottom: 12px;">Optional Preface Audio</h4>
+                            <p style="font-size: 11px; color: #888; margin-bottom: 10px;">Add an audio clip to play before each text file (e.g., intro music, chapter announcement)</p>
+                            <label style="font-size: 11px; display: block; margin-bottom: 4px;">Preface Text</label>
+                            <textarea id="project_preface_text" placeholder="Enter text for preface audio..." style="width: 100%; min-height: 80px; padding: 8px; border: 2px solid #e0e0e0; border-radius: 6px; font-size: 12px; font-family: inherit; resize: vertical;"></textarea>
+                            <div style="display: flex; gap: 10px; margin-top: 8px;">
+                                <button class="btn btn-secondary btn-small" onclick="generatePrefaceAudio()">Generate Preface</button>
+                                <button class="btn btn-secondary btn-small" onclick="clearPrefaceAudio()">Clear</button>
+                            </div>
+                            <div id="prefaceAudioPreview" style="margin-top: 10px; display: none;">
+                                <label style="font-size: 11px; display: block; margin-bottom: 4px;">Preface Audio Preview</label>
+                                <audio controls style="width: 100%;"></audio>
+                            </div>
+                        </div>
                     </div>
 
-                    <label>Select Text File(s)</label>
-                    <div style="display: flex; gap: 10px;">
-                        <input type="text" id="folderPath" placeholder="No files selected" readonly>
-                        <button class="btn btn-primary" id="browseFolderBtn">Browse</button>
+                    <!-- Right Column: Voice Samples Library -->
+                    <div>
+                        <h4 style="font-size: 12px; color: #666; margin-bottom: 12px;">Voice Samples Library</h4>
+                        <div style="display: flex; gap: 10px; margin-bottom: 10px;">
+                            <button class="btn btn-secondary btn-small" id="uploadVoiceBtn">Upload Audio</button>
+                            <button class="btn btn-secondary btn-small" id="recordVoiceBtn">Record</button>
+                            <button class="btn btn-secondary btn-small" id="refreshVoicesBtn">Refresh</button>
+                        </div>
+                        <div class="voice-samples-library" id="voiceSamplesList" style="max-height: 400px;">
+                            <p style="color: #999; font-size: 13px; text-align: center;">No voice samples yet</p>
+                        </div>
+                        <input type="file" id="voiceUploadInput" accept="audio/*">
                     </div>
-                    <input type="file" id="folderInput" accept=".txt" multiple>
-                </div>
-
-                <div class="voice-samples-section">
-                    <label>Voice Samples Library</label>
-                    <div style="display: flex; gap: 10px; margin-bottom: 10px;">
-                        <button class="btn btn-secondary" id="uploadVoiceBtn">Upload Audio</button>
-                        <button class="btn btn-secondary" id="recordVoiceBtn">Record</button>
-                        <button class="btn btn-secondary" id="refreshVoicesBtn">Refresh</button>
-                    </div>
-                    <div class="voice-samples-library" id="voiceSamplesList">
-                        <p style="color: #999; font-size: 13px; text-align: center;">No voice samples yet</p>
-                    </div>
-                    <input type="file" id="voiceUploadInput" accept="audio/*">
                 </div>
             </div>
         </div>
 
         <div class="status-bar" id="statusBar"></div>
 
+        <!-- Text Files Container (Files will be inserted here) -->
         <div class="files-grid" id="filesContainer">
             <div class="empty-state">
-                <h2>No File Loaded</h2>
-                <p>Click "Browse" to select a .txt file</p>
+                <h2>No Files Added</h2>
+                <p>Click "Browse" below to add .txt files to the project</p>
             </div>
+        </div>
+
+        <!-- Text Upload Section -->
+        <div class="text-upload-section">
+            <h4 style="font-size: 14px; color: #333; margin-bottom: 12px;">Add Text Files</h4>
+            <div style="display: flex; gap: 10px; align-items: center;">
+                <input type="text" id="folderPath" placeholder="No files selected" readonly style="flex: 1; padding: 10px; border: 2px solid #e0e0e0; border-radius: 8px; font-size: 14px;">
+                <button class="btn btn-primary" id="browseFolderBtn">Browse</button>
+            </div>
+            <input type="file" id="folderInput" accept=".txt" multiple>
+            <p style="font-size: 11px; color: #888; margin-top: 8px;">Select one or more .txt files to add to your project. Files will appear above this section.</p>
         </div>
     </div>
 
@@ -1351,6 +1472,9 @@
                     document.getElementById('projectName').textContent = data.metadata.name;
                     document.getElementById('projectPath').textContent = data.project_path;
 
+                    // Show project settings container
+                    document.getElementById('projectSettingsContainer').classList.add('show');
+
                     // Load project defaults
                     if (data.metadata.default_audio_settings) {
                         projectDefaults = data.metadata.default_audio_settings;
@@ -1379,12 +1503,17 @@
                         if (cfgVal) cfgVal.textContent = projectDefaults.cfg_weight || 0.5;
                         if (seedVal) seedVal.textContent = projectDefaults.seed || 0;
                         if (tempVal) tempVal.textContent = projectDefaults.temperature || 0.8;
+
+                        // Update summary
+                        updateProjectSettingsSummary();
                     }
 
                     // Load text files from project
                     await loadProjectTextFiles();
                 } else {
                     document.getElementById('projectInfo').style.display = 'none';
+                    // Hide project settings container
+                    document.getElementById('projectSettingsContainer').classList.remove('show');
                     filesContainer.innerHTML = `
                         <div class="empty-state">
                             <h2>No Project Loaded</h2>
@@ -2256,22 +2385,6 @@
             detailsContainer.innerHTML = `
                 <div style="margin-bottom: 15px;">
                     <h3 style="color: #667eea; margin: 0 0 10px 0;">${chunk.nickname || `Chunk #${chunkId + 1}`}</h3>
-
-                    ${chunk.dirty ? `
-                        <div style="background: #fff3cd; border: 2px solid #ffc107; border-radius: 8px; padding: 10px; margin-bottom: 10px;">
-                            <div style="display: flex; justify-content: space-between; align-items: center;">
-                                <div>
-                                    <strong style="color: #856404;">⚠️ Text Modified</strong>
-                                    <p style="font-size: 11px; color: #856404; margin: 4px 0 0 0;">
-                                        Chunk text has been edited since audio generation. Generated audio may not match current text.
-                                    </p>
-                                </div>
-                                <button class="btn btn-small" onclick="dismissDirtyFlag(${fileIndex}, ${chunkId})" style="padding: 4px 8px; font-size: 11px;">
-                                    Dismiss
-                                </button>
-                            </div>
-                        </div>
-                    ` : ''}
                 </div>
 
                 <div id="chunkAudioList_${fileIndex}_${chunkId}">
@@ -2290,6 +2403,9 @@
                             const bestTakeBadge = isBestTake ? '<span class="best-take-badge">Best Take</span>' : '';
                             const audioItemClass = isBestTake ? 'audio-item best-take' : 'audio-item';
 
+                            // Add outdated flag if chunk is dirty (text changed after audio generation)
+                            const outdatedFlag = chunk.dirty ? '<span class="outdated-audio-flag" title="Audio was generated before text was modified">!</span>' : '';
+
                             // Auto-select if needed
                             if (shouldAutoSelect && idx === 0 && item.audio_file) {
                                 setTimeout(() => setChunkBestTake(fileIndex, chunkId, fileName, item.audio_file), 100);
@@ -2298,7 +2414,7 @@
                             return `
                                 <div class="${audioItemClass}">
                                     <div class="audio-item-header">
-                                        <div class="audio-item-title">Generation #${idx + 1} ${bestTakeBadge}</div>
+                                        <div class="audio-item-title">Generation #${idx + 1} ${bestTakeBadge}${outdatedFlag}</div>
                                         <div class="audio-item-header-actions">
                                             <small style="color: #999;">${date}</small>
                                             <button class="delete-take-btn" onclick='deleteChunkTake(${fileIndex}, ${chunkId}, "${fileName}", "${item.audio_file}")' title="Delete this take">🗑️</button>
@@ -2647,10 +2763,101 @@
                 // Update local state
                 projectDefaults = data.default_audio_settings;
                 showStatus('Project defaults updated!', 'success');
+
+                // Update the summary
+                updateProjectSettingsSummary();
             } catch (error) {
                 console.error('Error updating project defaults:', error);
                 showStatus(`Failed: ${error.message}`, 'error');
             }
+        };
+
+        // Toggle project settings collapse/expand
+        window.toggleProjectSettings = function() {
+            const content = document.getElementById('projectSettingsContent');
+            const toggle = document.getElementById('projectSettingsToggle');
+
+            if (content.classList.contains('expanded')) {
+                content.classList.remove('expanded');
+                toggle.classList.remove('expanded');
+            } else {
+                content.classList.add('expanded');
+                toggle.classList.add('expanded');
+            }
+        };
+
+        // Update project settings summary
+        function updateProjectSettingsSummary() {
+            const voiceSample = document.getElementById('project_voice_default').value;
+            const exag = document.getElementById('project_exaggeration_default').value;
+            const cfg = document.getElementById('project_cfg_weight_default').value;
+
+            const voiceDisplay = voiceSample === 'none' ? 'Default' : voiceSample.substring(0, 15);
+            const summary = `Voice: ${voiceDisplay} | Exag: ${exag} | CFG: ${cfg}`;
+
+            document.getElementById('projectSettingsSummary').textContent = summary;
+        }
+
+        // Generate preface audio
+        window.generatePrefaceAudio = async function() {
+            const prefaceText = document.getElementById('project_preface_text').value.trim();
+
+            if (!prefaceText) {
+                showStatus('Please enter text for the preface audio', 'error');
+                return;
+            }
+
+            try {
+                showStatus('Generating preface audio...', 'info');
+
+                const textBlob = new Blob([prefaceText], { type: 'text/plain' });
+                const textFile = new File([textBlob], 'preface.txt', { type: 'text/plain' });
+
+                const formData = new FormData();
+                formData.append('file', textFile);
+                formData.append('filename', 'preface.txt');
+                formData.append('voice_sample', projectDefaults.voice_sample);
+                formData.append('language_id', 'en');
+                formData.append('exaggeration', projectDefaults.exaggeration);
+                formData.append('cfg_weight', projectDefaults.cfg_weight);
+
+                const response = await fetch(`${API_URL}/generate-from-upload`, {
+                    method: 'POST',
+                    body: formData
+                });
+
+                const data = await response.json();
+
+                if (!response.ok) {
+                    throw new Error(data.error || 'Failed to generate preface audio');
+                }
+
+                // Show audio preview
+                const preview = document.getElementById('prefaceAudioPreview');
+                const audio = preview.querySelector('audio');
+                audio.src = data.audio_url;
+                preview.style.display = 'block';
+
+                // Store preface audio info
+                projectDefaults.preface_audio = {
+                    audio_url: data.audio_url,
+                    audio_file: data.metadata.audio_file,
+                    text: prefaceText
+                };
+
+                showStatus('Preface audio generated!', 'success');
+            } catch (error) {
+                console.error('Error generating preface audio:', error);
+                showStatus(`Failed: ${error.message}`, 'error');
+            }
+        };
+
+        // Clear preface audio
+        window.clearPrefaceAudio = function() {
+            document.getElementById('project_preface_text').value = '';
+            document.getElementById('prefaceAudioPreview').style.display = 'none';
+            projectDefaults.preface_audio = null;
+            showStatus('Preface audio cleared', 'info');
         };
 
         // Generate all chunks using project defaults
