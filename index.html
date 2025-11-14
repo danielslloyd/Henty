@@ -964,6 +964,7 @@
                 <button class="btn btn-primary" onclick="showNewProjectDialog()">New Project</button>
                 <button class="btn btn-secondary" onclick="showLoadProjectDialog()">Load Project</button>
                 <button class="btn btn-success" onclick="showGutenbergDialog()">📚 Process Gutenberg URLs</button>
+                <button class="btn" onclick="generateAllProjectFiles()" style="background: #ff9800; color: white;">🎙️ Generate All Files</button>
             </div>
         </div>
 
@@ -1166,6 +1167,10 @@
         let progressPollInterval = null;
         let currentGeneratingFileIndex = null;
         let activeGenerations = {}; // Maps "fileIndex_chunkId" to generation info (startTime, estimatedDuration, etc.)
+
+        // Queue system for processing multiple files
+        let generationQueue = []; // Array of file indices to process
+        let isProcessingQueue = false;
 
         // Toggle inline progress section
         window.toggleInlineProgress = function(index) {
@@ -1645,9 +1650,19 @@
             bubble.dataset.textFileId = textFile.id; // Store text file ID for API calls
 
             bubble.innerHTML = `
-                <div class="file-header" onclick="toggleExpand(${index})">
-                    <div class="file-title">${fileName} <span style="font-size: 11px; color: #999;">(${chunks.length} chunks)</span></div>
-                    <div class="expand-icon">▼</div>
+                <div class="file-header">
+                    <div class="file-title" onclick="toggleExpand(${index})" style="flex: 1; cursor: pointer;">
+                        ${fileName} <span style="font-size: 11px; color: #999;">(${chunks.length} chunks)</span>
+                    </div>
+                    <div style="display: flex; gap: 8px; align-items: center;">
+                        <button class="btn" onclick="event.stopPropagation(); generateAllChunks(${index})" style="padding: 6px 12px; font-size: 11px; background: #ff9800; color: white;">
+                            Generate All
+                        </button>
+                        <button class="btn btn-primary" onclick="event.stopPropagation(); stitchAllAudio(${index})" style="padding: 6px 12px; font-size: 11px;">
+                            Stitch Best Takes
+                        </button>
+                        <div class="expand-icon" onclick="toggleExpand(${index})" style="cursor: pointer;">▼</div>
+                    </div>
                 </div>
 
                 <div class="file-expanded-content">
@@ -1656,9 +1671,6 @@
                         <div class="chunks-pane">
                             <div style="display: flex; justify-content: space-between; align-items: center; position: sticky; top: 0; background: white; padding: 10px 0; margin: 0 0 15px 0; border-bottom: 2px solid #e0e0e0; z-index: 10;">
                                 <h3 style="margin: 0; color: #333;">Chunks (${chunks.length})</h3>
-                                <button class="btn" onclick="generateAllChunks(${index})" style="padding: 6px 12px; font-size: 12px; background: #ff9800; color: white;">
-                                    Generate All
-                                </button>
                             </div>
                             <div id="chunksList_${index}">
                                 <!-- Populated by renderChunkBubbles -->
@@ -2214,16 +2226,6 @@
             });
 
             detailsContainer.innerHTML = `
-                ${allChunksHaveAudio ? `
-                    <div class="stitch-all-section">
-                        <h4>🎵 Stitch All Chunks</h4>
-                        <p>All chunks have audio! Create a complete audio file from all best takes.</p>
-                        <button class="btn btn-primary" onclick="stitchAllAudio(${fileIndex})" style="width: 100%;">
-                            Stitch All Best Takes Together
-                        </button>
-                    </div>
-                ` : ''}
-
                 <div style="margin-bottom: 15px;">
                     <h3 style="color: #667eea; margin: 0 0 10px 0;">${chunk.nickname || `Chunk #${chunkId + 1}`}</h3>
 
@@ -2671,7 +2673,7 @@
             }
         };
 
-        window.generateAllChunks = async function(fileIndex) {
+        window.generateAllChunks = async function(fileIndex, skipConfirm = false) {
             const chunks = fileChunks[fileIndex];
             const bubble = document.getElementById(`bubble_${fileIndex}`);
             const textFileId = bubble ? bubble.dataset.textFileId : null;
@@ -2686,8 +2688,19 @@
                 return;
             }
 
-            if (!confirm(`Generate audio for all ${chunks.length} chunks using project defaults?\n\nThis will process chunks sequentially.`)) {
+            // If something is already processing and this is a manual click, add to queue
+            if (isProcessingQueue && !skipConfirm) {
+                addToGenerationQueue(fileIndex);
                 return;
+            }
+
+            if (!skipConfirm && !confirm(`Generate audio for all ${chunks.length} chunks using project defaults?\n\nThis will process chunks sequentially.`)) {
+                return;
+            }
+
+            // Mark as processing
+            if (!skipConfirm) {
+                isProcessingQueue = true;
             }
 
             showStatus(`Starting batch generation for ${chunks.length} chunks...`, 'info');
@@ -2789,12 +2802,102 @@
                     delete activeGenerations[chunkKey];
                     console.error(`Error generating chunk ${chunk.id}:`, error);
                     showStatus(`Failed on chunk ${i + 1}: ${error.message}. Stopping batch generation.`, 'error');
+
+                    // Reset processing flag and process next in queue
+                    if (!skipConfirm) {
+                        isProcessingQueue = false;
+                    }
+                    processNextInQueue();
                     return;
                 }
             }
 
             showStatus(`Successfully generated audio for all ${chunks.length} chunks!`, 'success');
+
+            // Reset processing flag if this was manually triggered
+            if (!skipConfirm) {
+                isProcessingQueue = false;
+            }
+
+            // Process next file in queue if there is one
+            processNextInQueue();
         };
+
+        // Generate all chunks for all text files in the project
+        window.generateAllProjectFiles = async function() {
+            // Find all text files (those with chunks)
+            const textFileIndices = [];
+            for (let i = 0; i < currentFiles.length; i++) {
+                if (fileChunks[i] && fileChunks[i].length > 0) {
+                    textFileIndices.push(i);
+                }
+            }
+
+            if (textFileIndices.length === 0) {
+                showStatus('No text files found in project', 'error');
+                return;
+            }
+
+            const totalChunks = textFileIndices.reduce((sum, idx) => sum + fileChunks[idx].length, 0);
+
+            if (!confirm(`Generate audio for all chunks in ${textFileIndices.length} files (${totalChunks} total chunks)?\n\nFiles will be processed in order using project defaults.`)) {
+                return;
+            }
+
+            // Clear existing queue and add all files
+            generationQueue = [...textFileIndices];
+            showStatus(`Queued ${textFileIndices.length} files for generation...`, 'info');
+
+            // Start processing the queue
+            processNextInQueue();
+        };
+
+        // Add a file to the generation queue
+        window.addToGenerationQueue = function(fileIndex) {
+            if (!generationQueue.includes(fileIndex)) {
+                generationQueue.push(fileIndex);
+                showStatus(`Added file to generation queue (position ${generationQueue.length})`, 'info');
+            }
+
+            // Start processing if not already processing
+            if (!isProcessingQueue) {
+                processNextInQueue();
+            }
+        };
+
+        // Process the next file in the queue
+        async function processNextInQueue() {
+            // If already processing or queue is empty, do nothing
+            if (isProcessingQueue || generationQueue.length === 0) {
+                if (generationQueue.length === 0 && !isProcessingQueue) {
+                    // Queue is complete
+                    showStatus('All queued files have been processed!', 'success');
+                }
+                return;
+            }
+
+            isProcessingQueue = true;
+            const fileIndex = generationQueue.shift();
+
+            const fileName = currentFiles[fileIndex]?.name || `File ${fileIndex}`;
+            const chunks = fileChunks[fileIndex];
+
+            if (!chunks || chunks.length === 0) {
+                showStatus(`Skipping ${fileName} - no chunks found`, 'warning');
+                isProcessingQueue = false;
+                processNextInQueue();
+                return;
+            }
+
+            const remaining = generationQueue.length;
+            showStatus(`Processing: ${fileName} (${remaining} files remaining in queue)`, 'info');
+
+            // The generateAllChunks function will call processNextInQueue when done
+            await generateAllChunks(fileIndex, true); // skipConfirm = true
+
+            // Mark as not processing so the next one can start
+            isProcessingQueue = false;
+        }
 
         // Show generation placeholder
         function showGenerationPlaceholder(fileIndex, chunkId) {
