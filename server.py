@@ -1,5 +1,6 @@
 from flask import Flask, request, jsonify, send_file, send_from_directory
 from flask_cors import CORS
+from flask_socketio import SocketIO, emit
 import os
 from pathlib import Path
 from chatterbox.tts import ChatterboxTTS
@@ -12,9 +13,23 @@ import json
 import time
 import threading
 from scripts.gutenberg_processor import GutenbergProcessor
+from config import config
+from auth import AuthManager
 
 app = Flask(__name__)
-CORS(app)
+
+# Configure CORS for remote access
+cors_config = {
+    'origins': config.ALLOWED_ORIGINS,
+    'supports_credentials': True
+}
+CORS(app, resources={r"/*": cors_config})
+
+# Initialize SocketIO for real-time updates
+socketio = SocketIO(app, cors_allowed_origins=config.ALLOWED_ORIGINS, async_mode='threading')
+
+# Initialize authentication
+auth_manager = AuthManager(api_key=config.API_KEY, require_auth=config.REQUIRE_AUTH)
 
 class TextToAudioConverter:
     def __init__(self):
@@ -420,6 +435,13 @@ class TextToAudioConverter:
                     'status': 'generating'
                 }
 
+            # Emit progress update via WebSocket
+            if config.ENABLE_WEBSOCKET:
+                socketio.emit('generation_started', {
+                    'char_count': char_count,
+                    'estimated_time': self.current_generation['estimated_time']
+                })
+
             model = self.load_model()
 
             # Prepare generation parameters
@@ -496,12 +518,26 @@ class TextToAudioConverter:
                 gpu_stats_after=gpu_stats_after
             )
 
+            # Emit completion via WebSocket
+            if config.ENABLE_WEBSOCKET:
+                socketio.emit('generation_completed', {
+                    'char_count': char_count,
+                    'audio_duration_sec': audio_duration_sec,
+                    'generation_time_ms': generation_time_ms,
+                    'gpu_stats': gpu_stats_after
+                })
+
             # Clear current generation
             with self.generation_lock:
                 self.current_generation = None
 
             return output_path
         except Exception as e:
+            # Emit error via WebSocket
+            if config.ENABLE_WEBSOCKET:
+                socketio.emit('generation_error', {
+                    'error': str(e)
+                })
             # Clear current generation on error
             with self.generation_lock:
                 self.current_generation = None
@@ -572,6 +608,7 @@ def read_file():
         return jsonify({'error': str(e)}), 500
 
 @app.route('/api/generate', methods=['POST'])
+@auth_manager.require_api_key
 def generate_audio():
     """Generate audio for a text file"""
     try:
@@ -763,7 +800,13 @@ def status():
         'model_loaded': converter.model is not None
     })
 
+@app.route('/api/config')
+def get_config():
+    """Get client configuration (public endpoint)"""
+    return jsonify(config.get_client_config())
+
 @app.route('/api/voice-samples', methods=['GET'])
+@auth_manager.require_api_key
 def list_voice_samples():
     """List all voice samples"""
     try:
@@ -897,6 +940,7 @@ def list_generated_audio(txt_filename):
 # ===== PROJECT MANAGEMENT ENDPOINTS =====
 
 @app.route('/api/project/create', methods=['POST'])
+@auth_manager.require_api_key
 def create_project():
     """Create a new project in a user-selected folder"""
     try:
@@ -960,6 +1004,7 @@ def create_project():
         return jsonify({'error': str(e)}), 500
 
 @app.route('/api/project/load', methods=['POST'])
+@auth_manager.require_api_key
 def load_project():
     """Load an existing project from a folder"""
     try:
@@ -1088,6 +1133,7 @@ def update_project_defaults():
         return jsonify({'error': str(e)}), 500
 
 @app.route('/api/project/add-text-file', methods=['POST'])
+@auth_manager.require_api_key
 def add_text_file_to_project():
     """Add a text file to the project with chunking"""
     try:
@@ -1981,5 +2027,14 @@ def process_gutenberg():
 if __name__ == '__main__':
     print(f"Starting Text to Audio Converter API...")
     print(f"Using device: {converter.device}")
-    print(f"Open http://localhost:5000 in your browser")
-    app.run(debug=True, port=5000, host='0.0.0.0')
+    print(f"Server address: http://{config.HOST}:{config.PORT}")
+    if config.REQUIRE_AUTH:
+        print(f"Authentication: ENABLED")
+        print(f"API Key required for protected endpoints")
+    else:
+        print(f"Authentication: DISABLED (not recommended for remote access)")
+    print(f"WebSocket support: {'ENABLED' if config.ENABLE_WEBSOCKET else 'DISABLED'}")
+    print(f"\nAllowed CORS origins: {', '.join(config.ALLOWED_ORIGINS)}")
+    print(f"\nReady for connections!")
+
+    socketio.run(app, debug=config.DEBUG, port=config.PORT, host=config.HOST, allow_unsafe_werkzeug=True)
