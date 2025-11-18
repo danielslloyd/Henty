@@ -1,0 +1,733 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Project Gutenberg Reader</title>
+    <style>
+        :root {
+            --font-size-base: 18px;
+            --font-size-min: 12px;
+            --font-size-max: 32px;
+            --line-height: 1.7;
+            --main-column-width: 65ch;
+            --sidebar-width: 350px;
+            --color-bg: #fafaf8;
+            --color-text: #2c2c2c;
+            --color-annotation: #0066cc;
+            --color-annotation-hover: #004499;
+            --color-sidebar-bg: #ffffff;
+            --color-border: #e0e0e0;
+            --color-highlight: #fff3cd;
+            --color-shadow: rgba(0, 0, 0, 0.1);
+            --spacing-base: 1.5rem;
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Georgia', 'Times New Roman', serif;
+            font-size: var(--font-size-base);
+            line-height: var(--line-height);
+            color: var(--color-text);
+            background-color: var(--color-bg);
+            overflow-x: hidden;
+        }
+
+        /* Header Controls */
+        .controls-header {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            background: var(--color-sidebar-bg);
+            border-bottom: 2px solid var(--color-border);
+            padding: 1rem 2rem;
+            z-index: 1000;
+            box-shadow: 0 2px 8px var(--color-shadow);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            flex-wrap: wrap;
+            gap: 1rem;
+        }
+
+        .book-title {
+            font-size: 1.2rem;
+            font-weight: bold;
+            color: var(--color-text);
+            flex: 1 1 300px;
+        }
+
+        .controls {
+            display: flex;
+            gap: 1rem;
+            align-items: center;
+            flex-wrap: wrap;
+        }
+
+        .control-group {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+
+        .control-group label {
+            font-size: 0.9rem;
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+            color: #555;
+        }
+
+        button, select, input[type="range"] {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+            cursor: pointer;
+        }
+
+        button {
+            background: var(--color-annotation);
+            color: white;
+            border: none;
+            padding: 0.5rem 1rem;
+            border-radius: 4px;
+            font-size: 0.9rem;
+            transition: background 0.2s;
+        }
+
+        button:hover {
+            background: var(--color-annotation-hover);
+        }
+
+        button:active {
+            transform: translateY(1px);
+        }
+
+        input[type="range"] {
+            width: 120px;
+        }
+
+        #fontSizeDisplay {
+            font-size: 0.9rem;
+            min-width: 3rem;
+            text-align: center;
+            font-weight: bold;
+        }
+
+        /* Main Layout */
+        .container {
+            display: flex;
+            max-width: 1800px;
+            margin: 0 auto;
+            padding-top: 80px; /* Account for fixed header */
+            min-height: 100vh;
+        }
+
+        /* Main Reading Column */
+        .main-content {
+            flex: 1;
+            max-width: var(--main-column-width);
+            margin: 0 auto;
+            padding: var(--spacing-base);
+            padding-right: calc(var(--spacing-base) * 2);
+        }
+
+        /* Sidebar for Annotations */
+        .sidebar {
+            position: fixed;
+            right: 0;
+            top: 80px; /* Below header */
+            width: var(--sidebar-width);
+            height: calc(100vh - 80px);
+            background: var(--color-sidebar-bg);
+            border-left: 2px solid var(--color-border);
+            padding: var(--spacing-base);
+            overflow-y: auto;
+            box-shadow: -4px 0 12px var(--color-shadow);
+            transition: transform 0.3s ease;
+        }
+
+        .sidebar.hidden {
+            transform: translateX(100%);
+        }
+
+        .sidebar-header {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+            font-size: 0.9rem;
+            font-weight: bold;
+            color: #666;
+            margin-bottom: 1rem;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+        .annotation-card {
+            background: #f8f9fa;
+            border-left: 4px solid var(--color-annotation);
+            padding: 1rem;
+            margin-bottom: 1rem;
+            border-radius: 4px;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
+            opacity: 0;
+            transform: translateY(10px);
+            animation: slideIn 0.3s forwards;
+        }
+
+        @keyframes slideIn {
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        .annotation-type {
+            display: inline-block;
+            font-size: 0.75rem;
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+            text-transform: uppercase;
+            font-weight: bold;
+            color: white;
+            background: var(--color-annotation);
+            padding: 0.25rem 0.5rem;
+            border-radius: 3px;
+            margin-bottom: 0.5rem;
+        }
+
+        .annotation-type.place { background: #28a745; }
+        .annotation-type.person { background: #dc3545; }
+        .annotation-type.topic { background: #ffc107; color: #333; }
+        .annotation-type.term { background: #6f42c1; }
+
+        .annotation-summary {
+            font-size: 0.95rem;
+            margin: 0.5rem 0;
+            line-height: 1.5;
+        }
+
+        .annotation-details {
+            font-size: 0.85rem;
+            color: #666;
+            margin-top: 0.5rem;
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+        }
+
+        .annotation-coordinates {
+            font-size: 0.8rem;
+            color: #888;
+            margin-top: 0.25rem;
+        }
+
+        .annotation-sources {
+            margin-top: 0.75rem;
+            padding-top: 0.75rem;
+            border-top: 1px solid #e0e0e0;
+        }
+
+        .annotation-sources-title {
+            font-size: 0.75rem;
+            font-weight: bold;
+            color: #888;
+            margin-bottom: 0.25rem;
+            text-transform: uppercase;
+        }
+
+        .annotation-source {
+            display: block;
+            font-size: 0.85rem;
+            color: var(--color-annotation);
+            text-decoration: none;
+            margin-top: 0.25rem;
+            transition: color 0.2s;
+        }
+
+        .annotation-source:hover {
+            color: var(--color-annotation-hover);
+            text-decoration: underline;
+        }
+
+        .annotation-image {
+            width: 100%;
+            height: auto;
+            border-radius: 4px;
+            margin-top: 0.5rem;
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+        }
+
+        /* Text Content Styling */
+        .content h1 {
+            font-size: 2.5em;
+            margin-bottom: 1em;
+            color: #1a1a1a;
+            line-height: 1.2;
+        }
+
+        .content h2 {
+            font-size: 1.8em;
+            margin-top: 2em;
+            margin-bottom: 0.8em;
+            color: #1a1a1a;
+        }
+
+        .content p {
+            margin-bottom: 1.5em;
+            text-align: justify;
+            hyphens: auto;
+        }
+
+        /* Annotated Text */
+        .annotated {
+            color: var(--color-annotation);
+            text-decoration: underline;
+            text-decoration-style: dotted;
+            text-decoration-thickness: 1px;
+            text-underline-offset: 3px;
+            cursor: help;
+            transition: all 0.2s;
+            position: relative;
+        }
+
+        .annotated:hover {
+            color: var(--color-annotation-hover);
+            background-color: var(--color-highlight);
+            text-decoration-style: solid;
+        }
+
+        .annotated.active {
+            background-color: var(--color-highlight);
+            font-weight: 500;
+        }
+
+        /* Responsive Design */
+        @media (max-width: 1400px) {
+            .sidebar {
+                width: 300px;
+            }
+        }
+
+        @media (max-width: 1200px) {
+            .container {
+                flex-direction: column;
+            }
+
+            .main-content {
+                max-width: 100%;
+                padding: var(--spacing-base);
+            }
+
+            .sidebar {
+                position: relative;
+                right: auto;
+                top: auto;
+                width: 100%;
+                height: auto;
+                border-left: none;
+                border-top: 2px solid var(--color-border);
+                box-shadow: none;
+            }
+        }
+
+        @media (max-width: 768px) {
+            .controls-header {
+                padding: 0.75rem 1rem;
+            }
+
+            .book-title {
+                font-size: 1rem;
+                width: 100%;
+            }
+
+            .controls {
+                width: 100%;
+                justify-content: space-between;
+            }
+
+            .container {
+                padding-top: 120px; /* More space for wrapped header */
+            }
+
+            .main-content {
+                padding: 1rem;
+            }
+
+            :root {
+                --font-size-base: 16px;
+            }
+        }
+
+        /* Loading State */
+        .loading {
+            text-align: center;
+            padding: 4rem 2rem;
+            color: #999;
+            font-style: italic;
+        }
+
+        /* Empty State */
+        .empty-sidebar {
+            text-align: center;
+            padding: 2rem 1rem;
+            color: #999;
+            font-style: italic;
+        }
+
+        /* Scrollbar Styling */
+        .sidebar::-webkit-scrollbar {
+            width: 8px;
+        }
+
+        .sidebar::-webkit-scrollbar-track {
+            background: #f1f1f1;
+        }
+
+        .sidebar::-webkit-scrollbar-thumb {
+            background: #ccc;
+            border-radius: 4px;
+        }
+
+        .sidebar::-webkit-scrollbar-thumb:hover {
+            background: #999;
+        }
+    </style>
+</head>
+<body>
+    <!-- Header with Controls -->
+    <div class="controls-header">
+        <div class="book-title" id="bookTitle">Project Gutenberg Reader</div>
+        <div class="controls">
+            <div class="control-group">
+                <label for="fontSizeSlider">Text Size:</label>
+                <button onclick="adjustFontSize(-2)" aria-label="Decrease font size">A-</button>
+                <input
+                    type="range"
+                    id="fontSizeSlider"
+                    min="12"
+                    max="32"
+                    value="18"
+                    step="1"
+                    aria-label="Font size slider">
+                <button onclick="adjustFontSize(2)" aria-label="Increase font size">A+</button>
+                <span id="fontSizeDisplay">18px</span>
+            </div>
+            <button onclick="toggleSidebar()" id="toggleSidebarBtn">Hide Annotations</button>
+            <div class="control-group">
+                <label for="fileInput">Load Document:</label>
+                <input
+                    type="file"
+                    id="fileInput"
+                    accept=".json"
+                    style="display: none;"
+                    onchange="loadDocument(event)">
+                <button onclick="document.getElementById('fileInput').click()">Choose File</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Main Container -->
+    <div class="container">
+        <!-- Main Reading Column -->
+        <main class="main-content">
+            <div class="content" id="mainContent">
+                <div class="loading">
+                    <p>Load an annotated document to begin reading...</p>
+                    <p style="margin-top: 1rem; font-size: 0.9rem;">
+                        Use the "Choose File" button above to select a JSON document.
+                    </p>
+                </div>
+            </div>
+        </main>
+
+        <!-- Annotations Sidebar -->
+        <aside class="sidebar" id="sidebar">
+            <div class="sidebar-header">Annotations</div>
+            <div id="sidebarContent">
+                <div class="empty-sidebar">
+                    Hover over highlighted text to see annotations here.
+                </div>
+            </div>
+        </aside>
+    </div>
+
+    <script>
+        // Global state
+        let currentDocument = null;
+        let sidebarVisible = true;
+        let currentFontSize = 18;
+
+        // Initialize
+        document.addEventListener('DOMContentLoaded', function() {
+            initializeFontSize();
+            loadSampleDocument(); // Optional: load a sample for demo
+        });
+
+        // Font Size Management
+        function initializeFontSize() {
+            const slider = document.getElementById('fontSizeSlider');
+            slider.addEventListener('input', function() {
+                updateFontSize(parseInt(this.value));
+            });
+            updateFontSize(currentFontSize);
+        }
+
+        function adjustFontSize(delta) {
+            const newSize = Math.max(12, Math.min(32, currentFontSize + delta));
+            document.getElementById('fontSizeSlider').value = newSize;
+            updateFontSize(newSize);
+        }
+
+        function updateFontSize(size) {
+            currentFontSize = size;
+            document.documentElement.style.setProperty('--font-size-base', size + 'px');
+            document.getElementById('fontSizeDisplay').textContent = size + 'px';
+
+            // Adjust main column width based on font size
+            const chWidth = Math.max(55, Math.min(75, 65 - (size - 18) * 0.5));
+            document.documentElement.style.setProperty('--main-column-width', chWidth + 'ch');
+        }
+
+        // Sidebar Toggle
+        function toggleSidebar() {
+            sidebarVisible = !sidebarVisible;
+            const sidebar = document.getElementById('sidebar');
+            const btn = document.getElementById('toggleSidebarBtn');
+
+            if (sidebarVisible) {
+                sidebar.classList.remove('hidden');
+                btn.textContent = 'Hide Annotations';
+            } else {
+                sidebar.classList.add('hidden');
+                btn.textContent = 'Show Annotations';
+            }
+        }
+
+        // Load Document from File
+        function loadDocument(event) {
+            const file = event.target.files[0];
+            if (!file) return;
+
+            const reader = new FileReader();
+            reader.onload = function(e) {
+                try {
+                    const document = JSON.parse(e.target.result);
+                    renderDocument(document);
+                } catch (error) {
+                    alert('Error loading document: ' + error.message);
+                }
+            };
+            reader.readAsText(file);
+        }
+
+        // Load Sample Document (for demonstration)
+        function loadSampleDocument() {
+            // This can be removed or modified to load a default document
+            // For now, we'll leave the loading message
+        }
+
+        // Render Document
+        function renderDocument(doc) {
+            currentDocument = doc;
+
+            // Update title
+            const title = doc.metadata?.title || 'Untitled Document';
+            document.getElementById('bookTitle').textContent = title;
+            document.title = title + ' - Project Gutenberg Reader';
+
+            // Render content
+            const contentDiv = document.getElementById('mainContent');
+            contentDiv.innerHTML = '';
+
+            doc.content.forEach((block, index) => {
+                const element = renderContentBlock(block, doc.annotations_index);
+                if (element) {
+                    contentDiv.appendChild(element);
+                }
+            });
+        }
+
+        // Render Content Block
+        function renderContentBlock(block, annotationsIndex) {
+            if (block.type === 'heading') {
+                const heading = document.createElement('h' + (block.level || 1));
+                heading.textContent = block.text;
+                return heading;
+            } else if (block.type === 'paragraph') {
+                const p = document.createElement('p');
+
+                if (block.segments && block.segments.length > 0) {
+                    // Render segments with annotations
+                    block.segments.forEach(segment => {
+                        if (segment.annotations && segment.annotations.length > 0) {
+                            // Create annotated span
+                            const span = document.createElement('span');
+                            span.className = 'annotated';
+                            span.textContent = segment.text;
+
+                            // Get first annotation (could support multiple)
+                            const annotation = segment.annotations[0];
+                            const annotationId = annotation.id;
+
+                            // Add data attribute
+                            span.setAttribute('data-annotation-id', annotationId);
+
+                            // Add hover events
+                            span.addEventListener('mouseenter', function() {
+                                showAnnotation(annotationId, annotationsIndex);
+                                this.classList.add('active');
+                            });
+
+                            span.addEventListener('mouseleave', function() {
+                                this.classList.remove('active');
+                            });
+
+                            p.appendChild(span);
+                        } else {
+                            // Plain text
+                            p.appendChild(document.createTextNode(segment.text));
+                        }
+                    });
+                } else {
+                    // No segments, just plain text
+                    p.textContent = block.text;
+                }
+
+                return p;
+            } else if (block.type === 'image') {
+                const figure = document.createElement('figure');
+                const img = document.createElement('img');
+                img.src = block.image_url;
+                img.alt = block.image_alt || '';
+                img.className = 'content-image';
+                figure.appendChild(img);
+
+                if (block.image_caption) {
+                    const caption = document.createElement('figcaption');
+                    caption.textContent = block.image_caption;
+                    figure.appendChild(caption);
+                }
+
+                return figure;
+            }
+
+            return null;
+        }
+
+        // Show Annotation in Sidebar
+        function showAnnotation(annotationId, annotationsIndex) {
+            const annotation = annotationsIndex[annotationId];
+            if (!annotation) return;
+
+            const sidebarContent = document.getElementById('sidebarContent');
+            sidebarContent.innerHTML = '';
+
+            const card = createAnnotationCard(annotation);
+            sidebarContent.appendChild(card);
+        }
+
+        // Create Annotation Card
+        function createAnnotationCard(annotation) {
+            const card = document.createElement('div');
+            card.className = 'annotation-card';
+
+            // Type badge
+            const typeBadge = document.createElement('div');
+            typeBadge.className = 'annotation-type ' + annotation.type;
+            typeBadge.textContent = annotation.type;
+            card.appendChild(typeBadge);
+
+            // Summary
+            const summary = document.createElement('div');
+            summary.className = 'annotation-summary';
+            summary.textContent = annotation.summary;
+            card.appendChild(summary);
+
+            // Details
+            if (annotation.details && Object.keys(annotation.details).length > 0) {
+                const details = document.createElement('div');
+                details.className = 'annotation-details';
+
+                if (annotation.details.coordinates) {
+                    const coords = document.createElement('div');
+                    coords.className = 'annotation-coordinates';
+                    coords.textContent = `📍 ${annotation.details.coordinates.lat.toFixed(4)}, ${annotation.details.coordinates.lon.toFixed(4)}`;
+                    details.appendChild(coords);
+                }
+
+                if (annotation.details.born || annotation.details.died) {
+                    const lifespan = document.createElement('div');
+                    lifespan.textContent = `📅 ${annotation.details.born || '?'} - ${annotation.details.died || '?'}`;
+                    details.appendChild(lifespan);
+                }
+
+                if (annotation.details.modern_equivalent) {
+                    const modern = document.createElement('div');
+                    modern.textContent = `Modern: ${annotation.details.modern_equivalent}`;
+                    details.appendChild(modern);
+                }
+
+                if (annotation.details.etymology) {
+                    const etymology = document.createElement('div');
+                    etymology.textContent = `Etymology: ${annotation.details.etymology}`;
+                    details.appendChild(etymology);
+                }
+
+                card.appendChild(details);
+            }
+
+            // Image
+            if (annotation.image_url) {
+                const img = document.createElement('img');
+                img.src = annotation.image_url;
+                img.className = 'annotation-image';
+                img.alt = annotation.summary;
+                card.appendChild(img);
+            }
+
+            // Sources
+            if (annotation.sources && annotation.sources.length > 0) {
+                const sourcesDiv = document.createElement('div');
+                sourcesDiv.className = 'annotation-sources';
+
+                const sourcesTitle = document.createElement('div');
+                sourcesTitle.className = 'annotation-sources-title';
+                sourcesTitle.textContent = 'Sources';
+                sourcesDiv.appendChild(sourcesTitle);
+
+                annotation.sources.forEach(source => {
+                    const link = document.createElement('a');
+                    link.href = source.url;
+                    link.target = '_blank';
+                    link.rel = 'noopener noreferrer';
+                    link.className = 'annotation-source';
+                    link.textContent = `📚 ${source.title}`;
+                    sourcesDiv.appendChild(link);
+                });
+
+                card.appendChild(sourcesDiv);
+            }
+
+            return card;
+        }
+
+        // Keyboard Shortcuts
+        document.addEventListener('keydown', function(e) {
+            // Ctrl/Cmd + Plus: Increase font size
+            if ((e.ctrlKey || e.metaKey) && e.key === '+') {
+                e.preventDefault();
+                adjustFontSize(2);
+            }
+            // Ctrl/Cmd + Minus: Decrease font size
+            if ((e.ctrlKey || e.metaKey) && e.key === '-') {
+                e.preventDefault();
+                adjustFontSize(-2);
+            }
+            // Ctrl/Cmd + 0: Reset font size
+            if ((e.ctrlKey || e.metaKey) && e.key === '0') {
+                e.preventDefault();
+                document.getElementById('fontSizeSlider').value = 18;
+                updateFontSize(18);
+            }
+        });
+    </script>
+</body>
+</html>
