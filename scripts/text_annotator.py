@@ -1,5 +1,5 @@
 """
-Text Annotator using LLM
+Text Annotator using LLM (Anthropic or Ollama)
 
 This script processes plain text and generates rich annotations for:
 - Places (with coordinates and descriptions)
@@ -7,6 +7,8 @@ This script processes plain text and generates rich annotations for:
 - Archaic terminology (with definitions)
 
 All annotations include sources and links.
+
+Supports both cloud (Anthropic) and local (Ollama) LLMs.
 """
 
 import json
@@ -14,25 +16,91 @@ import re
 import os
 from typing import List, Dict, Any, Optional, Tuple
 from datetime import datetime
-import anthropic
 
 
 class TextAnnotator:
-    """Annotate text using Claude AI for educational annotations"""
+    """Annotate text using LLM for educational annotations"""
 
-    def __init__(self, api_key: Optional[str] = None):
+    def __init__(
+        self,
+        backend: str = "ollama",
+        model: Optional[str] = None,
+        api_key: Optional[str] = None,
+        ollama_host: str = "http://localhost:11434"
+    ):
         """
         Initialize the annotator
 
         Args:
-            api_key: Anthropic API key (or uses ANTHROPIC_API_KEY env var)
+            backend: "anthropic" or "ollama"
+            model: Model name (e.g., "llama3.2", "claude-sonnet-4-5-20250929")
+            api_key: Anthropic API key (only for anthropic backend)
+            ollama_host: Ollama server URL
         """
-        self.api_key = api_key or os.environ.get("ANTHROPIC_API_KEY")
-        if not self.api_key:
-            raise ValueError("ANTHROPIC_API_KEY must be set or provided")
+        self.backend = backend.lower()
+        self.ollama_host = ollama_host
 
-        self.client = anthropic.Anthropic(api_key=self.api_key)
-        self.model = "claude-sonnet-4-5-20250929"
+        if self.backend == "anthropic":
+            import anthropic
+            self.api_key = api_key or os.environ.get("ANTHROPIC_API_KEY")
+            if not self.api_key:
+                raise ValueError("ANTHROPIC_API_KEY must be set for Anthropic backend")
+            self.client = anthropic.Anthropic(api_key=self.api_key)
+            self.model = model or "claude-sonnet-4-5-20250929"
+
+        elif self.backend == "ollama":
+            try:
+                import ollama
+                self.ollama = ollama
+            except ImportError:
+                raise ImportError("Please install ollama: pip install ollama")
+
+            # Set the model
+            self.model = model or "llama3.2"
+
+            # Test connection
+            try:
+                self.ollama.list(host=ollama_host)
+            except Exception as e:
+                raise ConnectionError(
+                    f"Cannot connect to Ollama at {ollama_host}. "
+                    f"Make sure Ollama is running: ollama serve\n"
+                    f"Error: {e}"
+                )
+
+        else:
+            raise ValueError(f"Unknown backend: {backend}. Use 'anthropic' or 'ollama'")
+
+    def _call_llm(self, prompt: str, max_tokens: int = 4096) -> str:
+        """
+        Call the LLM backend (Anthropic or Ollama)
+
+        Args:
+            prompt: The prompt to send
+            max_tokens: Maximum tokens in response
+
+        Returns:
+            LLM response text
+        """
+        if self.backend == "anthropic":
+            message = self.client.messages.create(
+                model=self.model,
+                max_tokens=max_tokens,
+                messages=[{"role": "user", "content": prompt}]
+            )
+            return message.content[0].text
+
+        elif self.backend == "ollama":
+            response = self.ollama.chat(
+                model=self.model,
+                host=self.ollama_host,
+                messages=[{"role": "user", "content": prompt}],
+                options={
+                    "num_predict": max_tokens,
+                    "temperature": 0.7
+                }
+            )
+            return response['message']['content']
 
     def split_into_paragraphs(self, text: str) -> List[str]:
         """Split text into paragraphs"""
@@ -44,7 +112,7 @@ class TextAnnotator:
 
     def identify_entities(self, paragraph: str) -> Dict[str, Any]:
         """
-        Use Claude to identify places, people, topics, and archaic terms in a paragraph
+        Use LLM to identify places, people, topics, and archaic terms in a paragraph
 
         Returns a structured dictionary with all identified entities
         """
@@ -86,14 +154,7 @@ Paragraph to analyze:
 Return only the JSON object, no other text."""
 
         try:
-            message = self.client.messages.create(
-                model=self.model,
-                max_tokens=4096,
-                messages=[{"role": "user", "content": prompt}]
-            )
-
-            # Extract JSON from response
-            response_text = message.content[0].text
+            response_text = self._call_llm(prompt)
 
             # Try to extract JSON if wrapped in markdown
             json_match = re.search(r'```(?:json)?\s*(\{.*\})\s*```', response_text, re.DOTALL)
@@ -105,11 +166,12 @@ Return only the JSON object, no other text."""
 
         except Exception as e:
             print(f"Error identifying entities: {e}")
+            print(f"Response was: {response_text[:200] if 'response_text' in locals() else 'N/A'}")
             return {"entities": []}
 
     def enrich_entity_with_sources(self, entity: Dict[str, Any]) -> Dict[str, Any]:
         """
-        Use Claude to find authoritative sources and additional details for an entity
+        Use LLM to find authoritative sources and additional details for an entity
         """
         entity_text = entity.get("text", "")
         entity_type = entity.get("type", "")
@@ -147,13 +209,7 @@ Return ONLY a JSON object:
 Include only fields that are relevant for this {entity_type}. Return only the JSON, no other text."""
 
         try:
-            message = self.client.messages.create(
-                model=self.model,
-                max_tokens=2048,
-                messages=[{"role": "user", "content": prompt}]
-            )
-
-            response_text = message.content[0].text
+            response_text = self._call_llm(prompt, max_tokens=2048)
 
             # Try to extract JSON if wrapped in markdown
             json_match = re.search(r'```(?:json)?\s*(\{.*\})\s*```', response_text, re.DOTALL)
@@ -254,6 +310,7 @@ Include only fields that are relevant for this {entity_type}. Return only the JS
             annotation_counter += 1
 
             # Enrich the entity with detailed sources
+            print(f"    Enriching: {entity.get('text', '')[:50]}...")
             enriched_entity = self.enrich_entity_with_sources(entity)
 
             # Create annotation
@@ -282,7 +339,8 @@ Include only fields that are relevant for this {entity_type}. Return only the JS
         text: str,
         metadata: Dict[str, Any],
         batch_size: int = 5,
-        max_paragraphs: Optional[int] = None
+        max_paragraphs: Optional[int] = None,
+        progress_callback: Optional[callable] = None
     ) -> Dict[str, Any]:
         """
         Annotate an entire text document
@@ -292,6 +350,7 @@ Include only fields that are relevant for this {entity_type}. Return only the JS
             metadata: Document metadata (title, author, etc.)
             batch_size: Process paragraphs in batches (to avoid rate limits)
             max_paragraphs: Limit number of paragraphs to process (for testing)
+            progress_callback: Optional callback(current, total, message) for progress updates
 
         Returns:
             Complete annotated document in the schema format
@@ -301,7 +360,7 @@ Include only fields that are relevant for this {entity_type}. Return only the JS
         if max_paragraphs:
             paragraphs = paragraphs[:max_paragraphs]
 
-        print(f"Processing {len(paragraphs)} paragraphs...")
+        print(f"Processing {len(paragraphs)} paragraphs with {self.backend} ({self.model})...")
 
         content = []
         annotations_index = {}
@@ -319,8 +378,14 @@ Include only fields that are relevant for this {entity_type}. Return only the JS
                 paragraphs = paragraphs[1:]
 
         # Process each paragraph
+        total = len(paragraphs)
         for i, paragraph in enumerate(paragraphs):
-            print(f"Processing paragraph {i+1}/{len(paragraphs)}...")
+            current = i + 1
+            msg = f"Processing paragraph {current}/{total}"
+            print(f"\n{msg}...")
+
+            if progress_callback:
+                progress_callback(current, total, msg)
 
             # Identify entities in this paragraph
             result = self.identify_entities(paragraph)
@@ -348,7 +413,9 @@ Include only fields that are relevant for this {entity_type}. Return only the JS
         document = {
             "metadata": {
                 **metadata,
-                "processed_date": datetime.now().isoformat()
+                "processed_date": datetime.now().isoformat(),
+                "annotator_backend": self.backend,
+                "annotator_model": self.model
             },
             "content": content,
             "annotations_index": annotations_index
@@ -364,7 +431,23 @@ Include only fields that are relevant for this {entity_type}. Return only the JS
         """Save annotated document to JSON file"""
         with open(output_path, 'w', encoding='utf-8') as f:
             json.dump(document, f, indent=2, ensure_ascii=False)
-        print(f"Saved annotated document to: {output_path}")
+        print(f"\nSaved annotated document to: {output_path}")
+
+
+def list_ollama_models(host: str = "http://localhost:11434") -> List[str]:
+    """
+    List available Ollama models
+
+    Returns:
+        List of model names
+    """
+    try:
+        import ollama
+        models = ollama.list(host=host)
+        return [model['name'] for model in models.get('models', [])]
+    except Exception as e:
+        print(f"Error listing Ollama models: {e}")
+        return []
 
 
 def main():
@@ -372,13 +455,28 @@ def main():
     import sys
 
     if len(sys.argv) < 2:
-        print("Usage: python text_annotator.py <input.txt> [output.json]")
-        print("\nExample:")
-        print("  python text_annotator.py sample.txt annotated_sample.json")
+        print("Usage: python text_annotator.py <input.txt> [output.json] [--backend anthropic|ollama] [--model MODEL]")
+        print("\nExamples:")
+        print("  # Use Ollama (default)")
+        print("  python text_annotator.py sample.txt annotated.json")
+        print("\n  # Use specific Ollama model")
+        print("  python text_annotator.py sample.txt annotated.json --model llama3.2")
+        print("\n  # Use Anthropic")
+        print("  python text_annotator.py sample.txt annotated.json --backend anthropic")
         sys.exit(1)
 
     input_file = sys.argv[1]
-    output_file = sys.argv[2] if len(sys.argv) > 2 else input_file.replace('.txt', '_annotated.json')
+    output_file = sys.argv[2] if len(sys.argv) > 2 and not sys.argv[2].startswith('--') else input_file.replace('.txt', '_annotated.json')
+
+    # Parse optional arguments
+    backend = "ollama"
+    model = None
+
+    for i, arg in enumerate(sys.argv):
+        if arg == "--backend" and i + 1 < len(sys.argv):
+            backend = sys.argv[i + 1]
+        elif arg == "--model" and i + 1 < len(sys.argv):
+            model = sys.argv[i + 1]
 
     # Read input text
     with open(input_file, 'r', encoding='utf-8') as f:
@@ -394,10 +492,11 @@ def main():
     }
 
     # Create annotator and process
-    annotator = TextAnnotator()
+    print(f"Initializing annotator with {backend} backend...")
+    annotator = TextAnnotator(backend=backend, model=model)
 
-    # Process (limit to first 10 paragraphs for testing)
-    document = annotator.annotate_text(text, metadata, max_paragraphs=10)
+    # Process (limit to first 3 paragraphs for testing)
+    document = annotator.annotate_text(text, metadata, max_paragraphs=3)
 
     # Save result
     annotator.save_annotated_document(document, output_file)
