@@ -1,0 +1,123 @@
+{
+  "metadata": {
+    "title": "With Clive in India",
+    "author": "G. A. Henty",
+    "source_url": "https://www.gutenberg.org/cache/epub/4932/pg4932.txt",
+    "gutenberg_id": "4932",
+    "processed_date": "2025-11-18T00:00:00Z",
+    "language": "en"
+  },
+  "content": [
+    {
+      "type": "heading",
+      "level": 1,
+      "text": "With Clive in India"
+    },
+    {
+      "type": "paragraph",
+      "text": "In the year 1745, when young Robert Clive was making his way to Madras, the British presence in India was still modest.",
+      "segments": [
+        {
+          "text": "In the year ",
+          "annotations": []
+        },
+        {
+          "text": "1745",
+          "annotations": [
+            {
+              "id": "date_1745",
+              "type": "topic",
+              "category": "historical_period",
+              "summary": "Mid-18th century, period of European colonial expansion in India",
+              "details": {
+                "period": "1740s"
+              },
+              "sources": []
+            }
+          ]
+        },
+        {
+          "text": ", when young ",
+          "annotations": []
+        },
+        {
+          "text": "Robert Clive",
+          "annotations": [
+            {
+              "id": "person_clive",
+              "type": "person",
+              "category": "historical_figure",
+              "summary": "Robert Clive (1725-1774), British officer who established British control in India",
+              "details": {
+                "born": "1725",
+                "died": "1774",
+                "period": "18th century"
+              },
+              "sources": [
+                {
+                  "title": "Robert Clive - Wikipedia",
+                  "url": "https://en.wikipedia.org/wiki/Robert_Clive",
+                  "type": "wikipedia"
+                }
+              ],
+              "image_url": "https://upload.wikimedia.org/wikipedia/commons/thumb/5/52/Clive.jpg/220px-Clive.jpg"
+            }
+          ]
+        },
+        {
+          "text": " was making his way to ",
+          "annotations": []
+        },
+        {
+          "text": "Madras",
+          "annotations": [
+            {
+              "id": "place_madras",
+              "type": "place",
+              "category": "city",
+              "summary": "Madras (now Chennai), major British colonial settlement on India's eastern coast",
+              "details": {
+                "coordinates": {
+                  "lat": 13.0827,
+                  "lon": 80.2707
+                },
+                "modern_equivalent": "Chennai, India"
+              },
+              "sources": [
+                {
+                  "title": "Chennai - Wikipedia",
+                  "url": "https://en.wikipedia.org/wiki/Chennai",
+                  "type": "wikipedia"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "text": ", the British presence in India was still modest.",
+          "annotations": []
+        }
+      ]
+    }
+  ],
+  "annotations_index": {
+    "date_1745": {
+      "id": "date_1745",
+      "type": "topic",
+      "category": "historical_period",
+      "summary": "Mid-18th century, period of European colonial expansion in India"
+    },
+    "person_clive": {
+      "id": "person_clive",
+      "type": "person",
+      "category": "historical_figure",
+      "summary": "Robert Clive (1725-1774), British officer who established British control in India"
+    },
+    "place_madras": {
+      "id": "place_madras",
+      "type": "place",
+      "category": "city",
+      "summary": "Madras (now Chennai), major British colonial settlement on India's eastern coast"
+    }
+  }
+}
