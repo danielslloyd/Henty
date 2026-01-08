@@ -418,7 +418,7 @@ class TextToAudioConverter:
                     os.rename(temp_path, wav_path)
                 return False
 
-    def generate_audio(self, text, output_path, audio_prompt_path=None, language_id="en", exaggeration=0.5, cfg_weight=0.5):
+    def generate_audio(self, text, output_path, audio_prompt_path=None, language_id="en", exaggeration=0.6, cfg_weight=0.4):
         """Generate audio from text using Chatterbox TTS"""
         try:
             # Start timing and capture initial GPU stats
@@ -971,8 +971,8 @@ def create_project():
             'version': '1.0',
             'note': 'All file references use relative paths for portability',
             'default_audio_settings': {
-                'exaggeration': 0.5,
-                'cfg_weight': 0.5,
+                'exaggeration': 0.6,
+                'cfg_weight': 0.4,
                 'voice_sample': 'none',
                 'seed': 0,
                 'temperature': 0.8,
@@ -1031,8 +1031,8 @@ def load_project():
         # Add default audio settings if not present (backwards compatibility)
         if 'default_audio_settings' not in project_metadata:
             project_metadata['default_audio_settings'] = {
-                'exaggeration': 0.5,
-                'cfg_weight': 0.5,
+                'exaggeration': 0.6,
+                'cfg_weight': 0.4,
                 'voice_sample': 'none',
                 'seed': 0,
                 'temperature': 0.8,
@@ -1326,6 +1326,87 @@ def dismiss_dirty_flag():
     except Exception as e:
         import traceback
         print(f"Error dismissing dirty flag: {str(e)}")
+        print(traceback.format_exc())
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/project/insert-chunk', methods=['POST'])
+def insert_chunk():
+    """Insert a new chunk (text or pause) at a specific position"""
+    try:
+        import json
+        from datetime import datetime
+
+        if converter.current_project_path is None:
+            return jsonify({'error': 'No project loaded'}), 400
+
+        data = request.json
+        text_file_id = data.get('text_file_id')
+        insert_after_id = data.get('insert_after_id')  # Insert after this chunk ID (or -1 to insert at beginning)
+        chunk_type = data.get('type', 'text')  # 'text' or 'pause'
+
+        # Find the text file
+        text_files = converter.current_project_metadata.get('text_files', [])
+        text_file = next((tf for tf in text_files if tf['id'] == text_file_id), None)
+
+        if not text_file:
+            return jsonify({'error': 'Text file not found'}), 404
+
+        # Create new chunk based on type
+        if chunk_type == 'pause':
+            duration_ms = int(data.get('duration_ms', 1000))
+            new_chunk = {
+                'id': 0,  # Will be set correctly below
+                'type': 'pause',
+                'duration_ms': duration_ms,
+                'text': f'[Pause: {duration_ms}ms]',
+                'nickname': f'Pause ({duration_ms}ms)',
+                'start_pos': 0,
+                'end_pos': 0,
+                'dirty': False,
+                'generated_audios': []
+            }
+        else:  # text chunk
+            text = data.get('text', '')
+            new_chunk = {
+                'id': 0,  # Will be set correctly below
+                'type': 'text',
+                'text': text,
+                'nickname': text[:50].strip() + ('...' if len(text) > 50 else ''),
+                'start_pos': 0,
+                'end_pos': len(text),
+                'dirty': False,
+                'generated_audios': []
+            }
+
+        # Determine insertion position
+        chunks = text_file.get('chunks', [])
+        insert_position = insert_after_id + 1  # Insert after the specified chunk
+
+        # Insert the new chunk
+        chunks.insert(insert_position, new_chunk)
+
+        # Renumber all chunk IDs
+        for i, chunk in enumerate(chunks):
+            chunk['id'] = i
+
+        # Update project metadata
+        text_file['chunks'] = chunks
+        converter.current_project_metadata['last_modified'] = datetime.now().isoformat()
+
+        # Save to file
+        project_file = os.path.join(converter.current_project_path, 'project.json')
+        with open(project_file, 'w', encoding='utf-8') as f:
+            json.dump(converter.current_project_metadata, f, indent=2, ensure_ascii=False)
+
+        return jsonify({
+            'success': True,
+            'chunks': chunks,
+            'inserted_chunk': new_chunk
+        })
+
+    except Exception as e:
+        import traceback
+        print(f"Error inserting chunk: {str(e)}")
         print(traceback.format_exc())
         return jsonify({'error': str(e)}), 500
 
@@ -1650,9 +1731,13 @@ def delete_take():
     """Delete an audio file and its metadata"""
     try:
         import json
+        from datetime import datetime
+
         data = request.json
         txt_filename = data.get('txt_filename')
         audio_filename = data.get('audio_filename')
+        text_file_id = data.get('text_file_id')  # Optional: for project-based deletion
+        chunk_id = data.get('chunk_id')  # Optional: for chunk-based deletion
 
         if not txt_filename or not audio_filename:
             return jsonify({'error': 'txt_filename and audio_filename are required'}), 400
@@ -1673,6 +1758,50 @@ def delete_take():
             print(f"Deleted metadata file: {metadata_path}")
         else:
             print(f"Metadata file not found: {metadata_path}")
+
+        # Update project metadata if project is loaded and file/chunk info provided
+        if converter.current_project_path and converter.current_project_metadata:
+            try:
+                # If text_file_id and chunk_id are provided, remove from that specific chunk
+                if text_file_id is not None and chunk_id is not None:
+                    text_files = converter.current_project_metadata.get('text_files', [])
+                    text_file = next((tf for tf in text_files if tf['id'] == text_file_id), None)
+
+                    if text_file:
+                        chunks = text_file.get('chunks', [])
+                        chunk = next((c for c in chunks if c['id'] == chunk_id), None)
+
+                        if chunk:
+                            # Remove the audio from generated_audios
+                            chunk['generated_audios'] = [
+                                audio for audio in chunk.get('generated_audios', [])
+                                if audio.get('audio_file') != audio_filename
+                            ]
+                            print(f"Removed take from project metadata: {audio_filename}")
+                else:
+                    # Search through all chunks to find and remove the audio
+                    text_files = converter.current_project_metadata.get('text_files', [])
+                    for text_file in text_files:
+                        for chunk in text_file.get('chunks', []):
+                            original_count = len(chunk.get('generated_audios', []))
+                            chunk['generated_audios'] = [
+                                audio for audio in chunk.get('generated_audios', [])
+                                if audio.get('audio_file') != audio_filename
+                            ]
+                            if len(chunk['generated_audios']) < original_count:
+                                print(f"Removed take from project metadata: {audio_filename}")
+
+                # Update last modified
+                converter.current_project_metadata['last_modified'] = datetime.now().isoformat()
+
+                # Save project metadata
+                project_file = os.path.join(converter.current_project_path, 'project.json')
+                with open(project_file, 'w', encoding='utf-8') as f:
+                    json.dump(converter.current_project_metadata, f, indent=2, ensure_ascii=False)
+
+            except Exception as meta_error:
+                print(f"Warning: Could not update project metadata: {str(meta_error)}")
+                # Continue anyway since the files were deleted
 
         return jsonify({'success': True, 'message': 'Take deleted successfully'})
 
