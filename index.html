@@ -695,6 +695,15 @@
             color: white;
         }
 
+        .chunk-bubble:hover .btn-insert-chunk {
+            display: block !important;
+        }
+
+        .btn-insert-chunk:hover {
+            background: #5568d3 !important;
+            transform: translateX(-50%) scale(1.1);
+        }
+
         .chunk-details-pane {
             max-height: 600px;
             overflow-y: auto;
@@ -1242,6 +1251,34 @@
         </div>
     </div>
 
+    <!-- Insert Chunk Modal -->
+    <div class="modal" id="insertChunkModal">
+        <div class="modal-content">
+            <div class="modal-header">Insert Chunk</div>
+            <div class="modal-body">
+                <div style="margin-bottom: 15px;">
+                    <label style="display: block; font-size: 13px; font-weight: 600; color: #333; margin-bottom: 5px;">Chunk Type</label>
+                    <select id="insertChunkType" onchange="toggleInsertChunkFields()" style="width: 100%; padding: 10px; border: 2px solid #e0e0e0; border-radius: 8px; font-size: 14px;">
+                        <option value="text">Text Chunk</option>
+                        <option value="pause">Pause Chunk</option>
+                    </select>
+                </div>
+                <div id="insertTextFields">
+                    <label style="display: block; font-size: 13px; font-weight: 600; color: #333; margin-bottom: 5px;">Chunk Text</label>
+                    <textarea id="insertChunkText" style="width: 100%; min-height: 150px; padding: 12px; border: 2px solid #e0e0e0; border-radius: 8px; font-size: 14px; font-family: 'Courier New', monospace; resize: vertical;"></textarea>
+                </div>
+                <div id="insertPauseFields" style="display: none;">
+                    <label style="display: block; font-size: 13px; font-weight: 600; color: #333; margin-bottom: 5px;">Pause Duration (milliseconds)</label>
+                    <input type="number" id="insertPauseDuration" value="1000" min="0" step="100" style="width: 100%; padding: 10px; border: 2px solid #e0e0e0; border-radius: 8px; font-size: 14px;">
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-secondary" onclick="closeInsertChunkModal()">Cancel</button>
+                <button class="btn btn-primary" onclick="insertChunkConfirm()">Insert Chunk</button>
+            </div>
+        </div>
+    </div>
+
     <!-- Progress Bar Overlay -->
     <div id="progressOverlay" class="progress-overlay">
         <div class="progress-container">
@@ -1664,7 +1701,7 @@
                 // Update project defaults dropdown
                 const projectVoiceSelect = document.getElementById('project_voice_default');
                 if (projectVoiceSelect) {
-                    projectVoiceSelect.innerHTML = '<option value="none">Default Voice</option>';
+                    projectVoiceSelect.innerHTML = '<option value="">No voice samples available</option>';
                 }
                 return;
             }
@@ -1681,11 +1718,16 @@
                 </div>
             `).join('');
 
+            // Auto-select voice: prefer Haggard.wav, otherwise first available
+            if (projectDefaults.voice_sample === 'none' || !voiceSamples.find(s => s.name === projectDefaults.voice_sample)) {
+                const haggardVoice = voiceSamples.find(s => s.name === 'Haggard.wav');
+                projectDefaults.voice_sample = haggardVoice ? haggardVoice.name : voiceSamples[0].name;
+            }
+
             // Update project defaults dropdown
             const projectVoiceSelect = document.getElementById('project_voice_default');
             if (projectVoiceSelect) {
-                projectVoiceSelect.innerHTML = '<option value="none">Default Voice</option>' +
-                    voiceSamples.map(s => `<option value="${s.name}" ${projectDefaults.voice_sample === s.name ? 'selected' : ''}>${s.name}</option>`).join('');
+                projectVoiceSelect.innerHTML = voiceSamples.map(s => `<option value="${s.name}" ${projectDefaults.voice_sample === s.name ? 'selected' : ''}>${s.name}</option>`).join('');
             }
         }
 
@@ -2313,24 +2355,25 @@
                 return;
             }
 
-            container.innerHTML = chunks.map(chunk => {
+            container.innerHTML = chunks.map((chunk, index) => {
                 const audioKey = `${fileIndex}_${chunk.id}`;
                 const audioCount = chunkAudio[audioKey]?.length || 0;
                 const hasAudio = audioCount > 0;
                 const displayName = chunk.nickname || `Chunk ${chunk.id + 1}`;
+                const isPause = chunk.type === 'pause';
 
                 return `
-                    <div class="chunk-bubble ${hasAudio ? 'has-audio' : ''}"
+                    <div class="chunk-bubble ${hasAudio ? 'has-audio' : ''} ${isPause ? 'chunk-pause' : ''}"
                          id="chunkBubble_${fileIndex}_${chunk.id}"
                          onclick="selectChunk(${fileIndex}, ${chunk.id})"
-                         style="padding: 10px; position: relative;">
+                         style="padding: 10px; position: relative; ${isPause ? 'background: linear-gradient(135deg, #f0f0f0 0%, #e0e0e0 100%); font-style: italic;' : ''}">
                         <!-- Top row: Title/Number on left, Audio counter on right -->
                         <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 8px;">
                             <div style="display: flex; align-items: center; gap: 5px; font-size: 11px; font-weight: 600; color: #666;">
                                 <span>#${chunk.id + 1}</span>
                                 <span style="color: #999;">|</span>
-                                <span style="max-width: 150px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">${displayName}</span>
-                                <button class="chunk-edit-btn" onclick="event.stopPropagation(); editChunkText(${fileIndex}, ${chunk.id})" title="Edit chunk" style="font-size: 12px; padding: 2px 6px; opacity: 0.5;">✏️</button>
+                                <span style="max-width: 150px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">${isPause ? '⏸️ ' : ''}${displayName}</span>
+                                ${!isPause ? `<button class="chunk-edit-btn" onclick="event.stopPropagation(); editChunkText(${fileIndex}, ${chunk.id})" title="Edit chunk" style="font-size: 12px; padding: 2px 6px; opacity: 0.5;">✏️</button>` : ''}
                             </div>
                             ${hasAudio ? `<span class="chunk-audio-count" style="font-size: 10px; background: rgba(102,126,234,0.2); padding: 2px 8px; border-radius: 10px;">${audioCount} audio</span>` : ''}
                         </div>
@@ -2338,6 +2381,15 @@
                         <div style="font-size: 12px; line-height: 1.5; color: #444; overflow: hidden; text-overflow: ellipsis; display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical;">
                             ${chunk.text}
                         </div>
+                        <!-- Insert chunk button -->
+                        <button class="btn-insert-chunk" onclick="event.stopPropagation(); showInsertChunkDialog(${fileIndex}, ${chunk.id})"
+                                title="Insert chunk after this"
+                                style="position: absolute; bottom: -12px; left: 50%; transform: translateX(-50%);
+                                       background: #667eea; color: white; border: none; border-radius: 50%;
+                                       width: 24px; height: 24px; font-size: 14px; cursor: pointer;
+                                       display: none; box-shadow: 0 2px 4px rgba(0,0,0,0.2);">
+                            +
+                        </button>
                     </div>
                 `;
             }).join('');
@@ -2403,8 +2455,10 @@
                             const bestTakeBadge = isBestTake ? '<span class="best-take-badge">Best Take</span>' : '';
                             const audioItemClass = isBestTake ? 'audio-item best-take' : 'audio-item';
 
-                            // Add outdated flag if chunk is dirty (text changed after audio generation)
-                            const outdatedFlag = chunk.dirty ? '<span class="outdated-audio-flag" title="Audio was generated before text was modified">!</span>' : '';
+                            // Add outdated flag if chunk text has changed since audio generation
+                            const textChanged = item.original_text && item.original_text !== chunk.text;
+                            const escapedOrigText = item.original_text ? item.original_text.replace(/'/g, "\\'").replace(/"/g, "&quot;") : '';
+                            const outdatedFlag = textChanged ? `<span class="outdated-audio-flag" title="Text has changed since audio was generated. Click to view original." onclick="event.stopPropagation(); alert('Original text:\\n\\n${escapedOrigText}')" style="cursor: pointer;">⚠️</span>` : '';
 
                             // Auto-select if needed
                             if (shouldAutoSelect && idx === 0 && item.audio_file) {
@@ -2448,7 +2502,6 @@
                         <div class="control-group">
                             <label>Voice Sample</label>
                             <select id="voice_chunk_${fileIndex}_${chunkId}">
-                                <option value="none">Default Voice</option>
                                 ${voiceSamples.map(s => `<option value="${s.name}" ${projectDefaults.voice_sample === s.name ? 'selected' : ''}>${s.name}</option>`).join('')}
                             </select>
                         </div>
@@ -2544,6 +2597,7 @@
                 }
 
                 // Save audio metadata to project
+                const currentChunk = fileChunks[fileIndex].find(c => c.id === chunkId);
                 const audioMetadata = {
                     audio_file: data.audio_file,
                     audio_url: data.audio_url,
@@ -2551,7 +2605,8 @@
                     exaggeration: parseFloat(exaggeration),
                     cfg_weight: parseFloat(cfgWeight),
                     voice_sample: voice,
-                    is_best_take: false
+                    is_best_take: false,
+                    original_text: currentChunk ? currentChunk.text : ''
                 };
 
                 const saveResponse = await fetch(`${API_URL}/project/add-audio-to-chunk`, {
@@ -2674,6 +2729,10 @@
             try {
                 showStatus('Deleting take...', 'info');
 
+                // Get text file ID
+                const bubble = document.getElementById(`bubble_${fileIndex}`);
+                const textFileId = bubble ? bubble.dataset.textFileId : null;
+
                 const response = await fetch(`${API_URL}/delete-take`, {
                     method: 'POST',
                     headers: {
@@ -2681,7 +2740,9 @@
                     },
                     body: JSON.stringify({
                         txt_filename: txtFilename,
-                        audio_filename: audioFilename
+                        audio_filename: audioFilename,
+                        text_file_id: textFileId,
+                        chunk_id: chunkId
                     })
                 });
 
@@ -3000,7 +3061,8 @@
                         exaggeration: projectDefaults.exaggeration,
                         cfg_weight: projectDefaults.cfg_weight,
                         voice_sample: projectDefaults.voice_sample,
-                        is_best_take: false
+                        is_best_take: false,
+                        original_text: chunk.text
                     };
 
                     const saveResponse = await fetch(`${API_URL}/project/add-audio-to-chunk`, {
@@ -3391,6 +3453,101 @@
             }
 
             closeEditChunkModal();
+        };
+
+        // Insert chunk dialog
+        let insertChunkContext = null; // Stores {fileIndex, afterChunkId}
+
+        window.showInsertChunkDialog = function(fileIndex, afterChunkId) {
+            insertChunkContext = { fileIndex, afterChunkId };
+
+            // Reset form
+            document.getElementById('insertChunkType').value = 'text';
+            document.getElementById('insertChunkText').value = '';
+            document.getElementById('insertPauseDuration').value = '1000';
+            toggleInsertChunkFields();
+
+            // Show modal
+            document.getElementById('insertChunkModal').classList.add('show');
+        };
+
+        window.toggleInsertChunkFields = function() {
+            const type = document.getElementById('insertChunkType').value;
+            const textFields = document.getElementById('insertTextFields');
+            const pauseFields = document.getElementById('insertPauseFields');
+
+            if (type === 'pause') {
+                textFields.style.display = 'none';
+                pauseFields.style.display = 'block';
+            } else {
+                textFields.style.display = 'block';
+                pauseFields.style.display = 'none';
+            }
+        };
+
+        window.closeInsertChunkModal = function() {
+            document.getElementById('insertChunkModal').classList.remove('show');
+            insertChunkContext = null;
+        };
+
+        window.insertChunkConfirm = async function() {
+            if (!insertChunkContext) return;
+
+            const { fileIndex, afterChunkId } = insertChunkContext;
+            const type = document.getElementById('insertChunkType').value;
+
+            try {
+                // Get text file ID
+                const bubble = document.getElementById(`bubble_${fileIndex}`);
+                const textFileId = bubble ? bubble.dataset.textFileId : null;
+
+                if (!textFileId) {
+                    showStatus('Error: Could not identify text file', 'error');
+                    return;
+                }
+
+                // Prepare request data
+                const requestData = {
+                    text_file_id: textFileId,
+                    insert_after_id: afterChunkId,
+                    type: type
+                };
+
+                if (type === 'pause') {
+                    requestData.duration_ms = parseInt(document.getElementById('insertPauseDuration').value);
+                } else {
+                    requestData.text = document.getElementById('insertChunkText').value;
+                    if (!requestData.text.trim()) {
+                        showStatus('Please enter chunk text', 'error');
+                        return;
+                    }
+                }
+
+                // Call backend to insert chunk
+                const response = await fetch(`${API_URL}/project/insert-chunk`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(requestData)
+                });
+
+                const data = await response.json();
+
+                if (data.success) {
+                    // Update local chunks
+                    fileChunks[fileIndex] = data.chunks;
+
+                    // Re-render chunks
+                    renderChunkBubbles(fileIndex);
+
+                    showStatus(`${type === 'pause' ? 'Pause' : 'Text'} chunk inserted successfully`, 'success');
+                    closeInsertChunkModal();
+                } else {
+                    showStatus(`Failed to insert chunk: ${data.error}`, 'error');
+                }
+            } catch (error) {
+                console.error('Error inserting chunk:', error);
+                showStatus(`Failed to insert chunk: ${error.message}`, 'error');
+            }
         };
 
         // Dismiss dirty flag for a chunk
