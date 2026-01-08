@@ -2629,7 +2629,6 @@
                 showStatus(`Chunk #${chunkId + 1} audio generated successfully!`, 'success');
 
                 // Update local state from backend
-                const currentChunk = fileChunks[fileIndex].find(c => c.id === chunkId);
                 if (currentChunk) {
                     currentChunk.generated_audios = saveData.chunk.generated_audios;
                 }
