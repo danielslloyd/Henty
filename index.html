@@ -2714,14 +2714,17 @@
         window.selectChunk = function(fileIndex, chunkId) {
             selectedChunks[fileIndex] = chunkId;
 
-            // Update bubble selection
-            const allBubbles = document.querySelectorAll(`#chunksList_${fileIndex} .chunk-bubble`);
-            allBubbles.forEach(b => b.classList.remove('selected'));
-            const selectedBubble = document.getElementById(`chunkBubble_${fileIndex}_${chunkId}`);
-            if (selectedBubble) selectedBubble.classList.add('selected');
+            // Update text selection styling
+            const allChunks = document.querySelectorAll(`#chunksList_${fileIndex} .chunk-text`);
+            allChunks.forEach(c => c.classList.remove('selected'));
+            const selectedChunk = document.getElementById(`chunkText_${fileIndex}_${chunkId}`);
+            if (selectedChunk) selectedChunk.classList.add('selected');
 
             // Render chunk details
             renderChunkDetails(fileIndex, chunkId);
+
+            // Scroll to corresponding takes
+            scrollToTakes(fileIndex, chunkId);
         };
 
         // Highlight chunk and corresponding takes on hover
@@ -2748,14 +2751,30 @@
             takeElements.forEach(el => el.classList.remove('highlighted'));
         };
 
-        // Highlight take and corresponding chunk on hover
-        window.highlightTake = function(fileIndex, chunkId) {
+        // Highlight take and corresponding chunk on hover, and scroll to chunk when clicked
+        window.highlightTake = function(fileIndex, chunkId, scroll = false) {
             highlightChunk(fileIndex, chunkId);
+
+            // Scroll to chunk if requested (on click)
+            if (scroll) {
+                const chunkElement = document.getElementById(`chunkText_${fileIndex}_${chunkId}`);
+                if (chunkElement) {
+                    chunkElement.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                }
+            }
         };
 
         // Remove take highlight
         window.unhighlightTake = function(fileIndex, chunkId) {
             unhighlightChunk(fileIndex, chunkId);
+        };
+
+        // Scroll to takes when chunk is clicked
+        window.scrollToTakes = function(fileIndex, chunkId) {
+            const takeElements = document.querySelectorAll(`[data-take-file-index="${fileIndex}"][data-take-chunk-id="${chunkId}"]`);
+            if (takeElements.length > 0) {
+                takeElements[0].scrollIntoView({ behavior: 'smooth', block: 'center' });
+            }
         };
 
         // Insert chapter break after a chunk
@@ -2842,17 +2861,18 @@
                                  data-take-file-index="${fileIndex}"
                                  data-take-chunk-id="${chunk.id}">
                                 <div class="take-header"
+                                     onclick="highlightTake(${fileIndex}, ${chunk.id}, true)"
                                      onmouseenter="highlightTake(${fileIndex}, ${chunk.id})"
                                      onmouseleave="unhighlightTake(${fileIndex}, ${chunk.id})">
                                     <span class="take-preview">${takePreview}</span>
                                     <div class="take-icons">
-                                        <button class="take-icon settings" data-settings-for="${takeId}" onclick="toggleTakeSettings('${takeId}')" title="Settings">
+                                        <button class="take-icon settings" data-settings-for="${takeId}" onclick="event.stopPropagation(); toggleTakeSettings('${takeId}')" title="Settings">
                                             <span class="material-symbols-outlined">settings</span>
                                         </button>
-                                        <button class="take-icon play" onclick="playTakeAudio('${bestTake.audio_url}')" title="Play">
+                                        <button class="take-icon play" onclick="event.stopPropagation(); playTakeAudio('${bestTake.audio_url}')" title="Play">
                                             <span class="material-symbols-outlined">play_arrow</span>
                                         </button>
-                                        <button class="take-icon delete" onclick='deleteChunkTake(${fileIndex}, ${chunk.id}, "${fileName}", "${bestTake.audio_file}")' title="Delete">
+                                        <button class="take-icon delete" onclick='event.stopPropagation(); deleteChunkTake(${fileIndex}, ${chunk.id}, "${fileName}", "${bestTake.audio_file}")' title="Delete">
                                             <span class="material-symbols-outlined">delete</span>
                                         </button>
                                     </div>
@@ -2886,17 +2906,18 @@
                                  data-take-file-index="${fileIndex}"
                                  data-take-chunk-id="${chunk.id}">
                                 <div class="take-header"
+                                     onclick="highlightTake(${fileIndex}, ${chunk.id}, true)"
                                      onmouseenter="highlightTake(${fileIndex}, ${chunk.id})"
                                      onmouseleave="unhighlightTake(${fileIndex}, ${chunk.id})">
                                     <span class="take-preview">${takePreview}</span>
                                     <div class="take-icons">
-                                        <button class="take-icon settings" data-settings-for="${takeId}" onclick="toggleTakeSettings('${takeId}')" title="Settings">
+                                        <button class="take-icon settings" data-settings-for="${takeId}" onclick="event.stopPropagation(); toggleTakeSettings('${takeId}')" title="Settings">
                                             <span class="material-symbols-outlined">settings</span>
                                         </button>
-                                        <button class="take-icon play" onclick="playTakeAudio('${item.audio_url}')" title="Play">
+                                        <button class="take-icon play" onclick="event.stopPropagation(); playTakeAudio('${item.audio_url}')" title="Play">
                                             <span class="material-symbols-outlined">play_arrow</span>
                                         </button>
-                                        <button class="take-icon delete" onclick='deleteChunkTake(${fileIndex}, ${chunk.id}, "${fileName}", "${item.audio_file}")' title="Delete">
+                                        <button class="take-icon delete" onclick='event.stopPropagation(); deleteChunkTake(${fileIndex}, ${chunk.id}, "${fileName}", "${item.audio_file}")' title="Delete">
                                             <span class="material-symbols-outlined">delete</span>
                                         </button>
                                     </div>
@@ -2929,14 +2950,15 @@
                              data-take-file-index="${fileIndex}"
                              data-take-chunk-id="${chunk.id}">
                             <div class="take-header"
+                                 onclick="highlightTake(${fileIndex}, ${chunk.id}, true)"
                                  onmouseenter="highlightTake(${fileIndex}, ${chunk.id})"
                                  onmouseleave="unhighlightTake(${fileIndex}, ${chunk.id})">
                                 <span class="take-preview">${chunkPreview}</span>
                                 <div class="take-icons">
-                                    <button class="take-icon settings" data-settings-for="${takeId}" onclick="toggleTakeSettings('${takeId}')" title="Settings">
+                                    <button class="take-icon settings" data-settings-for="${takeId}" onclick="event.stopPropagation(); toggleTakeSettings('${takeId}')" title="Settings">
                                         <span class="material-symbols-outlined">settings</span>
                                     </button>
-                                    <button class="take-icon" onclick="selectChunk(${fileIndex}, ${chunk.id}); setTimeout(() => generateChunkAudio(${fileIndex}, ${chunk.id}), 100)" title="Generate">
+                                    <button class="take-icon" onclick="event.stopPropagation(); selectChunk(${fileIndex}, ${chunk.id}); setTimeout(() => generateChunkAudio(${fileIndex}, ${chunk.id}), 100)" title="Generate">
                                         <span class="material-symbols-outlined">auto_awesome</span>
                                     </button>
                                 </div>
@@ -2982,18 +3004,30 @@
 
         // Generate audio for a specific chunk
         window.generateChunkAudio = async function(fileIndex, chunkId) {
-            const chunk = fileChunks[fileIndex].find(c => c.id === chunkId);
-            const bubble = document.getElementById(`bubble_${fileIndex}`);
-            const textFileId = bubble ? bubble.dataset.textFileId : null;
+            const chunk = fileChunks[fileIndex]?.find(c => c.id === chunkId);
 
-            if (!textFileId) {
-                showStatus('Error: Could not identify text file', 'error');
+            if (!chunk) {
+                showStatus('Error: Chunk not found', 'error');
                 return;
             }
 
-            const voice = document.getElementById(`voice_chunk_${fileIndex}_${chunkId}`).value;
-            const exaggeration = document.getElementById(`exaggeration_chunk_${fileIndex}_${chunkId}`).value;
-            const cfgWeight = document.getElementById(`cfg_weight_chunk_${fileIndex}_${chunkId}`).value;
+            // Try to get text file ID from bubble first, then fallback to currentFiles
+            const bubble = document.getElementById(`bubble_${fileIndex}`);
+            let textFileId = bubble ? bubble.dataset.textFileId : null;
+
+            if (!textFileId && currentFiles[fileIndex]) {
+                textFileId = currentFiles[fileIndex].textFileId;
+            }
+
+            if (!textFileId) {
+                showStatus('Error: Could not identify text file', 'error');
+                console.error('No text file ID found. Bubble:', bubble, 'CurrentFiles:', currentFiles[fileIndex]);
+                return;
+            }
+
+            const voice = document.getElementById(`voice_chunk_${fileIndex}_${chunkId}`)?.value || projectDefaults.voice_sample;
+            const exaggeration = document.getElementById(`exaggeration_chunk_${fileIndex}_${chunkId}`)?.value || projectDefaults.exaggeration;
+            const cfgWeight = document.getElementById(`cfg_weight_chunk_${fileIndex}_${chunkId}`)?.value || projectDefaults.cfg_weight;
 
             const charCount = chunk.text.length;
             const chunkKey = `${fileIndex}_${chunkId}`;
@@ -3048,7 +3082,6 @@
                 }
 
                 // Save audio metadata to project
-                const currentChunk = fileChunks[fileIndex].find(c => c.id === chunkId);
                 const audioMetadata = {
                     audio_file: data.audio_file,
                     audio_url: data.audio_url,
@@ -3057,7 +3090,7 @@
                     cfg_weight: parseFloat(cfgWeight),
                     voice_sample: voice,
                     is_best_take: false,
-                    original_text: currentChunk ? currentChunk.text : ''
+                    original_text: chunk.text
                 };
 
                 const saveResponse = await fetch(`${API_URL}/project/add-audio-to-chunk`, {
@@ -3074,16 +3107,24 @@
 
                 if (!saveResponse.ok) {
                     console.error('Failed to save audio metadata to project:', saveData.error);
+                    // Don't fail the whole operation, just log the error
                 }
 
                 hideProgressBar();
                 showStatus(`Chunk #${chunkId + 1} audio generated successfully!`, 'success');
 
-                // Update local state from backend
-                if (currentChunk) {
-                    currentChunk.generated_audios = saveData.chunk.generated_audios;
+                // Update local state from backend (if save was successful)
+                if (saveResponse.ok && saveData.chunk && saveData.chunk.generated_audios) {
+                    chunk.generated_audios = saveData.chunk.generated_audios;
+                    chunkAudio[chunkKey] = saveData.chunk.generated_audios;
+                } else {
+                    // Manually update local state if save failed
+                    if (!chunk.generated_audios) {
+                        chunk.generated_audios = [];
+                    }
+                    chunk.generated_audios.push(audioMetadata);
+                    chunkAudio[chunkKey] = chunk.generated_audios;
                 }
-                chunkAudio[chunkKey] = saveData.chunk.generated_audios;
 
                 // Update chunk bubbles
                 renderChunkBubbles(fileIndex);
