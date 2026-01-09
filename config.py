@@ -32,6 +32,10 @@ class ServerConfig:
         # Max file sizes
         self.MAX_UPLOAD_SIZE = int(os.getenv('MAX_UPLOAD_SIZE', str(100 * 1024 * 1024)))  # 100MB default
 
+        # Directory settings
+        self.COMMON_FILES_DIR = os.getenv('COMMON_FILES_DIR', 'common_files')
+        self.DEFAULT_PROJECT_DIR = os.getenv('DEFAULT_PROJECT_DIR', 'projects')
+
         # Initialize API key if needed
         if self.REQUIRE_AUTH and not self.API_KEY:
             self._generate_api_key()
@@ -82,6 +86,10 @@ ENABLE_WEBSOCKET=True
 
 # Max Upload Size (bytes)
 MAX_UPLOAD_SIZE=104857600  # 100MB
+
+# Directory Settings
+COMMON_FILES_DIR=common_files  # Directory for shared audio files (intros, outros, etc.)
+DEFAULT_PROJECT_DIR=projects   # Default directory for all projects
 """
         return template
 
