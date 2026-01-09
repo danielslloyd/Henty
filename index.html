@@ -305,6 +305,84 @@
             line-height: 1.4;
         }
 
+        /* Chunk preview styles */
+        .chunk-preview-item {
+            border-bottom: 1px solid #f0f0f0;
+            background: rgba(241, 245, 249, 0.5);
+        }
+
+        .chunk-preview-header {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            padding: 12px 16px;
+            cursor: pointer;
+        }
+
+        .chunk-preview-header:hover {
+            background: rgba(241, 245, 249, 0.8);
+        }
+
+        .chunk-preview-text {
+            flex: 1;
+            font-size: 13px;
+            font-weight: 500;
+            color: #334155;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+
+        .chunk-preview-icons {
+            display: flex;
+            gap: 4px;
+            margin-left: auto;
+        }
+
+        .chunk-icon {
+            background: none;
+            border: none;
+            color: #64748b;
+            cursor: pointer;
+            padding: 4px;
+            border-radius: 4px;
+            transition: all 0.15s;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .chunk-icon:hover {
+            background: rgba(100, 116, 139, 0.1);
+            color: #3b82f6;
+        }
+
+        .chunk-icon .material-symbols-outlined {
+            font-size: 18px;
+        }
+
+        /* Check circle icon for takes */
+        .take-icon.check-circle {
+            padding: 0;
+            margin-right: 4px;
+        }
+
+        .take-icon.check-circle.best {
+            color: #3b82f6;
+        }
+
+        .take-icon.check-circle:not(.best) {
+            color: #cbd5e1;
+        }
+
+        .take-icon.check-circle:not(.best):hover {
+            color: #94a3b8;
+        }
+
+        .take-icon.check-circle .material-symbols-outlined {
+            font-size: 20px;
+        }
+
         .take-icons {
             display: flex;
             gap: 4px;
@@ -2943,88 +3021,98 @@
             let allTakesHtml = '';
             let takeCounter = 0;
 
-            // Iterate through all chunks and collect all takes
+            // Iterate through all chunks
             chunks.forEach((chunk) => {
                 const audioKey = `${fileIndex}_${chunk.id}`;
                 const audioList = chunkAudio[audioKey] || [];
+                const chunkPreview = chunk.text.substring(0, 48) + (chunk.text.length > 48 ? '...' : '');
+                const chunkPreviewId = `chunk_preview_${fileIndex}_${chunk.id}`;
 
-                if (audioList.length > 0) {
-                    // Sort by timestamp (earliest first)
-                    const sortedAudio = [...audioList].sort((a, b) =>
-                        (a.timestamp || 0) - (b.timestamp || 0)
-                    );
-
-                    // Find best take
-                    const shouldAutoSelect = sortedAudio.length === 1 && !sortedAudio[0].is_best_take;
-                    let bestTakeIndex = sortedAudio.findIndex(a => a.is_best_take);
-                    if (bestTakeIndex === -1 && shouldAutoSelect && sortedAudio[0].audio_file) {
-                        bestTakeIndex = 0;
-                        setTimeout(() => setChunkBestTake(fileIndex, chunk.id, fileName, sortedAudio[0].audio_file), 100);
-                    }
-
-                    const bestTake = bestTakeIndex >= 0 ? sortedAudio[bestTakeIndex] : null;
-                    const otherTakes = sortedAudio.filter((_, idx) => idx !== bestTakeIndex);
-
-                    // Render best take (non-indented)
-                    if (bestTake) {
-                        const takeId = `take_${fileIndex}_${chunk.id}_${takeCounter++}`;
-                        const text = bestTake.original_text || chunk.text;
-                        const takePreview = text.substring(0, 48) + (text.length > 48 ? '...' : '');
-
-                        allTakesHtml += `
-                            <div class="audio-item best-take"
-                                 data-take-file-index="${fileIndex}"
-                                 data-take-chunk-id="${chunk.id}">
-                                <div class="take-header"
-                                     onclick="highlightTake(${fileIndex}, ${chunk.id}, true)"
-                                     onmouseenter="highlightTake(${fileIndex}, ${chunk.id})"
-                                     onmouseleave="unhighlightTake(${fileIndex}, ${chunk.id})">
-                                    <span class="take-preview">${takePreview}</span>
-                                    <div class="take-icons">
-                                        <button class="take-icon settings" data-settings-for="${takeId}" onclick="event.stopPropagation(); toggleTakeSettings('${takeId}')" title="Settings">
-                                            <span class="material-symbols-outlined">settings</span>
-                                        </button>
-                                        <button class="take-icon play" onclick="event.stopPropagation(); playTakeAudio('${bestTake.audio_url}')" title="Play">
-                                            <span class="material-symbols-outlined">play_arrow</span>
-                                        </button>
-                                        <button class="take-icon delete" onclick='event.stopPropagation(); deleteChunkTake(${fileIndex}, ${chunk.id}, "${fileName}", "${bestTake.audio_file}")' title="Delete">
-                                            <span class="material-symbols-outlined">delete</span>
-                                        </button>
-                                    </div>
-                                </div>
-                                <div class="take-settings" id="settings_${takeId}">
-                                    <div class="setting-row">
-                                        <span class="setting-label">Voice</span>
-                                        <span class="setting-value">${bestTake.voice_sample || 'Default'}</span>
-                                    </div>
-                                    <div class="setting-row">
-                                        <span class="setting-label">Exaggeration</span>
-                                        <span class="setting-value">${bestTake.exaggeration}</span>
-                                    </div>
-                                    <div class="setting-row">
-                                        <span class="setting-label">CFG Weight</span>
-                                        <span class="setting-value">${bestTake.cfg_weight}</span>
-                                    </div>
-                                </div>
-                                <audio><source src="http://localhost:5000${bestTake.audio_url}" type="audio/wav"></audio>
+                // Render chunk preview with tune/add icons (always visible)
+                allTakesHtml += `
+                    <div class="chunk-preview-item"
+                         data-file-index="${fileIndex}"
+                         data-chunk-id="${chunk.id}">
+                        <div class="chunk-preview-header"
+                             onclick="highlightTake(${fileIndex}, ${chunk.id}, true)"
+                             onmouseenter="highlightTake(${fileIndex}, ${chunk.id})"
+                             onmouseleave="unhighlightTake(${fileIndex}, ${chunk.id})">
+                            <span class="chunk-preview-text">${chunkPreview}</span>
+                            <div class="chunk-preview-icons">
+                                <button class="chunk-icon tune" onclick="event.stopPropagation(); selectChunk(${fileIndex}, ${chunk.id}); setTimeout(() => toggleTakeSettings('${chunkPreviewId}_settings'), 100)" title="Tune settings">
+                                    <span class="material-symbols-outlined">tune</span>
+                                </button>
+                                <button class="chunk-icon add" onclick="event.stopPropagation(); selectChunk(${fileIndex}, ${chunk.id}); setTimeout(() => generateChunkAudio(${fileIndex}, ${chunk.id}), 100)" title="Generate take">
+                                    <span class="material-symbols-outlined">add</span>
+                                </button>
                             </div>
-                        `;
+                        </div>
+                        <div class="take-settings" id="${chunkPreviewId}_settings">
+                            <div class="setting-row">
+                                <span class="setting-label">Voice</span>
+                                <div class="setting-control">
+                                    <select id="voice_chunk_${fileIndex}_${chunk.id}">
+                                        ${voiceSamples.map(s => `<option value="${s.name}" ${projectDefaults.voice_sample === s.name ? 'selected' : ''}>${s.name}</option>`).join('')}
+                                    </select>
+                                </div>
+                            </div>
+                            <div class="setting-row">
+                                <span class="setting-label">Exaggeration</span>
+                                <div class="setting-control">
+                                    <input type="range" id="exaggeration_chunk_${fileIndex}_${chunk.id}" min="0" max="1" step="0.1" value="${projectDefaults.exaggeration}"
+                                           oninput="document.getElementById('exag_val_${chunkPreviewId}').textContent = this.value">
+                                    <span class="setting-value" id="exag_val_${chunkPreviewId}">${projectDefaults.exaggeration}</span>
+                                </div>
+                            </div>
+                            <div class="setting-row">
+                                <span class="setting-label">CFG Weight</span>
+                                <div class="setting-control">
+                                    <input type="range" id="cfg_weight_chunk_${fileIndex}_${chunk.id}" min="0" max="1" step="0.1" value="${projectDefaults.cfg_weight}"
+                                           oninput="document.getElementById('cfg_val_${chunkPreviewId}').textContent = this.value">
+                                    <span class="setting-value" id="cfg_val_${chunkPreviewId}">${projectDefaults.cfg_weight}</span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                `;
+
+                // Render takes for this chunk
+                if (audioList.length > 0) {
+                    // Find best take and sort so best is first
+                    const shouldAutoSelect = audioList.length === 1 && !audioList[0].is_best_take;
+                    let bestTakeIndex = audioList.findIndex(a => a.is_best_take);
+                    if (bestTakeIndex === -1 && shouldAutoSelect && audioList[0].audio_file) {
+                        bestTakeIndex = 0;
+                        setTimeout(() => setChunkBestTake(fileIndex, chunk.id, fileName, audioList[0].audio_file), 100);
                     }
 
-                    // Render other takes (indented)
-                    otherTakes.forEach((item, idx) => {
+                    // Sort takes: best take first, then by timestamp
+                    const sortedAudio = [...audioList].sort((a, b) => {
+                        if (a.is_best_take && !b.is_best_take) return -1;
+                        if (!a.is_best_take && b.is_best_take) return 1;
+                        return (a.timestamp || 0) - (b.timestamp || 0);
+                    });
+
+                    // Render all takes
+                    sortedAudio.forEach((item, idx) => {
                         const takeId = `take_${fileIndex}_${chunk.id}_${takeCounter++}`;
                         const text = item.original_text || chunk.text;
                         const takePreview = text.substring(0, 48) + (text.length > 48 ? '...' : '');
+                        const isBest = item.is_best_take;
 
                         allTakesHtml += `
-                            <div class="audio-item indented non-best-take"
+                            <div class="audio-item indented ${isBest ? 'best-take' : 'non-best-take'}"
                                  data-take-file-index="${fileIndex}"
                                  data-take-chunk-id="${chunk.id}">
                                 <div class="take-header"
                                      onclick="highlightTake(${fileIndex}, ${chunk.id}, true)"
                                      onmouseenter="highlightTake(${fileIndex}, ${chunk.id})"
                                      onmouseleave="unhighlightTake(${fileIndex}, ${chunk.id})">
+                                    <button class="take-icon check-circle ${isBest ? 'best' : ''}"
+                                            onclick='event.stopPropagation(); setChunkBestTake(${fileIndex}, ${chunk.id}, "${fileName}", "${item.audio_file}")'
+                                            title="${isBest ? 'Best take' : 'Set as best take'}">
+                                        <span class="material-symbols-outlined">${isBest ? 'check_circle' : 'radio_button_unchecked'}</span>
+                                    </button>
                                     <span class="take-preview">${takePreview}</span>
                                     <div class="take-icons">
                                         <button class="take-icon settings" data-settings-for="${takeId}" onclick="event.stopPropagation(); toggleTakeSettings('${takeId}')" title="Settings">
@@ -3056,57 +3144,6 @@
                             </div>
                         `;
                     });
-                } else {
-                    // Placeholder for chunks with no takes
-                    const takeId = `take_${fileIndex}_${chunk.id}_placeholder`;
-                    const chunkPreview = chunk.text.substring(0, 48) + (chunk.text.length > 48 ? '...' : '');
-
-                    allTakesHtml += `
-                        <div class="audio-item placeholder"
-                             data-take-file-index="${fileIndex}"
-                             data-take-chunk-id="${chunk.id}">
-                            <div class="take-header"
-                                 onclick="highlightTake(${fileIndex}, ${chunk.id}, true)"
-                                 onmouseenter="highlightTake(${fileIndex}, ${chunk.id})"
-                                 onmouseleave="unhighlightTake(${fileIndex}, ${chunk.id})">
-                                <span class="take-preview">${chunkPreview}</span>
-                                <div class="take-icons">
-                                    <button class="take-icon settings" data-settings-for="${takeId}" onclick="event.stopPropagation(); toggleTakeSettings('${takeId}')" title="Settings">
-                                        <span class="material-symbols-outlined">settings</span>
-                                    </button>
-                                    <button class="take-icon" onclick="event.stopPropagation(); selectChunk(${fileIndex}, ${chunk.id}); setTimeout(() => generateChunkAudio(${fileIndex}, ${chunk.id}), 100)" title="Generate">
-                                        <span class="material-symbols-outlined">auto_awesome</span>
-                                    </button>
-                                </div>
-                            </div>
-                            <div class="take-settings" id="settings_${takeId}">
-                                <div class="setting-row">
-                                    <span class="setting-label">Voice</span>
-                                    <div class="setting-control">
-                                        <select id="voice_chunk_${fileIndex}_${chunk.id}">
-                                            ${voiceSamples.map(s => `<option value="${s.name}" ${projectDefaults.voice_sample === s.name ? 'selected' : ''}>${s.name}</option>`).join('')}
-                                        </select>
-                                    </div>
-                                </div>
-                                <div class="setting-row">
-                                    <span class="setting-label">Exaggeration</span>
-                                    <div class="setting-control">
-                                        <input type="range" id="exaggeration_chunk_${fileIndex}_${chunk.id}" min="0" max="1" step="0.1" value="${projectDefaults.exaggeration}"
-                                               oninput="document.getElementById('exag_val_${takeId}').textContent = this.value">
-                                        <span class="setting-value" id="exag_val_${takeId}">${projectDefaults.exaggeration}</span>
-                                    </div>
-                                </div>
-                                <div class="setting-row">
-                                    <span class="setting-label">CFG Weight</span>
-                                    <div class="setting-control">
-                                        <input type="range" id="cfg_weight_chunk_${fileIndex}_${chunk.id}" min="0" max="1" step="0.1" value="${projectDefaults.cfg_weight}"
-                                               oninput="document.getElementById('cfg_val_${takeId}').textContent = this.value">
-                                        <span class="setting-value" id="cfg_val_${takeId}">${projectDefaults.cfg_weight}</span>
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
-                    `;
                 }
             });
 
@@ -3242,15 +3279,17 @@
                     chunkAudio[chunkKey] = chunk.generated_audios;
                 }
 
+                // Remove generation placeholder
+                removeGenerationPlaceholder(fileIndex, chunkId);
+
                 // Update chunk bubbles
                 renderChunkBubbles(fileIndex);
 
-                // Re-render details if this chunk is selected
-                if (selectedChunks[fileIndex] === chunkId) {
-                    renderChunkDetails(fileIndex, chunkId);
-                }
+                // Re-render details (shows all chunks)
+                renderChunkDetails(fileIndex, chunkId);
             } catch (error) {
                 delete activeGenerations[chunkKey];
+                removeGenerationPlaceholder(fileIndex, chunkId);
                 hideProgressBar();
                 console.error('Error generating chunk audio:', error);
                 showStatus(`Failed: ${error.message}`, 'error');
@@ -3702,18 +3741,20 @@
                     chunk.generated_audios = saveData.chunk.generated_audios;
                     chunkAudio[chunkKey] = chunk.generated_audios;
 
+                    // Remove generation placeholder
+                    removeGenerationPlaceholder(fileIndex, chunk.id);
+
                     // Update chunk bubbles
                     renderChunkBubbles(fileIndex);
 
-                    // Re-render details if this chunk is selected
-                    if (selectedChunks[fileIndex] === chunk.id) {
-                        renderChunkDetails(fileIndex, chunk.id);
-                    }
+                    // Re-render details (shows all chunks)
+                    renderChunkDetails(fileIndex, chunk.id);
 
                     showStatus(`Completed ${i + 1}/${chunks.length} chunks`, 'info');
                 } catch (error) {
                     const chunkKey = `${fileIndex}_${chunk.id}`;
                     delete activeGenerations[chunkKey];
+                    removeGenerationPlaceholder(fileIndex, chunk.id);
                     console.error(`Error generating chunk ${chunk.id}:`, error);
                     showStatus(`Failed on chunk ${i + 1}: ${error.message}. Stopping batch generation.`, 'error');
 
@@ -3815,24 +3856,50 @@
 
         // Show generation placeholder
         function showGenerationPlaceholder(fileIndex, chunkId) {
-            const listContainer = document.getElementById(`chunkAudioList_${fileIndex}_${chunkId}`);
-            if (!listContainer) return;
+            // Find the chunk preview element
+            const allTakesList = document.getElementById(`allTakesList_${fileIndex}`);
+            if (!allTakesList) return;
 
-            const placeholder = `
-                <div class="audio-item" id="generation_placeholder_${fileIndex}_${chunkId}" style="background: #fff3cd; border: 2px dashed #ffc107;">
-                    <div class="audio-item-header">
-                        <div class="audio-item-title">⏳ Generating...</div>
-                    </div>
-                    <div id="generation_progress_${fileIndex}_${chunkId}" style="padding: 10px; font-size: 13px; color: #666;">
+            const chunkPreview = allTakesList.querySelector(`[data-chunk-id="${chunkId}"].chunk-preview-item`);
+            if (!chunkPreview) return;
+
+            // Remove any existing placeholder for this chunk
+            const existingPlaceholder = document.getElementById(`generation_placeholder_${fileIndex}_${chunkId}`);
+            if (existingPlaceholder) {
+                existingPlaceholder.remove();
+            }
+
+            const placeholder = document.createElement('div');
+            placeholder.id = `generation_placeholder_${fileIndex}_${chunkId}`;
+            placeholder.className = 'audio-item indented generating';
+            placeholder.setAttribute('data-take-file-index', fileIndex);
+            placeholder.setAttribute('data-take-chunk-id', chunkId);
+            placeholder.innerHTML = `
+                <div class="take-header">
+                    <span class="material-symbols-outlined" style="color: #8b5cf6; margin-right: 4px; font-size: 20px;">hourglass_empty</span>
+                    <span class="take-preview" style="font-style: italic;">Generating take...</span>
+                </div>
+                <div style="padding: 0 16px 12px 48px;">
+                    <div id="generation_progress_${fileIndex}_${chunkId}" style="font-size: 12px; color: #64748b; margin-bottom: 6px;">
                         Estimating time...
                     </div>
-                    <div style="width: 100%; background: #e0e0e0; border-radius: 4px; height: 8px; overflow: hidden;">
-                        <div id="generation_progress_bar_${fileIndex}_${chunkId}" style="width: 0%; background: linear-gradient(90deg, #667eea, #764ba2); height: 100%; transition: width 0.3s;"></div>
+                    <div style="width: 100%; background: rgba(139, 92, 246, 0.1); border-radius: 4px; height: 6px; overflow: hidden;">
+                        <div id="generation_progress_bar_${fileIndex}_${chunkId}"
+                             style="width: 0%; background: linear-gradient(90deg, #8b5cf6, #a78bfa); height: 100%; transition: width 0.3s;"></div>
                     </div>
                 </div>
             `;
 
-            listContainer.innerHTML = placeholder + listContainer.innerHTML;
+            // Insert the placeholder right after the chunk preview
+            chunkPreview.insertAdjacentElement('afterend', placeholder);
+        }
+
+        // Remove generation placeholder
+        function removeGenerationPlaceholder(fileIndex, chunkId) {
+            const placeholder = document.getElementById(`generation_placeholder_${fileIndex}_${chunkId}`);
+            if (placeholder) {
+                placeholder.remove();
+            }
         }
 
         // Update generation placeholder with progress
