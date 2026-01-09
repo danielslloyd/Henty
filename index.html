@@ -1177,13 +1177,52 @@
 
         <!-- Text Upload Section -->
         <div class="text-upload-section">
-            <h4 style="font-size: 14px; color: #333; margin-bottom: 12px;">Add Text Files</h4>
-            <div style="display: flex; gap: 10px; align-items: center;">
-                <input type="text" id="folderPath" placeholder="No files selected" readonly style="flex: 1; padding: 10px; border: 2px solid #e0e0e0; border-radius: 8px; font-size: 14px;">
-                <button class="btn btn-primary" id="browseFolderBtn">Browse</button>
+            <h4 style="font-size: 14px; color: #333; margin-bottom: 12px;">Add Content to Project</h4>
+
+            <!-- Tab selector -->
+            <div style="display: flex; gap: 10px; margin-bottom: 15px; border-bottom: 2px solid #e0e0e0;">
+                <button id="tabTextFile" class="tab-btn active" onclick="switchTab('textFile')" style="padding: 8px 16px; border: none; background: none; cursor: pointer; border-bottom: 3px solid #667eea; font-weight: 600;">
+                    📄 Upload File
+                </button>
+                <button id="tabGutenberg" class="tab-btn" onclick="switchTab('gutenberg')" style="padding: 8px 16px; border: none; background: none; cursor: pointer; border-bottom: 3px solid transparent; font-weight: 600;">
+                    📚 Gutenberg URL
+                </button>
+                <button id="tabCommonFiles" class="tab-btn" onclick="switchTab('commonFiles')" style="padding: 8px 16px; border: none; background: none; cursor: pointer; border-bottom: 3px solid transparent; font-weight: 600;">
+                    🎵 Common Files
+                </button>
             </div>
-            <input type="file" id="folderInput" accept=".txt" multiple>
-            <p style="font-size: 11px; color: #888; margin-top: 8px;">Select one or more .txt files to add to your project. Files will appear above this section.</p>
+
+            <!-- Text File Upload Tab -->
+            <div id="contentTextFile" class="tab-content">
+                <div style="display: flex; gap: 10px; align-items: center;">
+                    <input type="text" id="folderPath" placeholder="No files selected" readonly style="flex: 1; padding: 10px; border: 2px solid #e0e0e0; border-radius: 8px; font-size: 14px;">
+                    <button class="btn btn-primary" id="browseFolderBtn">Browse</button>
+                </div>
+                <input type="file" id="folderInput" accept=".txt" multiple>
+                <p style="font-size: 11px; color: #888; margin-top: 8px;">Select one or more .txt files. Chapter detection will automatically detect chapters in your text.</p>
+            </div>
+
+            <!-- Gutenberg URL Tab -->
+            <div id="contentGutenberg" class="tab-content" style="display: none;">
+                <div style="display: flex; gap: 10px; align-items: center;">
+                    <input type="text" id="gutenbergUrl" placeholder="Enter Project Gutenberg URL (e.g., https://www.gutenberg.org/files/84/84-0.txt)" style="flex: 1; padding: 10px; border: 2px solid #e0e0e0; border-radius: 8px; font-size: 14px;">
+                    <button class="btn btn-primary" onclick="addGutenbergUrl()">Add</button>
+                </div>
+                <p style="font-size: 11px; color: #888; margin-top: 8px;">📚 Enter a Project Gutenberg .txt URL. Chapters will be automatically detected and added to your project.</p>
+            </div>
+
+            <!-- Common Files Tab -->
+            <div id="contentCommonFiles" class="tab-content" style="display: none;">
+                <div style="display: flex; gap: 10px; align-items: center; margin-bottom: 10px;">
+                    <input type="file" id="commonFileInput" accept="audio/*" style="flex: 1;">
+                    <button class="btn btn-primary" onclick="uploadCommonFile()">Upload</button>
+                    <button class="btn btn-secondary" onclick="refreshCommonFiles()">Refresh</button>
+                </div>
+                <div id="commonFilesList" style="max-height: 300px; overflow-y: auto; background: #f9f9f9; border: 2px solid #e0e0e0; border-radius: 8px; padding: 15px;">
+                    <p style="color: #999; font-size: 13px; text-align: center;">Loading common files...</p>
+                </div>
+                <p style="font-size: 11px; color: #888; margin-top: 8px;">🎵 Upload shared audio files (intros, outros, etc.) that can be inserted into any chapter.</p>
+            </div>
         </div>
     </div>
 
@@ -1572,7 +1611,10 @@
                     throw new Error(data.error || 'Failed to load text files');
                 }
 
+                // Support both chapters (new) and text_files (old)
+                const chapters = data.chapters || [];
                 const textFiles = data.text_files || [];
+                const hasChapters = data.has_chapters || chapters.length > 0;
 
                 // Clear current state
                 currentFiles = [];
@@ -1580,20 +1622,30 @@
                 chunkAudio = {};
                 filesContainer.innerHTML = '';
 
-                if (textFiles.length === 0) {
+                if (chapters.length === 0 && textFiles.length === 0) {
                     filesContainer.innerHTML = `
                         <div class="empty-state">
-                            <h2>No Files Added</h2>
-                            <p>Click "Browse" to add a .txt file to the project</p>
+                            <h2>No Content Added</h2>
+                            <p>Add a text file or Project Gutenberg URL to get started</p>
                         </div>
                     `;
                     return;
                 }
 
-                // Render each text file
-                for (let i = 0; i < textFiles.length; i++) {
-                    const textFile = textFiles[i];
-                    await renderProjectTextFile(i, textFile);
+                // Render chapters if available (new format)
+                if (hasChapters) {
+                    for (let i = 0; i < chapters.length; i++) {
+                        const chapter = chapters[i];
+                        await renderProjectChapter(i, chapter);
+                    }
+                }
+
+                // Render text files (old format, for backwards compatibility)
+                if (textFiles.length > 0 && !hasChapters) {
+                    for (let i = 0; i < textFiles.length; i++) {
+                        const textFile = textFiles[i];
+                        await renderProjectTextFile(i, textFile);
+                    }
                 }
 
             } catch (error) {
@@ -1890,6 +1942,118 @@
 
             filesContainer.appendChild(bubble);
             renderChunkBubbles(index);
+        }
+
+        // Render a chapter from the project (new format)
+        async function renderProjectChapter(index, chapter) {
+            const chapterTitle = chapter.title || `Chapter ${index + 1}`;
+            const chunks = chapter.chunks || [];
+
+            // Store chapter info in currentFiles array
+            currentFiles[index] = {
+                name: chapterTitle,
+                textFileId: chapter.id,  // Use chapter ID
+                isChapter: true
+            };
+
+            // Store chunks in our state
+            fileChunks[index] = chunks;
+
+            // Initialize chunk audio storage and dirty flags
+            for (const chunk of chunks) {
+                const chunkKey = `${index}_${chunk.id}`;
+                // Load generated audios from chunk data
+                chunkAudio[chunkKey] = chunk.generated_audios || [];
+                chunkOriginalTexts[chunkKey] = chunk.text;
+            }
+
+            const bubble = document.createElement('div');
+            bubble.className = 'file-bubble';
+            bubble.id = `bubble_${index}`;
+            bubble.dataset.chapterId = chapter.id; // Store chapter ID for API calls
+            bubble.dataset.textFileId = chapter.id; // Also store as textFileId for backwards compat
+
+            const sourceInfo = chapter.source === 'gutenberg' ?
+                `<span style="font-size: 10px; color: #4caf50; margin-left: 10px;">📚 From Project Gutenberg</span>` : '';
+
+            bubble.innerHTML = `
+                <div class="file-header">
+                    <div class="file-title" onclick="toggleExpand(${index})" style="flex: 1; cursor: pointer;">
+                        📖 ${chapterTitle} <span style="font-size: 11px; color: #999;">(${chunks.length} chunks)</span>${sourceInfo}
+                    </div>
+                    <div style="display: flex; gap: 8px; align-items: center;">
+                        <button class="btn" onclick="event.stopPropagation(); generateAllChapterChunks(${index}, '${chapter.id}')"
+                                style="padding: 6px 12px; font-size: 11px; background: #ff9800; color: white;">
+                            Generate All
+                        </button>
+                        <button class="btn btn-primary" onclick="event.stopPropagation(); stitchAllAudio(${index})"
+                                style="padding: 6px 12px; font-size: 11px;">
+                            Stitch Best Takes
+                        </button>
+                        <div class="expand-icon" onclick="toggleExpand(${index})" style="cursor: pointer;">▼</div>
+                    </div>
+                </div>
+
+                <div class="file-expanded-content">
+                    <div class="chunked-layout">
+                        <!-- Left pane: Chunk bubbles -->
+                        <div class="chunks-pane">
+                            <div style="display: flex; justify-content: space-between; align-items: center; position: sticky; top: 0; background: white; padding: 10px 0; margin: 0 0 15px 0; border-bottom: 2px solid #e0e0e0; z-index: 10;">
+                                <h3 style="margin: 0; color: #333;">Chunks (${chunks.length})</h3>
+                                <button class="btn btn-small" onclick="event.stopPropagation(); showCommonFilesModal(${index})"
+                                        style="padding: 4px 8px; font-size: 10px; background: #2196f3; color: white;">
+                                    + Common File
+                                </button>
+                            </div>
+                            <div id="chunksList_${index}">
+                                <!-- Populated by renderChunkBubbles -->
+                            </div>
+                        </div>
+
+                        <!-- Right pane: Selected chunk details -->
+                        <div class="chunk-details-pane">
+                            <div id="chunkDetails_${index}">
+                                <div class="no-chunk-selected">
+                                    Select a chunk to view details and generate audio
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            `;
+
+            filesContainer.appendChild(bubble);
+            renderChunkBubbles(index);
+        }
+
+        // Generate all chunks for a chapter using the new API endpoint
+        async function generateAllChapterChunks(fileIndex, chapterId) {
+            try {
+                showStatus('Generating audio for all chunks in chapter...', 'info');
+
+                const response = await fetch(`${API_URL}/project/chapter/generate-all`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        chapter_id: chapterId
+                    })
+                });
+
+                const data = await response.json();
+
+                if (!response.ok) {
+                    throw new Error(data.error || 'Failed to generate chapter audio');
+                }
+
+                showStatus(`Generated audio for ${data.generated} chunks (${data.errors} errors)`, 'success');
+
+                // Reload the project to get updated chunks with audio
+                await loadProjectTextFiles();
+
+            } catch (error) {
+                console.error('Error generating chapter audio:', error);
+                showStatus(`Failed to generate chapter audio: ${error.message}`, 'error');
+            }
         }
 
         // Render simple (short) file with original layout
@@ -3678,6 +3842,277 @@
                 closeGutenbergDialog();
             }
         });
+
+        // ===== NEW FUNCTIONS FOR CHAPTERS, GUTENBERG, AND COMMON FILES =====
+
+        // Tab switching function
+        window.switchTab = function(tabName) {
+            // Hide all tab contents
+            document.querySelectorAll('.tab-content').forEach(el => el.style.display = 'none');
+
+            // Remove active class from all tabs
+            document.querySelectorAll('.tab-btn').forEach(el => {
+                el.style.borderBottom = '3px solid transparent';
+                el.classList.remove('active');
+            });
+
+            // Show selected tab content
+            const contentId = 'content' + tabName.charAt(0).toUpperCase() + tabName.slice(1);
+            const tabId = 'tab' + tabName.charAt(0).toUpperCase() + tabName.slice(1);
+            document.getElementById(contentId).style.display = 'block';
+            const tabBtn = document.getElementById(tabId);
+            tabBtn.style.borderBottom = '3px solid #667eea';
+            tabBtn.classList.add('active');
+
+            // Load common files when switching to that tab
+            if (tabName === 'commonFiles') {
+                refreshCommonFiles();
+            }
+        };
+
+        // Add Gutenberg URL to project
+        window.addGutenbergUrl = async function() {
+            const url = document.getElementById('gutenbergUrl').value.trim();
+
+            if (!url) {
+                showStatus('Please enter a Gutenberg URL', 'error');
+                return;
+            }
+
+            try {
+                showStatus('Processing Gutenberg URL...', 'info');
+
+                const response = await fetch(`${API_URL}/project/add-gutenberg-url`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ url })
+                });
+
+                const data = await response.json();
+
+                if (!response.ok) {
+                    throw new Error(data.error || 'Failed to add Gutenberg URL');
+                }
+
+                showStatus(`Added "${data.title}" with ${data.chapter_count} chapter(s)!`, 'success');
+
+                // Clear input
+                document.getElementById('gutenbergUrl').value = '';
+
+                // Reload project files/chapters
+                await loadProjectTextFiles();
+
+            } catch (error) {
+                console.error('Error adding Gutenberg URL:', error);
+                showStatus(`Failed: ${error.message}`, 'error');
+            }
+        };
+
+        // Upload common file
+        window.uploadCommonFile = async function() {
+            const fileInput = document.getElementById('commonFileInput');
+            const file = fileInput.files[0];
+
+            if (!file) {
+                showStatus('Please select a file to upload', 'error');
+                return;
+            }
+
+            try {
+                showStatus('Uploading common file...', 'info');
+
+                const formData = new FormData();
+                formData.append('file', file);
+                formData.append('filename', file.name);
+
+                const response = await fetch(`${API_URL}/common-files/upload`, {
+                    method: 'POST',
+                    body: formData
+                });
+
+                const data = await response.json();
+
+                if (!response.ok) {
+                    throw new Error(data.error || 'Failed to upload file');
+                }
+
+                showStatus(`Uploaded "${data.filename}" (${(data.duration_sec || 0).toFixed(1)}s)`, 'success');
+
+                // Clear input
+                fileInput.value = '';
+
+                // Refresh list
+                await refreshCommonFiles();
+
+            } catch (error) {
+                console.error('Error uploading common file:', error);
+                showStatus(`Failed: ${error.message}`, 'error');
+            }
+        };
+
+        // Refresh common files list
+        window.refreshCommonFiles = async function() {
+            try {
+                const response = await fetch(`${API_URL}/common-files`);
+                const data = await response.json();
+
+                const listContainer = document.getElementById('commonFilesList');
+
+                if (!response.ok) {
+                    throw new Error(data.error || 'Failed to load common files');
+                }
+
+                const commonFiles = data.common_files || [];
+
+                if (commonFiles.length === 0) {
+                    listContainer.innerHTML = '<p style="color: #999; font-size: 13px; text-align: center;">No common files yet. Upload audio files to get started!</p>';
+                    return;
+                }
+
+                listContainer.innerHTML = commonFiles.map(file => `
+                    <div style="display: flex; align-items: center; gap: 10px; padding: 10px; background: white; border-radius: 6px; margin-bottom: 8px;">
+                        <div style="flex: 1;">
+                            <div style="font-size: 13px; color: #333; font-weight: 600;">${file.filename}</div>
+                            <div style="font-size: 11px; color: #666;">
+                                Duration: ${file.duration_sec.toFixed(1)}s | Size: ${(file.file_size_bytes / 1024).toFixed(1)} KB
+                            </div>
+                        </div>
+                        <button class="btn btn-small" onclick="playCommonFile('${file.filename}')"
+                                style="padding: 4px 8px; font-size: 10px; background: #4caf50; color: white;">
+                            ▶ Play
+                        </button>
+                    </div>
+                `).join('');
+
+            } catch (error) {
+                console.error('Error loading common files:', error);
+                document.getElementById('commonFilesList').innerHTML = `
+                    <p style="color: #f44336; font-size: 13px; text-align: center;">Error loading common files: ${error.message}</p>
+                `;
+            }
+        };
+
+        // Play common file preview
+        window.playCommonFile = function(filename) {
+            const audio = new Audio(`${API_URL}/common-files/${filename}`);
+            audio.play().catch(err => {
+                console.error('Error playing audio:', err);
+                showStatus('Failed to play audio', 'error');
+            });
+        };
+
+        // Show common files modal for insertion
+        window.showCommonFilesModal = async function(fileIndex) {
+            // Create a modal to select common files and insert them
+            const modal = document.createElement('div');
+            modal.className = 'modal show';
+            modal.id = 'commonFilesInsertModal';
+            modal.style.zIndex = '10000';
+
+            try {
+                const response = await fetch(`${API_URL}/common-files`);
+                const data = await response.json();
+                const commonFiles = data.common_files || [];
+
+                if (commonFiles.length === 0) {
+                    showStatus('No common files available. Upload some first!', 'error');
+                    return;
+                }
+
+                modal.innerHTML = `
+                    <div class="modal-content" style="max-width: 600px;">
+                        <div class="modal-header">Insert Common File</div>
+                        <div class="modal-body">
+                            <p style="font-size: 13px; color: #666; margin-bottom: 15px;">
+                                Select a common file to insert into this chapter. It will be added as a new chunk.
+                            </p>
+                            <div id="commonFilesSelectList" style="max-height: 400px; overflow-y: auto;">
+                                ${commonFiles.map(file => `
+                                    <div class="common-file-item" data-filename="${file.filename}"
+                                         style="padding: 12px; background: #f9f9f9; border: 2px solid #e0e0e0; border-radius: 8px; margin-bottom: 10px; cursor: pointer; transition: all 0.2s;"
+                                         onmouseover="this.style.borderColor='#667eea'; this.style.background='#f0f0ff';"
+                                         onmouseout="this.style.borderColor='#e0e0e0'; this.style.background='#f9f9f9';"
+                                         onclick="selectCommonFileForInsert('${file.filename}', ${fileIndex}, this)">
+                                        <div style="font-size: 14px; font-weight: 600; color: #333; margin-bottom: 4px;">
+                                            🎵 ${file.filename}
+                                        </div>
+                                        <div style="font-size: 12px; color: #666;">
+                                            Duration: ${file.duration_sec.toFixed(1)}s | Size: ${(file.file_size_bytes / 1024).toFixed(1)} KB
+                                        </div>
+                                    </div>
+                                `).join('')}
+                            </div>
+                        </div>
+                        <div class="modal-footer">
+                            <button class="btn btn-secondary" onclick="closeCommonFilesModal()">Cancel</button>
+                        </div>
+                    </div>
+                `;
+
+                document.body.appendChild(modal);
+
+            } catch (error) {
+                console.error('Error showing common files modal:', error);
+                showStatus(`Failed to load common files: ${error.message}`, 'error');
+            }
+        };
+
+        // Select common file for insertion
+        window.selectCommonFileForInsert = async function(filename, fileIndex, element) {
+            try {
+                // Get the chapter/text file ID
+                const bubble = document.getElementById(`bubble_${fileIndex}`);
+                const chapterId = bubble ? (bubble.dataset.chapterId || bubble.dataset.textFileId) : null;
+
+                if (!chapterId) {
+                    showStatus('Error: Could not identify chapter', 'error');
+                    return;
+                }
+
+                // Get the currently selected chunk (to insert after it)
+                const selectedChunkId = selectedChunks[fileIndex] !== undefined ? selectedChunks[fileIndex] : -1;
+
+                showStatus('Inserting common file...', 'info');
+
+                // Insert the common file chunk
+                const response = await fetch(`${API_URL}/project/insert-chunk`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        chapter_id: chapterId,
+                        insert_after_id: selectedChunkId,
+                        type: 'common_file',
+                        common_file_path: filename
+                    })
+                });
+
+                const data = await response.json();
+
+                if (!response.ok) {
+                    throw new Error(data.error || 'Failed to insert common file');
+                }
+
+                showStatus(`Inserted "${filename}" successfully!`, 'success');
+
+                // Close modal
+                closeCommonFilesModal();
+
+                // Reload project to show updated chunks
+                await loadProjectTextFiles();
+
+            } catch (error) {
+                console.error('Error inserting common file:', error);
+                showStatus(`Failed: ${error.message}`, 'error');
+            }
+        };
+
+        // Close common files modal
+        window.closeCommonFilesModal = function() {
+            const modal = document.getElementById('commonFilesInsertModal');
+            if (modal) {
+                modal.remove();
+            }
+        };
 
         // Initialize
         (async function init() {

@@ -2528,6 +2528,258 @@ def process_gutenberg():
         print(traceback.format_exc())
         return jsonify({'error': str(e)}), 500
 
+@app.route('/api/project/add-gutenberg-url', methods=['POST'])
+@auth_manager.require_api_key
+def add_gutenberg_url_to_project():
+    """Add Project Gutenberg content directly to current project with XML chapter structure"""
+    try:
+        import json
+        from datetime import datetime
+        import uuid
+
+        if converter.current_project_path is None:
+            return jsonify({'error': 'No project loaded'}), 400
+
+        data = request.json
+        url = data.get('url')
+
+        if not url:
+            return jsonify({'error': 'url is required'}), 400
+
+        if 'gutenberg.org' not in url.lower():
+            return jsonify({'error': f'URL does not appear to be from Project Gutenberg: {url}'}), 400
+
+        print(f"\n=== Adding Gutenberg URL to project: {url} ===")
+
+        # Use GutenbergProcessor to download and process the text
+        processor = GutenbergProcessor(output_dir=converter.current_project_path)
+
+        # Download text
+        print(f"Downloading text from {url}...")
+        text = processor.download_text(url)
+
+        # Extract title
+        title = processor.extract_title(text)
+        if not title:
+            title = processor.extract_book_name(url)
+        print(f"Extracted title: {title}")
+
+        # Strip Gutenberg metadata
+        text = processor.strip_gutenberg_metadata(text, title)
+
+        # Process carriage returns
+        text = processor.process_carriage_returns(text)
+
+        print(f"Processed text length: {len(text)} characters")
+
+        # Detect chapters in the processed text
+        detected_chapters = converter.detect_chapters(text)
+        print(f"Detected {len(detected_chapters)} chapter(s)")
+
+        # Generate XML content
+        xml_content = converter.text_to_xml_content(text, detected_chapters)
+
+        # Initialize chapters structure if not present
+        if 'chapters' not in converter.current_project_metadata:
+            converter.current_project_metadata['chapters'] = []
+
+        # Create chapters with chunks for each detected chapter
+        new_chapters = []
+        for detected_chapter in detected_chapters:
+            # Chunk the chapter text
+            chunks = converter.smart_chunk_text(detected_chapter['text'], max_chunk_size=500)
+
+            # Add chunk structure with dirty flag and generated_audios
+            for chunk in chunks:
+                chunk['dirty'] = False
+                chunk['generated_audios'] = []
+
+            # Create chapter entry
+            chapter_entry = {
+                'id': detected_chapter['id'],
+                'title': detected_chapter['title'],
+                'order': detected_chapter['order'],
+                'chunks': chunks,
+                'audio_output': None,
+                'added_at': datetime.now().isoformat(),
+                'source': 'gutenberg',
+                'source_url': url
+            }
+
+            new_chapters.append(chapter_entry)
+            converter.current_project_metadata['chapters'].append(chapter_entry)
+
+        # Store/update XML content
+        converter.current_project_metadata['content_xml'] = xml_content
+        converter.current_project_metadata['original_filename'] = f"{title}.txt"
+        converter.current_project_metadata['last_modified'] = datetime.now().isoformat()
+        converter.current_project_metadata['version'] = '3.0'
+
+        # Save to file
+        project_file = os.path.join(converter.current_project_path, 'project.json')
+        with open(project_file, 'w', encoding='utf-8') as f:
+            json.dump(converter.current_project_metadata, f, indent=2, ensure_ascii=False)
+
+        print(f"Successfully added {len(new_chapters)} chapters from Gutenberg to project")
+
+        return jsonify({
+            'success': True,
+            'title': title,
+            'url': url,
+            'chapters': new_chapters,
+            'chapter_count': len(new_chapters),
+            'content_xml': xml_content
+        })
+
+    except Exception as e:
+        import traceback
+        print(f"Error adding Gutenberg URL to project: {str(e)}")
+        print(traceback.format_exc())
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/project/chapter/generate-all', methods=['POST'])
+@auth_manager.require_api_key
+def generate_all_chapter_chunks():
+    """Generate audio for all chunks in a specific chapter"""
+    try:
+        import json
+        import time
+
+        if converter.current_project_path is None:
+            return jsonify({'error': 'No project loaded'}), 400
+
+        data = request.json
+        chapter_id = data.get('chapter_id')
+
+        if not chapter_id:
+            return jsonify({'error': 'chapter_id is required'}), 400
+
+        # Get audio generation parameters (use project defaults if not provided)
+        language_id = data.get('language_id') or converter.current_project_metadata.get('default_audio_settings', {}).get('language_id', 'en')
+        exaggeration = data.get('exaggeration') or converter.current_project_metadata.get('default_audio_settings', {}).get('exaggeration', 0.6)
+        cfg_weight = data.get('cfg_weight') or converter.current_project_metadata.get('default_audio_settings', {}).get('cfg_weight', 0.4)
+        voice_sample = data.get('voice_sample') or converter.current_project_metadata.get('default_audio_settings', {}).get('voice_sample', 'none')
+
+        # Find the chapter
+        chapters = converter.current_project_metadata.get('chapters', [])
+        chapter = next((ch for ch in chapters if ch['id'] == chapter_id), None)
+
+        if not chapter:
+            return jsonify({'error': 'Chapter not found'}), 404
+
+        chunks = chapter.get('chunks', [])
+        if not chunks:
+            return jsonify({'error': 'No chunks found in chapter'}), 400
+
+        print(f"\n=== Generating audio for all chunks in chapter: {chapter.get('title', 'Unknown')} ===")
+        print(f"Total chunks to generate: {len(chunks)}")
+        print(f"Parameters - Language: {language_id}, Exaggeration: {exaggeration}, CFG Weight: {cfg_weight}")
+
+        # Voice sample path
+        audio_prompt_path = None
+        if voice_sample and voice_sample != 'none':
+            audio_prompt_path = os.path.join(converter.voice_samples_dir, voice_sample)
+            if not os.path.exists(audio_prompt_path):
+                print(f"Warning: Voice sample not found: {audio_prompt_path}")
+                audio_prompt_path = None
+
+        audio_dir = os.path.join(converter.current_project_path, 'audio')
+        os.makedirs(audio_dir, exist_ok=True)
+
+        generated_audio_info = []
+        success_count = 0
+        error_count = 0
+
+        # Generate audio for each text chunk (skip pause and common_file chunks)
+        for chunk in chunks:
+            chunk_type = chunk.get('type', 'text')
+
+            if chunk_type != 'text':
+                print(f"Skipping chunk {chunk['id']} (type: {chunk_type})")
+                continue
+
+            try:
+                # Strip XML tags from chunk text
+                clean_text = converter.strip_xml_tags(chunk['text'])
+
+                # Generate filename
+                timestamp = int(time.time() * 1000)
+                chapter_title_safe = chapter['title'].replace(' ', '_').replace('/', '_')[:30]
+                audio_filename = f"{chapter_title_safe}_chunk{chunk['id']}_{timestamp}.wav"
+                audio_path = os.path.join(audio_dir, audio_filename)
+
+                print(f"Generating audio for chunk {chunk['id']}... ({len(clean_text)} chars)")
+
+                # Generate audio
+                converter.generate_audio(
+                    clean_text,
+                    audio_path,
+                    audio_prompt_path=audio_prompt_path,
+                    language_id=language_id,
+                    exaggeration=exaggeration,
+                    cfg_weight=cfg_weight
+                )
+
+                # Create metadata
+                audio_metadata = {
+                    'audio_file': audio_filename,
+                    'timestamp': timestamp,
+                    'language_id': language_id,
+                    'exaggeration': exaggeration,
+                    'cfg_weight': cfg_weight,
+                    'voice_sample': voice_sample,
+                    'text_preview': chunk['text'][:200],
+                    'is_best_take': len(chunk.get('generated_audios', [])) == 0  # First generation is best take
+                }
+
+                # Add to chunk's generated_audios
+                if 'generated_audios' not in chunk:
+                    chunk['generated_audios'] = []
+                chunk['generated_audios'].append(audio_metadata)
+
+                generated_audio_info.append({
+                    'chunk_id': chunk['id'],
+                    'audio_file': audio_filename,
+                    'success': True
+                })
+
+                success_count += 1
+                print(f"✓ Successfully generated audio for chunk {chunk['id']}")
+
+            except Exception as chunk_error:
+                print(f"✗ Error generating audio for chunk {chunk['id']}: {str(chunk_error)}")
+                generated_audio_info.append({
+                    'chunk_id': chunk['id'],
+                    'error': str(chunk_error),
+                    'success': False
+                })
+                error_count += 1
+
+        # Save updated project metadata
+        converter.current_project_metadata['last_modified'] = datetime.now().isoformat()
+        project_file = os.path.join(converter.current_project_path, 'project.json')
+        with open(project_file, 'w', encoding='utf-8') as f:
+            json.dump(converter.current_project_metadata, f, indent=2, ensure_ascii=False)
+
+        print(f"\n=== Chapter audio generation complete ===")
+        print(f"Success: {success_count}, Errors: {error_count}")
+
+        return jsonify({
+            'success': True,
+            'chapter_id': chapter_id,
+            'chapter_title': chapter.get('title'),
+            'total_chunks': len(chunks),
+            'generated': success_count,
+            'errors': error_count,
+            'generated_audio': generated_audio_info
+        })
+
+    except Exception as e:
+        import traceback
+        print(f"Error generating chapter audio: {str(e)}")
+        print(traceback.format_exc())
+        return jsonify({'error': str(e)}), 500
+
 if __name__ == '__main__':
     print(f"Starting Text to Audio Converter API...")
     print(f"Using device: {converter.device}")
