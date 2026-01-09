@@ -1,23 +1,5 @@
 [
   {
-    "timestamp": 1767891176969,
-    "char_count": 411,
-    "audio_duration_sec": 17.24,
-    "generation_time_ms": 48347,
-    "chars_per_second": 8.5,
-    "gpu_before": null,
-    "gpu_after": null
-  },
-  {
-    "timestamp": 1767891211359,
-    "char_count": 288,
-    "audio_duration_sec": 13.0,
-    "generation_time_ms": 33805,
-    "chars_per_second": 8.52,
-    "gpu_before": null,
-    "gpu_after": null
-  },
-  {
     "timestamp": 1767891274310,
     "char_count": 476,
     "audio_duration_sec": 21.24,
@@ -896,6 +878,24 @@
     "audio_duration_sec": 3.4,
     "generation_time_ms": 11455,
     "chars_per_second": 3.75,
+    "gpu_before": null,
+    "gpu_after": null
+  },
+  {
+    "timestamp": 1767977417539,
+    "char_count": 342,
+    "audio_duration_sec": 19.88,
+    "generation_time_ms": 69153,
+    "chars_per_second": 4.95,
+    "gpu_before": null,
+    "gpu_after": null
+  },
+  {
+    "timestamp": 1767977549076,
+    "char_count": 342,
+    "audio_duration_sec": 19.44,
+    "generation_time_ms": 57345,
+    "chars_per_second": 5.96,
     "gpu_before": null,
     "gpu_after": null
   }
