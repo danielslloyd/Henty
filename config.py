@@ -59,7 +59,9 @@ class ServerConfig:
         return {
             'require_auth': self.REQUIRE_AUTH,
             'websocket_enabled': self.ENABLE_WEBSOCKET,
-            'max_upload_size': self.MAX_UPLOAD_SIZE
+            'max_upload_size': self.MAX_UPLOAD_SIZE,
+            'default_project_dir': self.DEFAULT_PROJECT_DIR,
+            'common_files_dir': self.COMMON_FILES_DIR
         }
 
     @staticmethod

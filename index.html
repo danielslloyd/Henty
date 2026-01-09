@@ -1879,14 +1879,32 @@
             }
         }
 
-        window.showNewProjectDialog = function() {
+        window.showNewProjectDialog = async function() {
+            // Fetch server config to get default project directory
+            let defaultProjectDir = null;
+            try {
+                const configResponse = await fetch(`${API_URL}/config`);
+                const configData = await configResponse.json();
+                defaultProjectDir = configData.default_project_dir;
+            } catch (error) {
+                console.warn('Could not fetch server config:', error);
+            }
+
             // Step 1: Ask for project name
             const projectName = prompt('Enter the project name:', 'My Audiobook Project');
             if (!projectName) return;
 
-            // Step 2: Ask for parent directory where the new project folder will be created
-            const parentDirectory = prompt('Enter the parent directory path where the new project folder will be created:\n(e.g., C:\\Users\\YourName\\Documents)\n\nA new folder named "' + projectName + '" will be created inside this directory.');
-            if (!parentDirectory) return;
+            // Step 2: If default project directory is configured, use it automatically; otherwise prompt
+            let parentDirectory;
+            if (defaultProjectDir) {
+                // Use default directory without prompting
+                parentDirectory = defaultProjectDir;
+                showStatus(`Using default project directory: ${defaultProjectDir}`, 'info');
+            } else {
+                // Ask for parent directory where the new project folder will be created
+                parentDirectory = prompt('Enter the parent directory path where the new project folder will be created:\n(e.g., C:\\Users\\YourName\\Documents)\n\nA new folder named "' + projectName + '" will be created inside this directory.');
+                if (!parentDirectory) return;
+            }
 
             // Step 3: Create the full project path by combining parent directory with project name
             const projectPath = parentDirectory.endsWith('/') || parentDirectory.endsWith('\\')
