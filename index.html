@@ -3064,7 +3064,10 @@
                     let bestTakeIndex = audioList.findIndex(a => a.is_best_take);
                     if (bestTakeIndex === -1 && shouldAutoSelect && audioList[0].audio_file) {
                         bestTakeIndex = 0;
-                        setTimeout(() => setChunkBestTake(fileIndex, chunk.id, fileName, audioList[0].audio_file), 100);
+                        // Only auto-set if we have a valid audio_file
+                        if (audioList[0].audio_file) {
+                            setTimeout(() => setChunkBestTake(fileIndex, chunk.id, fileName, audioList[0].audio_file), 100);
+                        }
                     }
 
                     // Sort takes: best take first, then by timestamp
