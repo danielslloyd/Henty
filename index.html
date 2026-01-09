@@ -2911,7 +2911,7 @@
                     // Find best take
                     const shouldAutoSelect = sortedAudio.length === 1 && !sortedAudio[0].is_best_take;
                     let bestTakeIndex = sortedAudio.findIndex(a => a.is_best_take);
-                    if (bestTakeIndex === -1 && shouldAutoSelect) {
+                    if (bestTakeIndex === -1 && shouldAutoSelect && sortedAudio[0].audio_file) {
                         bestTakeIndex = 0;
                         setTimeout(() => setChunkBestTake(fileIndex, chunk.id, fileName, sortedAudio[0].audio_file), 100);
                     }

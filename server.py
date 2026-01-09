@@ -1551,15 +1551,20 @@ def update_chunk_text():
         new_text = data.get('new_text')
         new_nickname = data.get('new_nickname')
 
-        # Find the text file
+        # Try to find in chapters first (new format), then text_files (old format)
+        chapters = converter.current_project_metadata.get('chapters', [])
         text_files = converter.current_project_metadata.get('text_files', [])
+
+        chapter = next((ch for ch in chapters if ch['id'] == text_file_id), None)
         text_file = next((tf for tf in text_files if tf['id'] == text_file_id), None)
 
-        if not text_file:
+        container = chapter or text_file
+
+        if not container:
             return jsonify({'error': 'Text file not found'}), 404
 
         # Find the chunk
-        chunk = next((c for c in text_file['chunks'] if c['id'] == chunk_id), None)
+        chunk = next((c for c in container['chunks'] if c['id'] == chunk_id), None)
 
         if not chunk:
             return jsonify({'error': 'Chunk not found'}), 404
@@ -1777,15 +1782,20 @@ def add_audio_to_chunk():
         if not text_file_id or chunk_id is None or not audio_metadata:
             return jsonify({'error': 'text_file_id, chunk_id, and audio_metadata are required'}), 400
 
-        # Find the text file
+        # Try to find in chapters first (new format), then text_files (old format)
+        chapters = converter.current_project_metadata.get('chapters', [])
         text_files = converter.current_project_metadata.get('text_files', [])
+
+        chapter = next((ch for ch in chapters if ch['id'] == text_file_id), None)
         text_file = next((tf for tf in text_files if tf['id'] == text_file_id), None)
 
-        if not text_file:
+        container = chapter or text_file
+
+        if not container:
             return jsonify({'error': 'Text file not found'}), 404
 
         # Find the chunk
-        chunk = next((c for c in text_file['chunks'] if c['id'] == chunk_id), None)
+        chunk = next((c for c in container['chunks'] if c['id'] == chunk_id), None)
 
         if not chunk:
             return jsonify({'error': 'Chunk not found'}), 404
@@ -1831,15 +1841,20 @@ def set_chunk_best_take():
         if not text_file_id or chunk_id is None or not audio_filename:
             return jsonify({'error': 'text_file_id, chunk_id, and audio_filename are required'}), 400
 
-        # Find the text file
-        text_file = next((tf for tf in converter.current_project_metadata.get('text_files', [])
-                         if tf['id'] == text_file_id), None)
+        # Try to find in chapters first (new format), then text_files (old format)
+        chapters = converter.current_project_metadata.get('chapters', [])
+        text_files = converter.current_project_metadata.get('text_files', [])
 
-        if not text_file:
+        chapter = next((ch for ch in chapters if ch['id'] == text_file_id), None)
+        text_file = next((tf for tf in text_files if tf['id'] == text_file_id), None)
+
+        container = chapter or text_file
+
+        if not container:
             return jsonify({'error': 'Text file not found'}), 404
 
         # Find the chunk
-        chunk = next((c for c in text_file['chunks'] if c['id'] == chunk_id), None)
+        chunk = next((c for c in container['chunks'] if c['id'] == chunk_id), None)
 
         if not chunk:
             return jsonify({'error': 'Chunk not found'}), 404
