@@ -37,9 +37,13 @@ class TextToAudioConverter:
         self.device = "cuda" if torch.cuda.is_available() else "cpu"
         self.audio_dir = "generated_audio"
         self.voice_samples_dir = "voice_samples"
+        self.common_files_dir = config.COMMON_FILES_DIR
+        self.projects_dir = config.DEFAULT_PROJECT_DIR
         self.stats_file = "generation_stats.json"
         os.makedirs(self.audio_dir, exist_ok=True)
         os.makedirs(self.voice_samples_dir, exist_ok=True)
+        os.makedirs(self.common_files_dir, exist_ok=True)
+        os.makedirs(self.projects_dir, exist_ok=True)
 
         # Generation tracking
         self.current_generation = None
@@ -320,6 +324,10 @@ class TextToAudioConverter:
     def stitch_audio_files(self, audio_paths, output_path):
         """
         Stitch multiple audio files together into a single file.
+        Supports:
+        - File paths (string): loads audio from file (WAV, MP3, etc.)
+        - Pause tuples ('pause', duration_ms): generates silence
+
         Returns the path to the stitched audio file.
         """
         try:
@@ -327,18 +335,42 @@ class TextToAudioConverter:
                 raise ValueError("No audio files provided for stitching")
 
             print(f"=== Starting audio stitching ===")
-            print(f"Total files to stitch: {len(audio_paths)}")
+            print(f"Total items to stitch: {len(audio_paths)}")
 
             # Load all audio files
             combined = None
-            for i, audio_path in enumerate(audio_paths):
-                if not os.path.exists(audio_path):
-                    print(f"Warning: Audio file not found: {audio_path}")
-                    continue
+            for i, item in enumerate(audio_paths):
+                # Check if this is a pause tuple
+                if isinstance(item, tuple) and item[0] == 'pause':
+                    duration_ms = item[1]
+                    print(f"Item {i+1}/{len(audio_paths)}: Generating {duration_ms}ms pause")
+                    audio_segment = AudioSegment.silent(duration=duration_ms)
+                else:
+                    # Regular audio file
+                    audio_path = item
+                    if not os.path.exists(audio_path):
+                        print(f"Warning: Audio file not found: {audio_path}")
+                        continue
 
-                print(f"Loading audio file {i+1}/{len(audio_paths)}: {os.path.basename(audio_path)}")
-                audio_segment = AudioSegment.from_wav(audio_path)
-                print(f"  - Duration: {len(audio_segment)}ms, Sample rate: {audio_segment.frame_rate}Hz, Channels: {audio_segment.channels}")
+                    print(f"Loading audio file {i+1}/{len(audio_paths)}: {os.path.basename(audio_path)}")
+
+                    # Detect file type and load accordingly
+                    file_ext = os.path.splitext(audio_path)[1].lower()
+                    if file_ext == '.wav':
+                        audio_segment = AudioSegment.from_wav(audio_path)
+                    elif file_ext == '.mp3':
+                        audio_segment = AudioSegment.from_mp3(audio_path)
+                    elif file_ext in ['.ogg', '.oga']:
+                        audio_segment = AudioSegment.from_ogg(audio_path)
+                    elif file_ext == '.flac':
+                        audio_segment = AudioSegment.from_file(audio_path, format='flac')
+                    elif file_ext == '.m4a':
+                        audio_segment = AudioSegment.from_file(audio_path, format='m4a')
+                    else:
+                        # Try to load as generic file
+                        audio_segment = AudioSegment.from_file(audio_path)
+
+                    print(f"  - Duration: {len(audio_segment)}ms, Sample rate: {audio_segment.frame_rate}Hz, Channels: {audio_segment.channels}")
 
                 if combined is None:
                     combined = audio_segment
@@ -354,7 +386,7 @@ class TextToAudioConverter:
 
             # Export the combined audio
             combined.export(output_path, format="wav")
-            print(f"Successfully stitched {len(audio_paths)} audio files to: {output_path}")
+            print(f"Successfully stitched {len(audio_paths)} items to: {output_path}")
             return output_path
 
         except Exception as e:
@@ -417,6 +449,161 @@ class TextToAudioConverter:
                         os.remove(wav_path)
                     os.rename(temp_path, wav_path)
                 return False
+
+    def get_audio_file_info(self, audio_path):
+        """Get information about an audio file (duration, sample rate, etc.)"""
+        try:
+            audio_segment = AudioSegment.from_file(audio_path)
+            return {
+                'duration_ms': len(audio_segment),
+                'duration_sec': len(audio_segment) / 1000.0,
+                'sample_rate': audio_segment.frame_rate,
+                'channels': audio_segment.channels,
+                'file_size_bytes': os.path.getsize(audio_path)
+            }
+        except Exception as e:
+            print(f"Error getting audio file info: {str(e)}")
+            return None
+
+    def list_common_files(self):
+        """List all audio files in the common files directory"""
+        try:
+            if not os.path.exists(self.common_files_dir):
+                return []
+
+            common_files = []
+            for filename in os.listdir(self.common_files_dir):
+                file_path = os.path.join(self.common_files_dir, filename)
+                # Check if it's an audio file
+                if os.path.isfile(file_path) and filename.lower().endswith(('.wav', '.mp3', '.flac', '.ogg', '.m4a')):
+                    info = self.get_audio_file_info(file_path)
+                    if info:
+                        common_files.append({
+                            'filename': filename,
+                            'path': file_path,
+                            'relative_path': os.path.relpath(file_path, os.getcwd()),
+                            'duration_ms': info['duration_ms'],
+                            'duration_sec': info['duration_sec'],
+                            'file_size_bytes': info['file_size_bytes']
+                        })
+
+            return sorted(common_files, key=lambda x: x['filename'])
+        except Exception as e:
+            print(f"Error listing common files: {str(e)}")
+            return []
+
+    def detect_chapters(self, text):
+        """
+        Detect chapters in text using various patterns.
+        Returns list of chapter dicts with: id, title, text, start_pos, end_pos
+        """
+        import uuid
+
+        # Chapter detection patterns (in order of priority)
+        chapter_patterns = [
+            # Standard chapter headings with numbers/roman numerals
+            r'^(Chapter\s+(?:[IVXLCDM]+|\d+|One|Two|Three|Four|Five|Six|Seven|Eight|Nine|Ten|Eleven|Twelve)[^\n]*)',
+            # All caps chapter headings
+            r'^(CHAPTER\s+(?:[IVXLCDM]+|\d+|ONE|TWO|THREE|FOUR|FIVE|SIX|SEVEN|EIGHT|NINE|TEN)[^\n]*)',
+            # Book/Part divisions
+            r'^((?:Book|Part|Section)\s+(?:[IVXLCDM]+|\d+)[^\n]*)',
+            # Simple "I.", "II.", etc at start of line
+            r'^([IVXLCDM]+\.)\s*$',
+            # Numbered sections "1.", "2.", etc at start of line (but not in middle of sentence)
+            r'^\s*(\d+\.)\s*$'
+        ]
+
+        chapters = []
+        chapter_positions = []
+
+        # Find all chapter markers
+        for pattern in chapter_patterns:
+            for match in re.finditer(pattern, text, re.MULTILINE | re.IGNORECASE):
+                chapter_positions.append({
+                    'pos': match.start(),
+                    'title': match.group(1).strip(),
+                    'pattern': pattern
+                })
+
+        # Also look for section breaks (4+ consecutive newlines) if no chapters found
+        if not chapter_positions:
+            section_breaks = list(re.finditer(r'\n{4,}', text))
+            if section_breaks:
+                # Add implicit chapters based on section breaks
+                for i, match in enumerate(section_breaks):
+                    chapter_positions.append({
+                        'pos': match.end(),
+                        'title': f'Section {i+1}',
+                        'pattern': 'section_break'
+                    })
+
+        # Sort by position
+        chapter_positions.sort(key=lambda x: x['pos'])
+
+        # If we found chapter markers, create chapters
+        if chapter_positions:
+            for i, chapter_info in enumerate(chapter_positions):
+                start_pos = chapter_info['pos']
+                # Find end position (start of next chapter or end of text)
+                end_pos = chapter_positions[i+1]['pos'] if i+1 < len(chapter_positions) else len(text)
+
+                chapter_text = text[start_pos:end_pos].strip()
+
+                chapters.append({
+                    'id': str(uuid.uuid4()),
+                    'title': chapter_info['title'],
+                    'text': chapter_text,
+                    'start_pos': start_pos,
+                    'end_pos': end_pos,
+                    'order': i
+                })
+        else:
+            # No chapters detected, treat entire text as single chapter
+            chapters.append({
+                'id': str(uuid.uuid4()),
+                'title': 'Complete Text',
+                'text': text,
+                'start_pos': 0,
+                'end_pos': len(text),
+                'order': 0
+            })
+
+        return chapters
+
+    def strip_xml_tags(self, text):
+        """Strip all XML-like tags from text for TTS processing"""
+        # Remove all XML tags: <tag>content</tag> or <tag/>
+        cleaned = re.sub(r'<[^>]+>', '', text)
+        return cleaned
+
+    def text_to_xml_content(self, text, chapters=None):
+        """
+        Convert text (with optional detected chapters) to XML-embedded-in-JSON format.
+        Returns a string of XML content.
+        """
+        if chapters is None:
+            chapters = self.detect_chapters(text)
+
+        xml_lines = ['<?xml version="1.0" encoding="UTF-8"?>']
+        xml_lines.append('<book>')
+
+        for chapter in chapters:
+            chapter_title = chapter['title'].replace('&', '&amp;').replace('<', '&lt;').replace('>', '&gt;')
+            xml_lines.append(f'  <chapter id="{chapter["id"]}" title="{chapter_title}" order="{chapter["order"]}">')
+
+            # Split chapter text into paragraphs
+            paragraphs = [p.strip() for p in chapter['text'].split('\n\n') if p.strip()]
+
+            for para in paragraphs:
+                # Escape XML special characters
+                para_escaped = para.replace('&', '&amp;').replace('<', '&lt;').replace('>', '&gt;')
+                xml_lines.append(f'    <p>{para_escaped}</p>')
+
+            xml_lines.append('  </chapter>')
+
+        xml_lines.append('</book>')
+
+        return '\n'.join(xml_lines)
 
     def generate_audio(self, text, output_path, audio_prompt_path=None, language_id="en", exaggeration=0.6, cfg_weight=0.4):
         """Generate audio from text using Chatterbox TTS"""
@@ -907,6 +1094,94 @@ def upload_voice_sample():
         print(traceback.format_exc())
         return jsonify({'error': str(e)}), 500
 
+# Common Files API Endpoints
+@app.route('/api/common-files', methods=['GET'])
+@auth_manager.require_api_key
+def list_common_files():
+    """List all audio files in the common files directory"""
+    try:
+        common_files = converter.list_common_files()
+        return jsonify({'common_files': common_files})
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/common-files/<filename>')
+def serve_common_file(filename):
+    """Serve a common file"""
+    try:
+        return send_from_directory(converter.common_files_dir, filename)
+    except Exception as e:
+        return jsonify({'error': str(e)}), 404
+
+@app.route('/api/common-files/upload', methods=['POST'])
+@auth_manager.require_api_key
+def upload_common_file():
+    """Upload a common audio file (intro, outro, etc.)"""
+    try:
+        print(f"\n=== Received common file upload ===")
+
+        if 'file' not in request.files:
+            return jsonify({'error': 'No file provided'}), 400
+
+        file = request.files['file']
+        filename = request.form.get('filename', file.filename)
+
+        # Validate file type - support various audio formats
+        allowed_extensions = ['.wav', '.mp3', '.ogg', '.flac', '.m4a']
+        if not any(filename.lower().endswith(ext) for ext in allowed_extensions):
+            return jsonify({'error': 'Invalid audio file type. Allowed: WAV, MP3, OGG, FLAC, M4A'}), 400
+
+        # Save file
+        file_path = os.path.join(converter.common_files_dir, filename)
+        file.save(file_path)
+        print(f"Common file saved: {file_path}")
+
+        # Get file info
+        info = converter.get_audio_file_info(file_path)
+
+        return jsonify({
+            'success': True,
+            'filename': filename,
+            'url': f'/api/common-files/{filename}',
+            'path': file_path,
+            'relative_path': os.path.relpath(file_path, os.getcwd()),
+            'duration_ms': info['duration_ms'] if info else None,
+            'duration_sec': info['duration_sec'] if info else None,
+            'file_size_bytes': info['file_size_bytes'] if info else None
+        })
+    except Exception as e:
+        import traceback
+        print(f"\n=== ERROR uploading common file ===")
+        print(f"Exception: {str(e)}")
+        print(traceback.format_exc())
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/common-files/info/<filename>', methods=['GET'])
+@auth_manager.require_api_key
+def get_common_file_info(filename):
+    """Get detailed information about a specific common file"""
+    try:
+        file_path = os.path.join(converter.common_files_dir, filename)
+        if not os.path.exists(file_path):
+            return jsonify({'error': 'File not found'}), 404
+
+        info = converter.get_audio_file_info(file_path)
+        if not info:
+            return jsonify({'error': 'Could not read audio file information'}), 500
+
+        return jsonify({
+            'filename': filename,
+            'path': file_path,
+            'relative_path': os.path.relpath(file_path, os.getcwd()),
+            'duration_ms': info['duration_ms'],
+            'duration_sec': info['duration_sec'],
+            'sample_rate': info['sample_rate'],
+            'channels': info['channels'],
+            'file_size_bytes': info['file_size_bytes']
+        })
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
 @app.route('/api/generated-audio/<txt_filename>', methods=['GET'])
 def list_generated_audio(txt_filename):
     """List all generated audio files for a specific text file"""
@@ -1135,7 +1410,7 @@ def update_project_defaults():
 @app.route('/api/project/add-text-file', methods=['POST'])
 @auth_manager.require_api_key
 def add_text_file_to_project():
-    """Add a text file to the project with chunking"""
+    """Add a text file to the project with chapter detection and chunking"""
     try:
         import json
         from datetime import datetime
@@ -1155,43 +1430,62 @@ def add_text_file_to_project():
         # Read text content
         text_content = file.read().decode('utf-8')
         original_filename = file.filename
-        original_path = request.form.get('original_path', file.filename)
 
-        # Chunk the text
-        chunks = converter.smart_chunk_text(text_content, max_chunk_size=500)
+        print(f"\n=== Adding text file: {original_filename} ===")
 
-        # Create text file entry
-        text_file_entry = {
-            'id': str(uuid.uuid4()),
-            'original_filename': original_filename,
-            'original_path': original_path,
-            'added_at': datetime.now().isoformat(),
-            'full_text': text_content,
-            'chunks': []
-        }
+        # Detect chapters in the text
+        detected_chapters = converter.detect_chapters(text_content)
+        print(f"Detected {len(detected_chapters)} chapter(s)")
 
-        # Add chunk structure with dirty flag and generated_audios
-        for chunk in chunks:
-            chunk['dirty'] = False
-            chunk['generated_audios'] = []
-            text_file_entry['chunks'].append(chunk)
+        # Generate XML content
+        xml_content = converter.text_to_xml_content(text_content, detected_chapters)
 
-        # Add to project metadata
-        if 'text_files' not in converter.current_project_metadata:
-            converter.current_project_metadata['text_files'] = []
+        # Initialize chapters structure if not present
+        if 'chapters' not in converter.current_project_metadata:
+            converter.current_project_metadata['chapters'] = []
 
-        converter.current_project_metadata['text_files'].append(text_file_entry)
+        # Create chapters with chunks for each detected chapter
+        new_chapters = []
+        for detected_chapter in detected_chapters:
+            # Chunk the chapter text
+            chunks = converter.smart_chunk_text(detected_chapter['text'], max_chunk_size=500)
+
+            # Add chunk structure with dirty flag and generated_audios
+            for chunk in chunks:
+                chunk['dirty'] = False
+                chunk['generated_audios'] = []
+
+            # Create chapter entry
+            chapter_entry = {
+                'id': detected_chapter['id'],
+                'title': detected_chapter['title'],
+                'order': detected_chapter['order'],
+                'chunks': chunks,
+                'audio_output': None,  # Will be set when chapter is stitched
+                'added_at': datetime.now().isoformat()
+            }
+
+            new_chapters.append(chapter_entry)
+            converter.current_project_metadata['chapters'].append(chapter_entry)
+
+        # Store/update XML content
+        converter.current_project_metadata['content_xml'] = xml_content
+        converter.current_project_metadata['original_filename'] = original_filename
         converter.current_project_metadata['last_modified'] = datetime.now().isoformat()
-        converter.current_project_metadata['version'] = '2.0'
+        converter.current_project_metadata['version'] = '3.0'
 
         # Save to file
         project_file = os.path.join(converter.current_project_path, 'project.json')
         with open(project_file, 'w', encoding='utf-8') as f:
             json.dump(converter.current_project_metadata, f, indent=2, ensure_ascii=False)
 
+        print(f"Successfully added {len(new_chapters)} chapters to project")
+
         return jsonify({
             'success': True,
-            'text_file': text_file_entry
+            'chapters': new_chapters,
+            'chapter_count': len(new_chapters),
+            'content_xml': xml_content
         })
 
     except Exception as e:
@@ -1202,16 +1496,21 @@ def add_text_file_to_project():
 
 @app.route('/api/project/get-text-files', methods=['GET'])
 def get_project_text_files():
-    """Get all text files in the current project"""
+    """Get all text files/chapters in the current project"""
     try:
         if converter.current_project_path is None:
             return jsonify({'error': 'No project loaded'}), 400
 
+        # Return both chapters (new) and text_files (old) for backwards compatibility
+        chapters = converter.current_project_metadata.get('chapters', [])
         text_files = converter.current_project_metadata.get('text_files', [])
 
         return jsonify({
             'success': True,
-            'text_files': text_files
+            'chapters': chapters,
+            'text_files': text_files,  # Keep for backwards compatibility
+            'has_chapters': len(chapters) > 0,
+            'content_xml': converter.current_project_metadata.get('content_xml', None)
         })
 
     except Exception as e:
@@ -1331,7 +1630,7 @@ def dismiss_dirty_flag():
 
 @app.route('/api/project/insert-chunk', methods=['POST'])
 def insert_chunk():
-    """Insert a new chunk (text or pause) at a specific position"""
+    """Insert a new chunk (text, pause, or common_file) at a specific position"""
     try:
         import json
         from datetime import datetime
@@ -1340,16 +1639,21 @@ def insert_chunk():
             return jsonify({'error': 'No project loaded'}), 400
 
         data = request.json
-        text_file_id = data.get('text_file_id')
+        chapter_id = data.get('chapter_id') or data.get('text_file_id')  # Support both old and new formats
         insert_after_id = data.get('insert_after_id')  # Insert after this chunk ID (or -1 to insert at beginning)
-        chunk_type = data.get('type', 'text')  # 'text' or 'pause'
+        chunk_type = data.get('type', 'text')  # 'text', 'pause', or 'common_file'
 
-        # Find the text file
+        # Find the chapter (try new structure first, then fall back to old)
+        chapters = converter.current_project_metadata.get('chapters', [])
         text_files = converter.current_project_metadata.get('text_files', [])
-        text_file = next((tf for tf in text_files if tf['id'] == text_file_id), None)
 
-        if not text_file:
-            return jsonify({'error': 'Text file not found'}), 404
+        chapter = next((ch for ch in chapters if ch['id'] == chapter_id), None)
+        if not chapter:
+            # Fall back to old text_files structure
+            chapter = next((tf for tf in text_files if tf['id'] == chapter_id), None)
+
+        if not chapter:
+            return jsonify({'error': 'Chapter not found'}), 404
 
         # Create new chunk based on type
         if chunk_type == 'pause':
@@ -1365,6 +1669,35 @@ def insert_chunk():
                 'dirty': False,
                 'generated_audios': []
             }
+        elif chunk_type == 'common_file':
+            # Common file chunk
+            common_file_path = data.get('common_file_path')
+            if not common_file_path:
+                return jsonify({'error': 'common_file_path is required for common_file chunks'}), 400
+
+            # Get file info
+            filename = os.path.basename(common_file_path)
+            full_path = os.path.join(converter.common_files_dir, filename)
+
+            if not os.path.exists(full_path):
+                return jsonify({'error': f'Common file not found: {filename}'}), 404
+
+            # Get audio file info
+            info = converter.get_audio_file_info(full_path)
+
+            new_chunk = {
+                'id': 0,  # Will be set correctly below
+                'type': 'common_file',
+                'common_file_path': os.path.relpath(full_path, os.getcwd()),
+                'filename': filename,
+                'duration_ms': info['duration_ms'] if info else 0,
+                'text': f'[Common File: {filename}]',
+                'nickname': f'{filename} ({info["duration_sec"]:.1f}s)' if info else filename,
+                'start_pos': 0,
+                'end_pos': 0,
+                'dirty': False,
+                'generated_audios': []  # Common files don't have generated audios, they're used as-is
+            }
         else:  # text chunk
             text = data.get('text', '')
             new_chunk = {
@@ -1379,7 +1712,7 @@ def insert_chunk():
             }
 
         # Determine insertion position
-        chunks = text_file.get('chunks', [])
+        chunks = chapter.get('chunks', [])
         insert_position = insert_after_id + 1  # Insert after the specified chunk
 
         # Insert the new chunk
@@ -1390,7 +1723,7 @@ def insert_chunk():
             chunk['id'] = i
 
         # Update project metadata
-        text_file['chunks'] = chunks
+        chapter['chunks'] = chunks
         converter.current_project_metadata['last_modified'] = datetime.now().isoformat()
 
         # Save to file
@@ -1530,7 +1863,7 @@ def set_chunk_best_take():
 
 @app.route('/api/project/stitch-best-takes', methods=['POST'])
 def stitch_project_best_takes():
-    """Stitch together the best takes from all chunks in a text file within the current project"""
+    """Stitch together the best takes from all chunks in a chapter/text file within the current project"""
     try:
         import json
         import time
@@ -1539,73 +1872,111 @@ def stitch_project_best_takes():
             return jsonify({'error': 'No project loaded'}), 400
 
         data = request.json
-        text_file_id = data.get('text_file_id')
+        chapter_id = data.get('chapter_id') or data.get('text_file_id')  # Support both old and new formats
 
-        if not text_file_id:
-            return jsonify({'error': 'text_file_id is required'}), 400
+        if not chapter_id:
+            return jsonify({'error': 'chapter_id (or text_file_id) is required'}), 400
 
-        # Find the text file in project metadata
+        # Find the chapter (try new structure first, then fall back to old)
+        chapters = converter.current_project_metadata.get('chapters', [])
         text_files = converter.current_project_metadata.get('text_files', [])
-        text_file = next((tf for tf in text_files if tf['id'] == text_file_id), None)
 
-        if not text_file:
-            return jsonify({'error': 'Text file not found in project'}), 404
+        chapter = next((ch for ch in chapters if ch['id'] == chapter_id), None)
+        is_new_structure = chapter is not None
+
+        if not chapter:
+            # Fall back to old text_files structure
+            chapter = next((tf for tf in text_files if tf['id'] == chapter_id), None)
+
+        if not chapter:
+            return jsonify({'error': 'Chapter/text file not found in project'}), 404
 
         # Get chunks sorted by ID
-        chunks = sorted(text_file.get('chunks', []), key=lambda c: c['id'])
+        chunks = sorted(chapter.get('chunks', []), key=lambda c: c['id'])
 
         if not chunks:
-            return jsonify({'error': 'No chunks found in text file'}), 400
+            return jsonify({'error': 'No chunks found in chapter'}), 400
 
         # Collect audio paths for best takes
         audio_paths = []
         audio_dir = os.path.join(converter.current_project_path, 'audio')
 
         for chunk in chunks:
-            generated_audios = chunk.get('generated_audios', [])
+            chunk_type = chunk.get('type', 'text')
 
-            if not generated_audios:
-                return jsonify({'error': f'No audio generated for chunk {chunk["id"]}'}), 400
+            if chunk_type == 'common_file':
+                # For common_file chunks, use the common file directly
+                common_file_path = chunk.get('common_file_path')
+                if not common_file_path:
+                    return jsonify({'error': f'Chunk {chunk["id"]} is missing common_file_path'}), 400
 
-            # Find best take
-            best_audio = None
-            for audio in generated_audios:
-                if audio.get('is_best_take', False):
-                    best_audio = audio
-                    break
+                # Resolve relative path
+                if not os.path.isabs(common_file_path):
+                    common_file_path = os.path.join(os.getcwd(), common_file_path)
 
-            # If no best take marked, use the most recent
-            if not best_audio:
-                best_audio = max(generated_audios, key=lambda a: a.get('timestamp', 0))
-                print(f"Chunk {chunk['id']}: No best take marked, using most recent (timestamp: {best_audio.get('timestamp', 0)})")
+                if not os.path.exists(common_file_path):
+                    return jsonify({'error': f'Common file not found: {common_file_path}'}), 400
+
+                print(f"Chunk {chunk['id']}: Using common file: {common_file_path}")
+                audio_paths.append(common_file_path)
+
+            elif chunk_type == 'pause':
+                # For pause chunks, generate silence
+                duration_ms = chunk.get('duration_ms', 1000)
+                print(f"Chunk {chunk['id']}: Generating {duration_ms}ms pause")
+                # We'll handle pause chunks in the stitching function
+                audio_paths.append(('pause', duration_ms))
+
             else:
-                print(f"Chunk {chunk['id']}: Using best take (timestamp: {best_audio.get('timestamp', 0)})")
+                # For text chunks, use generated audio
+                generated_audios = chunk.get('generated_audios', [])
 
-            # Build audio file path
-            # Handle both 'audio_file' (filename) and 'audio_url' (URL path)
-            if 'audio_file' in best_audio:
-                audio_file = best_audio['audio_file']
-            elif 'audio_url' in best_audio:
-                # Extract filename from URL like '/api/audio/filename.wav'
-                audio_file = best_audio['audio_url'].split('/')[-1]
-            else:
-                print(f"ERROR: audio object missing 'audio_file' or 'audio_url' key. Audio object: {best_audio}")
-                return jsonify({'error': f'Chunk {chunk["id"]} has invalid audio metadata'}), 400
-            audio_path = os.path.join(audio_dir, audio_file)
+                if not generated_audios:
+                    return jsonify({'error': f'No audio generated for chunk {chunk["id"]}'}), 400
 
-            print(f"Chunk {chunk['id']}: Selected audio file: {audio_file}")
-            print(f"Chunk {chunk['id']}: Full path: {audio_path}")
-            print(f"Chunk {chunk['id']}: File exists: {os.path.exists(audio_path)}")
+                # Find best take
+                best_audio = None
+                for audio in generated_audios:
+                    if audio.get('is_best_take', False):
+                        best_audio = audio
+                        break
 
-            if not os.path.exists(audio_path):
-                return jsonify({'error': f'Audio file not found: {audio_file}'}), 400
+                # If no best take marked, use the most recent
+                if not best_audio:
+                    best_audio = max(generated_audios, key=lambda a: a.get('timestamp', 0))
+                    print(f"Chunk {chunk['id']}: No best take marked, using most recent (timestamp: {best_audio.get('timestamp', 0)})")
+                else:
+                    print(f"Chunk {chunk['id']}: Using best take (timestamp: {best_audio.get('timestamp', 0)})")
 
-            audio_paths.append(audio_path)
+                # Build audio file path
+                # Handle both 'audio_file' (filename) and 'audio_url' (URL path)
+                if 'audio_file' in best_audio:
+                    audio_file = best_audio['audio_file']
+                elif 'audio_url' in best_audio:
+                    # Extract filename from URL like '/api/audio/filename.wav'
+                    audio_file = best_audio['audio_url'].split('/')[-1]
+                else:
+                    print(f"ERROR: audio object missing 'audio_file' or 'audio_url' key. Audio object: {best_audio}")
+                    return jsonify({'error': f'Chunk {chunk["id"]} has invalid audio metadata'}), 400
+                audio_path = os.path.join(audio_dir, audio_file)
+
+                print(f"Chunk {chunk['id']}: Selected audio file: {audio_file}")
+                print(f"Chunk {chunk['id']}: Full path: {audio_path}")
+                print(f"Chunk {chunk['id']}: File exists: {os.path.exists(audio_path)}")
+
+                if not os.path.exists(audio_path):
+                    return jsonify({'error': f'Audio file not found: {audio_file}'}), 400
+
+                audio_paths.append(audio_path)
 
         # Create stitched audio filename
         timestamp = int(time.time() * 1000)
-        original_filename = text_file.get('original_filename', 'output')
-        base_name = os.path.splitext(original_filename)[0]
+        if is_new_structure:
+            chapter_title = chapter.get('title', 'output')
+            base_name = chapter_title.replace(' ', '_').replace('/', '_')[:50]
+        else:
+            original_filename = chapter.get('original_filename', 'output')
+            base_name = os.path.splitext(original_filename)[0]
         stitched_filename = f"{base_name}_stitched_{timestamp}.wav"
         stitched_path = os.path.join(audio_dir, stitched_filename)
 
@@ -1866,6 +2237,10 @@ def generate_chunk():
         print(f"Chunk text length: {len(chunk_text)} characters")
         print(f"Parameters - Language: {language_id}, Exaggeration: {exaggeration}, CFG Weight: {cfg_weight}")
 
+        # Strip XML tags from chunk text before TTS processing
+        clean_text = converter.strip_xml_tags(chunk_text)
+        print(f"Clean text length (after stripping XML tags): {len(clean_text)} characters")
+
         # Generate audio filename with timestamp and chunk ID
         base_name = os.path.splitext(os.path.basename(filename))[0]
         timestamp = int(time.time() * 1000)
@@ -1884,14 +2259,14 @@ def generate_chunk():
             'cfg_weight': cfg_weight,
             'voice_sample': voice_sample_name,
             'audio_file': audio_filename,
-            'text_preview': chunk_text[:200],
+            'text_preview': chunk_text[:200],  # Keep original text with tags for display
             'is_best_take': False
         }
 
-        # Generate audio
+        # Generate audio using clean text (no XML tags)
         print(f"Generating audio for chunk {chunk_id}...")
         converter.generate_audio(
-            chunk_text,
+            clean_text,
             audio_path,
             audio_prompt_path=audio_prompt_path,
             language_id=language_id,
@@ -2150,6 +2525,258 @@ def process_gutenberg():
     except Exception as e:
         import traceback
         print(f"Error processing Gutenberg URLs: {str(e)}")
+        print(traceback.format_exc())
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/project/add-gutenberg-url', methods=['POST'])
+@auth_manager.require_api_key
+def add_gutenberg_url_to_project():
+    """Add Project Gutenberg content directly to current project with XML chapter structure"""
+    try:
+        import json
+        from datetime import datetime
+        import uuid
+
+        if converter.current_project_path is None:
+            return jsonify({'error': 'No project loaded'}), 400
+
+        data = request.json
+        url = data.get('url')
+
+        if not url:
+            return jsonify({'error': 'url is required'}), 400
+
+        if 'gutenberg.org' not in url.lower():
+            return jsonify({'error': f'URL does not appear to be from Project Gutenberg: {url}'}), 400
+
+        print(f"\n=== Adding Gutenberg URL to project: {url} ===")
+
+        # Use GutenbergProcessor to download and process the text
+        processor = GutenbergProcessor(output_dir=converter.current_project_path)
+
+        # Download text
+        print(f"Downloading text from {url}...")
+        text = processor.download_text(url)
+
+        # Extract title
+        title = processor.extract_title(text)
+        if not title:
+            title = processor.extract_book_name(url)
+        print(f"Extracted title: {title}")
+
+        # Strip Gutenberg metadata
+        text = processor.strip_gutenberg_metadata(text, title)
+
+        # Process carriage returns
+        text = processor.process_carriage_returns(text)
+
+        print(f"Processed text length: {len(text)} characters")
+
+        # Detect chapters in the processed text
+        detected_chapters = converter.detect_chapters(text)
+        print(f"Detected {len(detected_chapters)} chapter(s)")
+
+        # Generate XML content
+        xml_content = converter.text_to_xml_content(text, detected_chapters)
+
+        # Initialize chapters structure if not present
+        if 'chapters' not in converter.current_project_metadata:
+            converter.current_project_metadata['chapters'] = []
+
+        # Create chapters with chunks for each detected chapter
+        new_chapters = []
+        for detected_chapter in detected_chapters:
+            # Chunk the chapter text
+            chunks = converter.smart_chunk_text(detected_chapter['text'], max_chunk_size=500)
+
+            # Add chunk structure with dirty flag and generated_audios
+            for chunk in chunks:
+                chunk['dirty'] = False
+                chunk['generated_audios'] = []
+
+            # Create chapter entry
+            chapter_entry = {
+                'id': detected_chapter['id'],
+                'title': detected_chapter['title'],
+                'order': detected_chapter['order'],
+                'chunks': chunks,
+                'audio_output': None,
+                'added_at': datetime.now().isoformat(),
+                'source': 'gutenberg',
+                'source_url': url
+            }
+
+            new_chapters.append(chapter_entry)
+            converter.current_project_metadata['chapters'].append(chapter_entry)
+
+        # Store/update XML content
+        converter.current_project_metadata['content_xml'] = xml_content
+        converter.current_project_metadata['original_filename'] = f"{title}.txt"
+        converter.current_project_metadata['last_modified'] = datetime.now().isoformat()
+        converter.current_project_metadata['version'] = '3.0'
+
+        # Save to file
+        project_file = os.path.join(converter.current_project_path, 'project.json')
+        with open(project_file, 'w', encoding='utf-8') as f:
+            json.dump(converter.current_project_metadata, f, indent=2, ensure_ascii=False)
+
+        print(f"Successfully added {len(new_chapters)} chapters from Gutenberg to project")
+
+        return jsonify({
+            'success': True,
+            'title': title,
+            'url': url,
+            'chapters': new_chapters,
+            'chapter_count': len(new_chapters),
+            'content_xml': xml_content
+        })
+
+    except Exception as e:
+        import traceback
+        print(f"Error adding Gutenberg URL to project: {str(e)}")
+        print(traceback.format_exc())
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/project/chapter/generate-all', methods=['POST'])
+@auth_manager.require_api_key
+def generate_all_chapter_chunks():
+    """Generate audio for all chunks in a specific chapter"""
+    try:
+        import json
+        import time
+
+        if converter.current_project_path is None:
+            return jsonify({'error': 'No project loaded'}), 400
+
+        data = request.json
+        chapter_id = data.get('chapter_id')
+
+        if not chapter_id:
+            return jsonify({'error': 'chapter_id is required'}), 400
+
+        # Get audio generation parameters (use project defaults if not provided)
+        language_id = data.get('language_id') or converter.current_project_metadata.get('default_audio_settings', {}).get('language_id', 'en')
+        exaggeration = data.get('exaggeration') or converter.current_project_metadata.get('default_audio_settings', {}).get('exaggeration', 0.6)
+        cfg_weight = data.get('cfg_weight') or converter.current_project_metadata.get('default_audio_settings', {}).get('cfg_weight', 0.4)
+        voice_sample = data.get('voice_sample') or converter.current_project_metadata.get('default_audio_settings', {}).get('voice_sample', 'none')
+
+        # Find the chapter
+        chapters = converter.current_project_metadata.get('chapters', [])
+        chapter = next((ch for ch in chapters if ch['id'] == chapter_id), None)
+
+        if not chapter:
+            return jsonify({'error': 'Chapter not found'}), 404
+
+        chunks = chapter.get('chunks', [])
+        if not chunks:
+            return jsonify({'error': 'No chunks found in chapter'}), 400
+
+        print(f"\n=== Generating audio for all chunks in chapter: {chapter.get('title', 'Unknown')} ===")
+        print(f"Total chunks to generate: {len(chunks)}")
+        print(f"Parameters - Language: {language_id}, Exaggeration: {exaggeration}, CFG Weight: {cfg_weight}")
+
+        # Voice sample path
+        audio_prompt_path = None
+        if voice_sample and voice_sample != 'none':
+            audio_prompt_path = os.path.join(converter.voice_samples_dir, voice_sample)
+            if not os.path.exists(audio_prompt_path):
+                print(f"Warning: Voice sample not found: {audio_prompt_path}")
+                audio_prompt_path = None
+
+        audio_dir = os.path.join(converter.current_project_path, 'audio')
+        os.makedirs(audio_dir, exist_ok=True)
+
+        generated_audio_info = []
+        success_count = 0
+        error_count = 0
+
+        # Generate audio for each text chunk (skip pause and common_file chunks)
+        for chunk in chunks:
+            chunk_type = chunk.get('type', 'text')
+
+            if chunk_type != 'text':
+                print(f"Skipping chunk {chunk['id']} (type: {chunk_type})")
+                continue
+
+            try:
+                # Strip XML tags from chunk text
+                clean_text = converter.strip_xml_tags(chunk['text'])
+
+                # Generate filename
+                timestamp = int(time.time() * 1000)
+                chapter_title_safe = chapter['title'].replace(' ', '_').replace('/', '_')[:30]
+                audio_filename = f"{chapter_title_safe}_chunk{chunk['id']}_{timestamp}.wav"
+                audio_path = os.path.join(audio_dir, audio_filename)
+
+                print(f"Generating audio for chunk {chunk['id']}... ({len(clean_text)} chars)")
+
+                # Generate audio
+                converter.generate_audio(
+                    clean_text,
+                    audio_path,
+                    audio_prompt_path=audio_prompt_path,
+                    language_id=language_id,
+                    exaggeration=exaggeration,
+                    cfg_weight=cfg_weight
+                )
+
+                # Create metadata
+                audio_metadata = {
+                    'audio_file': audio_filename,
+                    'timestamp': timestamp,
+                    'language_id': language_id,
+                    'exaggeration': exaggeration,
+                    'cfg_weight': cfg_weight,
+                    'voice_sample': voice_sample,
+                    'text_preview': chunk['text'][:200],
+                    'is_best_take': len(chunk.get('generated_audios', [])) == 0  # First generation is best take
+                }
+
+                # Add to chunk's generated_audios
+                if 'generated_audios' not in chunk:
+                    chunk['generated_audios'] = []
+                chunk['generated_audios'].append(audio_metadata)
+
+                generated_audio_info.append({
+                    'chunk_id': chunk['id'],
+                    'audio_file': audio_filename,
+                    'success': True
+                })
+
+                success_count += 1
+                print(f"✓ Successfully generated audio for chunk {chunk['id']}")
+
+            except Exception as chunk_error:
+                print(f"✗ Error generating audio for chunk {chunk['id']}: {str(chunk_error)}")
+                generated_audio_info.append({
+                    'chunk_id': chunk['id'],
+                    'error': str(chunk_error),
+                    'success': False
+                })
+                error_count += 1
+
+        # Save updated project metadata
+        converter.current_project_metadata['last_modified'] = datetime.now().isoformat()
+        project_file = os.path.join(converter.current_project_path, 'project.json')
+        with open(project_file, 'w', encoding='utf-8') as f:
+            json.dump(converter.current_project_metadata, f, indent=2, ensure_ascii=False)
+
+        print(f"\n=== Chapter audio generation complete ===")
+        print(f"Success: {success_count}, Errors: {error_count}")
+
+        return jsonify({
+            'success': True,
+            'chapter_id': chapter_id,
+            'chapter_title': chapter.get('title'),
+            'total_chunks': len(chunks),
+            'generated': success_count,
+            'errors': error_count,
+            'generated_audio': generated_audio_info
+        })
+
+    except Exception as e:
+        import traceback
+        print(f"Error generating chapter audio: {str(e)}")
         print(traceback.format_exc())
         return jsonify({'error': str(e)}), 500
 
