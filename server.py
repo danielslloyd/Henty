@@ -256,8 +256,20 @@ class TextToAudioConverter:
 
                 # Handle large paragraph that needs to be split
                 if len(para) > max_chunk_size:
-                    # Split by sentences
-                    sentences = re.split(r'([.!?]+\s+|[.!?]+$)', para)
+                    # Common abbreviations that should not end a sentence
+                    abbrev_pattern = r'\b(?:Mr|Mrs|Ms|Dr|Prof|Sr|Jr|St|Ave|Blvd|Rd|etc|vs|i\.e|e\.g|Vol|No|Fig|viz|al|Co|Corp|Inc|Ltd)\.'
+
+                    # Temporarily replace abbreviations with placeholders
+                    import uuid
+                    placeholder_map = {}
+                    temp_para = para
+                    for match in re.finditer(abbrev_pattern, para, re.IGNORECASE):
+                        placeholder = f"<<ABBREV{len(placeholder_map)}>>"
+                        placeholder_map[placeholder] = match.group(0)
+                        temp_para = temp_para.replace(match.group(0), placeholder, 1)
+
+                    # Split by sentences (now without false positives from abbreviations)
+                    sentences = re.split(r'([.!?]+\s+|[.!?]+$)', temp_para)
                     sentence_chunk = ""
                     sentence_start = current_pos
 
@@ -265,6 +277,10 @@ class TextToAudioConverter:
                         sentence = sentences[i]
                         punctuation = sentences[i + 1] if i + 1 < len(sentences) else ''
                         full_sentence = sentence + punctuation
+
+                        # Restore abbreviations
+                        for placeholder, orig in placeholder_map.items():
+                            full_sentence = full_sentence.replace(placeholder, orig)
 
                         if len(sentence_chunk) + len(full_sentence) <= max_chunk_size:
                             if not sentence_chunk:

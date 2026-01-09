@@ -822,6 +822,74 @@
             font-style: italic;
         }
 
+        /* Inline editing styles */
+        .chunk-editing {
+            display: block;
+            background: white;
+            border: 2px solid #3b82f6;
+            border-radius: 8px;
+            padding: 12px;
+            margin: 8px 0;
+        }
+
+        .chunk-edit-textarea {
+            width: 100%;
+            min-height: 80px;
+            padding: 8px;
+            border: 1px solid #e0e0e0;
+            border-radius: 4px;
+            font-family: inherit;
+            font-size: 14px;
+            line-height: 1.6;
+            resize: vertical;
+        }
+
+        .chunk-edit-actions {
+            display: flex;
+            gap: 8px;
+            margin-top: 8px;
+            justify-content: flex-end;
+        }
+
+        .chunk-edit-btn {
+            padding: 6px 16px;
+            border: none;
+            border-radius: 4px;
+            font-size: 13px;
+            cursor: pointer;
+            transition: all 0.15s;
+            display: flex;
+            align-items: center;
+            gap: 4px;
+        }
+
+        .chunk-edit-btn.save {
+            background: #3b82f6;
+            color: white;
+        }
+
+        .chunk-edit-btn.save:hover {
+            background: #2563eb;
+        }
+
+        .chunk-edit-btn.discard {
+            background: #f3f4f6;
+            color: #6b7280;
+        }
+
+        .chunk-edit-btn.discard:hover {
+            background: #e5e7eb;
+        }
+
+        .chunk-edit-btn.split {
+            background: #8b5cf6;
+            color: white;
+        }
+
+        .chunk-edit-btn.split:hover {
+            background: #7c3aed;
+        }
+
         /* Old bubble styles - keeping for compatibility */
         .chunk-bubble {
             display: none;
@@ -3164,12 +3232,22 @@
             try {
                 showStatus('Setting best take...', 'info');
 
-                // Get the text file ID from the bubble
+                // Get the text file ID from the bubble or currentFiles
                 const bubble = document.getElementById(`bubble_${fileIndex}`);
-                const textFileId = bubble ? bubble.dataset.textFileId : null;
+                let textFileId = bubble ? bubble.dataset.textFileId : null;
+
+                if (!textFileId && currentFiles[fileIndex]) {
+                    textFileId = currentFiles[fileIndex].textFileId;
+                }
 
                 if (!textFileId) {
+                    console.error('Text file ID not found. Bubble:', bubble, 'CurrentFiles:', currentFiles[fileIndex]);
                     throw new Error('Text file ID not found');
+                }
+
+                if (!audioFilename) {
+                    console.error('Audio filename not provided:', audioFilename);
+                    throw new Error('Audio filename is required');
                 }
 
                 const response = await fetch(`${API_URL}/project/set-chunk-best-take`, {
@@ -3193,8 +3271,8 @@
                 showStatus('Best take updated successfully!', 'success');
 
                 // Update local state
-                const chunk = fileChunks[fileIndex].find(c => c.id === chunkId);
-                if (chunk) {
+                const chunk = fileChunks[fileIndex]?.find(c => c.id === chunkId);
+                if (chunk && data.chunk && data.chunk.generated_audios) {
                     chunk.generated_audios = data.chunk.generated_audios;
                     const chunkKey = `${fileIndex}_${chunkId}`;
                     chunkAudio[chunkKey] = chunk.generated_audios;
@@ -3828,40 +3906,237 @@
         // ===== CHUNK EDITING FUNCTIONS =====
 
         // Edit chunk text
+        // Inline editing for chunks
         window.editChunkText = function(fileIndex, chunkId) {
-            const chunk = fileChunks[fileIndex].find(c => c.id === chunkId);
+            const chunk = fileChunks[fileIndex]?.find(c => c.id === chunkId);
             if (!chunk) {
                 showStatus('Chunk not found', 'error');
                 return;
             }
 
-            currentEditingChunk = { fileIndex, chunkId };
-            const titleInput = document.getElementById('editChunkTitle');
-            const textarea = document.getElementById('editChunkTextarea');
-            const charCount = document.getElementById('editChunkCharCount');
-            const titleError = document.getElementById('editChunkTitleError');
+            // Get the chunk element
+            const chunkElement = document.getElementById(`chunkText_${fileIndex}_${chunkId}`);
+            if (!chunkElement) return;
 
-            titleInput.value = chunk.nickname || `Chunk #${chunkId + 1}`;
-            textarea.value = chunk.text;
-            charCount.textContent = chunk.text.length;
-            titleError.style.display = 'none';
-
-            // Update character count on input
-            textarea.oninput = () => {
-                charCount.textContent = textarea.value.length;
+            // Store original text for discard
+            window.editingChunkData = {
+                fileIndex,
+                chunkId,
+                originalText: chunk.text,
+                chunkElement
             };
 
-            // Clear error when user types in title
-            titleInput.oninput = () => {
-                titleError.style.display = 'none';
-            };
+            // Replace chunk with edit UI
+            const editId = `edit_${fileIndex}_${chunkId}`;
+            const editHtml = `
+                <div class="chunk-editing" id="${editId}">
+                    <textarea class="chunk-edit-textarea" id="textarea_${editId}">${chunk.text}</textarea>
+                    <div class="chunk-edit-actions">
+                        <button class="chunk-edit-btn split" onclick="splitChunkAtCursor(${fileIndex}, ${chunkId})">
+                            <span class="material-symbols-outlined">splitscreen</span>
+                            Split Here
+                        </button>
+                        <button class="chunk-edit-btn discard" onclick="cancelChunkEdit(${fileIndex}, ${chunkId})">
+                            <span class="material-symbols-outlined">close</span>
+                            Discard
+                        </button>
+                        <button class="chunk-edit-btn save" onclick="saveInlineChunkEdit(${fileIndex}, ${chunkId})">
+                            <span class="material-symbols-outlined">check</span>
+                            Save
+                        </button>
+                    </div>
+                </div>
+            `;
 
-            document.getElementById('editChunkModal').classList.add('show');
+            // Replace the chunk element with edit UI
+            const tempDiv = document.createElement('div');
+            tempDiv.innerHTML = editHtml;
+            chunkElement.replaceWith(tempDiv.firstElementChild);
+
+            // Focus textarea
+            const textarea = document.getElementById(`textarea_${editId}`);
+            if (textarea) {
+                textarea.focus();
+                textarea.setSelectionRange(textarea.value.length, textarea.value.length);
+            }
+        };
+
+        // Save inline chunk edit
+        window.saveInlineChunkEdit = async function(fileIndex, chunkId) {
+            const chunk = fileChunks[fileIndex]?.find(c => c.id === chunkId);
+            if (!chunk) return;
+
+            const editId = `edit_${fileIndex}_${chunkId}`;
+            const textarea = document.getElementById(`textarea_${editId}`);
+            if (!textarea) return;
+
+            const newText = textarea.value.trim();
+            if (!newText) {
+                showStatus('Chunk text cannot be empty', 'error');
+                return;
+            }
+
+            if (newText === chunk.text) {
+                // No changes, just cancel
+                cancelChunkEdit(fileIndex, chunkId);
+                return;
+            }
+
+            try {
+                // Get text file ID
+                const bubble = document.getElementById(`bubble_${fileIndex}`);
+                let textFileId = bubble ? bubble.dataset.textFileId : null;
+
+                if (!textFileId && currentFiles[fileIndex]) {
+                    textFileId = currentFiles[fileIndex].textFileId;
+                }
+
+                if (!textFileId) {
+                    showStatus('Error: Could not identify text file', 'error');
+                    return;
+                }
+
+                showStatus('Saving changes...', 'info');
+
+                // Call backend to update chunk text
+                const response = await fetch(`${API_URL}/project/update-chunk-text`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        text_file_id: textFileId,
+                        chunk_id: chunkId,
+                        new_text: newText,
+                        new_nickname: chunk.nickname
+                    })
+                });
+
+                const data = await response.json();
+
+                if (!response.ok) {
+                    throw new Error(data.error || 'Failed to update chunk');
+                }
+
+                // Update local state
+                chunk.text = data.chunk.text;
+                chunk.nickname = data.chunk.nickname;
+                chunk.dirty = data.chunk.dirty;
+
+                // Re-render the chunks
+                renderChunkBubbles(fileIndex);
+
+                // Re-render details if this chunk is selected
+                if (selectedChunks[fileIndex] === chunkId) {
+                    renderChunkDetails(fileIndex, chunkId);
+                }
+
+                showStatus('Chunk updated successfully', 'success');
+
+            } catch (error) {
+                console.error('Error updating chunk:', error);
+                showStatus(`Failed to update chunk: ${error.message}`, 'error');
+            }
+        };
+
+        // Cancel inline chunk edit
+        window.cancelChunkEdit = function(fileIndex, chunkId) {
+            // Just re-render to restore original
+            renderChunkBubbles(fileIndex);
+
+            // Clean up
+            if (window.editingChunkData) {
+                delete window.editingChunkData;
+            }
+        };
+
+        // Split chunk at cursor position
+        window.splitChunkAtCursor = async function(fileIndex, chunkId) {
+            const editId = `edit_${fileIndex}_${chunkId}`;
+            const textarea = document.getElementById(`textarea_${editId}`);
+            if (!textarea) return;
+
+            const cursorPos = textarea.selectionStart;
+            const text = textarea.value;
+
+            if (cursorPos === 0 || cursorPos === text.length) {
+                showStatus('Please place cursor in the middle of text to split', 'error');
+                return;
+            }
+
+            const firstPart = text.substring(0, cursorPos).trim();
+            const secondPart = text.substring(cursorPos).trim();
+
+            if (!firstPart || !secondPart) {
+                showStatus('Both parts must contain text', 'error');
+                return;
+            }
+
+            try {
+                // Get text file ID
+                const bubble = document.getElementById(`bubble_${fileIndex}`);
+                let textFileId = bubble ? bubble.dataset.textFileId : null;
+
+                if (!textFileId && currentFiles[fileIndex]) {
+                    textFileId = currentFiles[fileIndex].textFileId;
+                }
+
+                if (!textFileId) {
+                    showStatus('Error: Could not identify text file', 'error');
+                    return;
+                }
+
+                showStatus('Splitting chunk...', 'info');
+
+                // First, update the current chunk with the first part
+                const updateResponse = await fetch(`${API_URL}/project/update-chunk-text`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        text_file_id: textFileId,
+                        chunk_id: chunkId,
+                        new_text: firstPart,
+                        new_nickname: fileChunks[fileIndex].find(c => c.id === chunkId).nickname
+                    })
+                });
+
+                if (!updateResponse.ok) {
+                    throw new Error('Failed to update first chunk');
+                }
+
+                // Then insert a new chunk with the second part
+                const insertResponse = await fetch(`${API_URL}/project/insert-chunk`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        text_file_id: textFileId,
+                        insert_after_id: chunkId,
+                        type: 'text',
+                        text: secondPart
+                    })
+                });
+
+                if (!insertResponse.ok) {
+                    throw new Error('Failed to insert second chunk');
+                }
+
+                showStatus('Chunk split successfully!', 'success');
+
+                // Reload the project to get updated chunks
+                const projectPath = converter.current_project_path;
+                if (projectPath) {
+                    await loadProject(projectPath);
+                }
+
+            } catch (error) {
+                console.error('Error splitting chunk:', error);
+                showStatus(`Failed to split chunk: ${error.message}`, 'error');
+            }
         };
 
         // Close edit chunk modal
         window.closeEditChunkModal = function() {
-            document.getElementById('editChunkModal').classList.remove('show');
+            if (document.getElementById('editChunkModal')) {
+                document.getElementById('editChunkModal').classList.remove('show');
+            }
             currentEditingChunk = null;
         };
 
