@@ -232,6 +232,7 @@
         /* Minimalist take item */
         .audio-item {
             border-bottom: 1px solid #f0f0f0;
+            border-left: 3px solid transparent;
             transition: all 0.15s ease;
         }
 
@@ -239,21 +240,51 @@
             background: #fafbfc;
         }
 
+        /* Color coding based on status */
         .audio-item.best-take {
-            background: rgba(59, 130, 246, 0.02);
+            background: rgba(59, 130, 246, 0.03);
+            border-left-color: #3b82f6;
+        }
+
+        .audio-item.non-best-take {
+            background: rgba(100, 116, 139, 0.02);
+            border-left-color: #cbd5e1;
+        }
+
+        .audio-item.placeholder {
+            background: rgba(156, 163, 175, 0.02);
+            border-left-color: #e5e7eb;
+            font-style: italic;
+            color: #94a3b8;
+        }
+
+        .audio-item.generating {
+            background: rgba(139, 92, 246, 0.03);
+            border-left-color: #8b5cf6;
+            animation: pulse 2s ease-in-out infinite;
+        }
+
+        .audio-item.in-queue {
+            background: rgba(234, 179, 8, 0.03);
+            border-left-color: #eab308;
+        }
+
+        @keyframes pulse {
+            0%, 100% {
+                opacity: 1;
+            }
+            50% {
+                opacity: 0.7;
+            }
         }
 
         .audio-item.indented .take-header {
             padding-left: 32px;
         }
 
-        .audio-item.placeholder {
-            font-style: italic;
-            color: #94a3b8;
-        }
-
         .audio-item.highlighted {
-            background: rgba(251, 191, 36, 0.08);
+            background: rgba(251, 191, 36, 0.08) !important;
+            border-left-color: #fbbf24 !important;
         }
 
         .take-header {
@@ -277,12 +308,9 @@
         .take-icons {
             display: flex;
             gap: 4px;
-            opacity: 0;
-            transition: opacity 0.15s;
-        }
-
-        .audio-item:hover .take-icons {
+            margin-left: auto;
             opacity: 1;
+            transition: opacity 0.15s;
         }
 
         .take-icon {
@@ -2922,7 +2950,8 @@
                     // Render best take (non-indented)
                     if (bestTake) {
                         const takeId = `take_${fileIndex}_${chunk.id}_${takeCounter++}`;
-                        const takePreview = (bestTake.original_text || chunk.text).substring(0, 80);
+                        const text = bestTake.original_text || chunk.text;
+                        const takePreview = text.substring(0, 48) + (text.length > 48 ? '...' : '');
 
                         allTakesHtml += `
                             <div class="audio-item best-take"
@@ -2967,10 +2996,11 @@
                     // Render other takes (indented)
                     otherTakes.forEach((item, idx) => {
                         const takeId = `take_${fileIndex}_${chunk.id}_${takeCounter++}`;
-                        const takePreview = (item.original_text || chunk.text).substring(0, 80);
+                        const text = item.original_text || chunk.text;
+                        const takePreview = text.substring(0, 48) + (text.length > 48 ? '...' : '');
 
                         allTakesHtml += `
-                            <div class="audio-item indented"
+                            <div class="audio-item indented non-best-take"
                                  data-take-file-index="${fileIndex}"
                                  data-take-chunk-id="${chunk.id}">
                                 <div class="take-header"
@@ -3011,7 +3041,7 @@
                 } else {
                     // Placeholder for chunks with no takes
                     const takeId = `take_${fileIndex}_${chunk.id}_placeholder`;
-                    const chunkPreview = chunk.text.substring(0, 80);
+                    const chunkPreview = chunk.text.substring(0, 48) + (chunk.text.length > 48 ? '...' : '');
 
                     allTakesHtml += `
                         <div class="audio-item placeholder"

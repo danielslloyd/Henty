@@ -2601,6 +2601,10 @@ def add_gutenberg_url_to_project():
         # Process carriage returns
         text = processor.process_carriage_returns(text)
 
+        # Replace SECTION_BREAK markers with paragraph breaks
+        # This ensures they don't appear in the final text
+        text = text.replace('<<<SECTION_BREAK>>>', '\n\n')
+
         print(f"Processed text length: {len(text)} characters")
 
         # Detect chapters in the processed text
