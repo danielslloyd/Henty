@@ -2113,7 +2113,7 @@
                 <div class="voice-sample-item">
                     <div class="voice-sample-name">${sample.name}</div>
                     <div class="voice-sample-controls">
-                        <button class="btn btn-small" onclick="playVoiceSample('${sample.url}')" title="Play sample" style="padding: 4px 8px; font-size: 11px;">▶</button>
+                        <button class="btn btn-small" onclick="playVoiceSample('${sample.url}', event)" title="Play sample" style="padding: 4px 8px; font-size: 11px;"><span class="material-symbols-outlined" style="font-size: 14px;">play_arrow</span></button>
                         <audio id="audio_${sample.name.replace(/[^a-zA-Z0-9]/g, '_')}" style="display: none;">
                             <source src="http://localhost:5000${sample.url}" type="audio/wav">
                         </audio>
@@ -2135,12 +2135,9 @@
         }
 
         // Play voice sample function
-        window.playVoiceSample = function(url) {
-            const audio = new Audio(`http://localhost:5000${url}`);
-            audio.play().catch(err => {
-                console.error('Error playing audio:', err);
-                showStatus('Failed to play audio sample', 'error');
-            });
+        window.playVoiceSample = function(url, event) {
+            const buttonElement = event ? event.currentTarget : null;
+            audioManager.play(url, buttonElement);
         };
 
         // Handle folder browse
@@ -3016,29 +3013,96 @@
             }
         };
 
-        // Play audio for a take
-        window.playTakeAudio = function(audioUrl) {
-            // Stop any currently playing audio
-            const currentAudio = window.currentPlayingAudio;
-            if (currentAudio) {
-                currentAudio.pause();
-                currentAudio.currentTime = 0;
-            }
+        // Global audio manager to handle play/pause state and ensure only one audio plays at a time
+        const audioManager = {
+            currentAudio: null,
+            currentButton: null,
 
-            // Create and play new audio
-            const audio = new Audio(`http://localhost:5000${audioUrl}`);
-            window.currentPlayingAudio = audio;
-            audio.play();
+            stop() {
+                if (this.currentAudio) {
+                    this.currentAudio.pause();
+                    this.currentAudio.currentTime = 0;
+                    this.currentAudio = null;
+                }
+                if (this.currentButton) {
+                    this.updateButtonIcon(this.currentButton, false);
+                    this.currentButton = null;
+                }
+            },
+
+            play(audioUrl, buttonElement) {
+                // If clicking the same button, toggle pause
+                if (this.currentButton === buttonElement && this.currentAudio && !this.currentAudio.paused) {
+                    this.currentAudio.pause();
+                    this.updateButtonIcon(buttonElement, false);
+                    return;
+                }
+
+                // Stop any currently playing audio
+                this.stop();
+
+                // Create and play new audio
+                const audio = new Audio(`http://localhost:5000${audioUrl}`);
+                this.currentAudio = audio;
+                this.currentButton = buttonElement;
+
+                audio.play().catch(err => {
+                    console.error('Error playing audio:', err);
+                    showStatus('Failed to play audio', 'error');
+                    this.stop();
+                });
+
+                // Update button to show pause icon
+                this.updateButtonIcon(buttonElement, true);
+
+                // When audio ends, reset button to play icon
+                audio.addEventListener('ended', () => {
+                    this.updateButtonIcon(buttonElement, false);
+                    this.currentAudio = null;
+                    this.currentButton = null;
+                });
+
+                // Handle audio errors
+                audio.addEventListener('error', () => {
+                    this.updateButtonIcon(buttonElement, false);
+                    this.currentAudio = null;
+                    this.currentButton = null;
+                });
+            },
+
+            updateButtonIcon(buttonElement, isPlaying) {
+                if (!buttonElement) return;
+                const icon = buttonElement.querySelector('.material-symbols-outlined');
+                if (icon) {
+                    icon.textContent = isPlaying ? 'pause' : 'play_arrow';
+                }
+            }
+        };
+
+        // Play audio for a take
+        window.playTakeAudio = function(audioUrl, event) {
+            const buttonElement = event ? event.currentTarget : null;
+            audioManager.play(audioUrl, buttonElement);
         };
 
         // Toggle settings expansion for a take
-        window.toggleTakeSettings = function(takeId) {
-            const settingsEl = document.getElementById(`settings_${takeId}`);
-            const iconEl = document.querySelector(`[data-settings-for="${takeId}"]`);
+        window.toggleTakeSettings = function(settingsId) {
+            // Handle both direct IDs and IDs that need "settings_" prefix
+            const actualId = settingsId.includes('_settings') ? settingsId : `settings_${settingsId}`;
+            const settingsEl = document.getElementById(actualId);
 
-            if (settingsEl && iconEl) {
-                settingsEl.classList.toggle('expanded');
-                iconEl.classList.toggle('expanded');
+            // For direct IDs (chunk settings), there's no icon to toggle
+            if (settingsId.includes('_settings')) {
+                if (settingsEl) {
+                    settingsEl.classList.toggle('expanded');
+                }
+            } else {
+                // For take settings, also toggle the icon
+                const iconEl = document.querySelector(`[data-settings-for="${settingsId}"]`);
+                if (settingsEl && iconEl) {
+                    settingsEl.classList.toggle('expanded');
+                    iconEl.classList.toggle('expanded');
+                }
             }
         };
 
@@ -3098,7 +3162,7 @@
                                     <button class="take-icon settings" data-settings-for="${takeId}" onclick="event.stopPropagation(); toggleTakeSettings('${takeId}')" title="Settings">
                                         <span class="material-symbols-outlined">settings</span>
                                     </button>
-                                    <button class="take-icon play" onclick="event.stopPropagation(); playTakeAudio('${firstTake.audio_url}')" title="Play">
+                                    <button class="take-icon play" onclick="event.stopPropagation(); playTakeAudio('${firstTake.audio_url}', event)" title="Play">
                                         <span class="material-symbols-outlined">play_arrow</span>
                                     </button>
                                     <button class="take-icon delete" onclick='event.stopPropagation(); deleteChunkTake(${fileIndex}, ${chunk.id}, "${fileName}", "${firstTake.audio_file}")' title="Delete">
@@ -3174,7 +3238,7 @@
                                         <button class="take-icon settings" data-settings-for="${takeId}" onclick="event.stopPropagation(); toggleTakeSettings('${takeId}')" title="Settings">
                                             <span class="material-symbols-outlined">settings</span>
                                         </button>
-                                        <button class="take-icon play" onclick="event.stopPropagation(); playTakeAudio('${take.audio_url}')" title="Play">
+                                        <button class="take-icon play" onclick="event.stopPropagation(); playTakeAudio('${take.audio_url}', event)" title="Play">
                                             <span class="material-symbols-outlined">play_arrow</span>
                                         </button>
                                         <button class="take-icon delete" onclick='event.stopPropagation(); deleteChunkTake(${fileIndex}, ${chunk.id}, "${fileName}", "${take.audio_file}")' title="Delete">
@@ -3519,14 +3583,15 @@
 
                 showStatus('Take deleted successfully!', 'success');
 
-                // Reload chunk audio
+                // Reload audio for ALL chunks to ensure UI is in sync with backend
                 const fileName = currentFiles[fileIndex].name.split('/').pop();
-                await loadChunkAudio(fileIndex, fileName, chunkId);
-
-                // Re-render details if this chunk is selected
-                if (selectedChunks[fileIndex] === chunkId) {
-                    renderChunkDetails(fileIndex, chunkId);
+                const chunks = fileChunks[fileIndex] || [];
+                for (const chunk of chunks) {
+                    await loadChunkAudio(fileIndex, fileName, chunk.id);
                 }
+
+                // Re-render details to show updated state
+                renderChunkDetails(fileIndex, chunkId);
             } catch (error) {
                 console.error('Error deleting chunk take:', error);
                 showStatus(`Failed: ${error.message}`, 'error');
