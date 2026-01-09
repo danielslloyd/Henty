@@ -222,91 +222,129 @@
             margin-top: 15px;
         }
 
+        /* One-line take item */
         .audio-item {
-            background: #f9f9f9;
-            border-radius: 8px;
-            padding: 12px;
-            margin-bottom: 10px;
-        }
-
-        .audio-item-header {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            margin-bottom: 8px;
-        }
-
-        .audio-item-title {
-            font-size: 13px;
-            font-weight: 600;
-            color: #555;
-        }
-
-        .audio-item-params {
-            font-size: 11px;
-            color: #888;
-            margin-bottom: 8px;
-        }
-
-        .audio-player {
-            width: 100%;
-        }
-
-        .best-take-control {
-            display: flex;
-            align-items: center;
-            gap: 8px;
-            margin-bottom: 8px;
-        }
-
-        .best-take-control input[type="radio"] {
-            cursor: pointer;
-            width: 16px;
-            height: 16px;
-        }
-
-        .best-take-control label {
-            cursor: pointer;
-            font-size: 12px;
-            color: #666;
-            user-select: none;
-        }
-
-        .best-take-badge {
-            display: inline-block;
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            color: white;
-            padding: 3px 10px;
-            border-radius: 12px;
-            font-size: 11px;
-            font-weight: 600;
-            text-transform: uppercase;
-            letter-spacing: 0.5px;
-        }
-
-        .audio-item.best-take {
-            border: 2px solid #667eea;
-            background: linear-gradient(to right, #f9f9f9, #f0f0ff);
-        }
-
-        .delete-take-btn {
-            background: none;
-            border: none;
-            cursor: pointer;
-            font-size: 16px;
-            padding: 4px 8px;
-            color: #999;
-            transition: color 0.2s;
-        }
-
-        .delete-take-btn:hover {
-            color: #ff4444;
-        }
-
-        .audio-item-header-actions {
             display: flex;
             align-items: center;
             gap: 10px;
+            padding: 6px 12px;
+            margin-bottom: 4px;
+            background: #f9f9f9;
+            border-radius: 6px;
+            border-left: 3px solid transparent;
+            transition: all 0.2s;
+            min-height: 32px;
+        }
+
+        .audio-item:hover {
+            background: #f0f0f0;
+        }
+
+        .audio-item.best-take {
+            border-left-color: #667eea;
+            background: linear-gradient(to right, #f0f0ff, #f9f9f9);
+        }
+
+        .audio-item.indented {
+            margin-left: 20px;
+            opacity: 0.8;
+        }
+
+        .audio-item.placeholder {
+            background: #fafafa;
+            border-left-color: #ddd;
+            font-style: italic;
+            color: #999;
+        }
+
+        .audio-item.highlighted {
+            background: rgba(255, 193, 7, 0.2);
+        }
+
+        .audio-item-hash {
+            font-family: 'Courier New', monospace;
+            font-size: 11px;
+            color: #999;
+            min-width: 60px;
+        }
+
+        .audio-item-preview {
+            flex: 1;
+            font-size: 12px;
+            color: #666;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+
+        .audio-item-icons {
+            display: flex;
+            gap: 6px;
+        }
+
+        .audio-item-icon {
+            background: none;
+            border: none;
+            cursor: pointer;
+            font-size: 14px;
+            padding: 4px;
+            color: #999;
+            transition: color 0.2s;
+            line-height: 1;
+        }
+
+        .audio-item-icon:hover {
+            color: #667eea;
+        }
+
+        .audio-item-icon.play-icon:hover {
+            color: #4caf50;
+        }
+
+        .audio-item-icon.delete-icon:hover {
+            color: #ff4444;
+        }
+
+        .audio-item-icon.generate-icon:hover {
+            color: #667eea;
+        }
+
+        /* Hidden audio player for one-line takes */
+        .audio-item audio {
+            display: none;
+        }
+
+        /* Legacy styles - keeping for compatibility */
+        .audio-item-header {
+            display: none;
+        }
+
+        .audio-item-title {
+            display: none;
+        }
+
+        .audio-item-params {
+            display: none;
+        }
+
+        .audio-player {
+            display: none;
+        }
+
+        .best-take-control {
+            display: none;
+        }
+
+        .best-take-badge {
+            display: none;
+        }
+
+        .delete-take-btn {
+            display: none;
+        }
+
+        .audio-item-header-actions {
+            display: none;
         }
 
         .inline-progress-section {
@@ -591,6 +629,10 @@
         .chunks-pane {
             max-height: 600px;
             overflow-y: auto;
+            padding: 15px;
+            line-height: 1.8;
+            font-size: 14px;
+            color: #333;
         }
 
         .chunks-pane h3 {
@@ -604,104 +646,105 @@
             z-index: 10;
         }
 
-        .chunk-bubble {
-            background: linear-gradient(135deg, #f5f5f5 0%, #e8e8e8 100%);
-            border: 2px solid #d0d0d0;
-            border-radius: 12px;
-            padding: 12px 15px;
-            margin-bottom: 12px;
+        /* Flowing text chunk with rounded highlight */
+        .chunk-text {
+            display: inline;
+            padding: 4px 8px;
+            margin: 0 2px;
+            border-radius: 8px;
+            background: rgba(230, 230, 230, 0.4);
+            transition: all 0.2s;
             cursor: pointer;
-            transition: all 0.3s;
             position: relative;
         }
 
-        .chunk-bubble:hover {
-            transform: translateY(-2px);
-            box-shadow: 0 4px 12px rgba(0,0,0,0.15);
-            border-color: #667eea;
+        .chunk-text:hover {
+            background: rgba(102, 126, 234, 0.15);
         }
 
-        .chunk-bubble.selected {
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            color: white;
-            border-color: #667eea;
+        .chunk-text.selected {
+            background: rgba(102, 126, 234, 0.3);
         }
 
-        .chunk-bubble.has-audio {
-            border-color: #4caf50;
-            background: linear-gradient(135deg, #e8f5e9 0%, #c8e6c9 100%);
+        .chunk-text.has-audio {
+            background: rgba(76, 175, 80, 0.2);
         }
 
-        .chunk-bubble.selected.has-audio {
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            color: white;
+        .chunk-text.has-audio:hover {
+            background: rgba(76, 175, 80, 0.3);
         }
 
-        .chunk-nickname {
-            font-size: 13px;
-            font-weight: 500;
-            margin-bottom: 5px;
-            line-height: 1.4;
+        .chunk-text.selected.has-audio {
+            background: rgba(102, 126, 234, 0.35);
         }
 
-        .chunk-nickname .chunk-preview {
-            color: #999;
-            font-weight: 400;
-            font-size: 11px;
+        .chunk-text.highlighted {
+            background: rgba(255, 193, 7, 0.3);
         }
 
-        .chunk-meta {
-            font-size: 11px;
-            opacity: 0.7;
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-        }
-
-        .chunk-audio-count {
-            background: rgba(255,255,255,0.3);
-            padding: 2px 8px;
-            border-radius: 10px;
-            font-size: 10px;
+        /* Chapter break marker */
+        .chapter-break {
+            display: block;
+            margin: 20px 0;
+            padding: 8px 0;
+            border-top: 2px solid #667eea;
+            border-bottom: 2px solid #667eea;
+            text-align: center;
             font-weight: 600;
+            color: #667eea;
+            font-size: 12px;
+            position: relative;
         }
 
-        .chunk-bubble.selected .chunk-audio-count {
-            background: rgba(255,255,255,0.2);
+        .chapter-break-actions {
+            display: inline-flex;
+            gap: 8px;
+            margin-left: 10px;
         }
 
-        .chunk-edit-btn {
+        .chapter-break-actions button {
             background: transparent;
             border: none;
-            color: #999;
-            font-size: 14px;
-            padding: 4px 8px;
-            cursor: pointer;
-            opacity: 0.6;
-            transition: opacity 0.2s, color 0.2s;
-            margin-left: 8px;
-        }
-
-        .chunk-edit-btn:hover {
-            opacity: 1;
             color: #667eea;
+            cursor: pointer;
+            font-size: 14px;
+            opacity: 0.6;
+            transition: opacity 0.2s;
         }
 
-        .chunk-bubble.selected .chunk-edit-btn {
-            color: rgba(255,255,255,0.7);
+        .chapter-break-actions button:hover {
+            opacity: 1;
         }
 
-        .chunk-bubble.selected .chunk-edit-btn:hover {
-            color: white;
+        /* Insert chapter break button (appears between chunks) */
+        .insert-chapter-break-btn {
+            display: inline-block;
+            margin: 0 6px;
+            padding: 2px 8px;
+            background: rgba(102, 126, 234, 0.1);
+            border: 1px dashed #667eea;
+            border-radius: 4px;
+            color: #667eea;
+            font-size: 10px;
+            cursor: pointer;
+            opacity: 0;
+            transition: opacity 0.2s;
         }
 
-        .chunk-bubble:hover .btn-insert-chunk {
-            display: block !important;
+        .chunk-text:hover + .insert-chapter-break-btn,
+        .insert-chapter-break-btn:hover {
+            opacity: 1;
         }
 
-        .btn-insert-chunk:hover {
-            background: #5568d3 !important;
-            transform: translateX(-50%) scale(1.1);
+        /* Pause chunk styling */
+        .chunk-pause {
+            background: rgba(200, 200, 200, 0.3);
+            font-style: italic;
+        }
+
+        /* Old bubble styles - keeping for compatibility */
+        .chunk-bubble {
+            display: none;
         }
 
         .chunk-details-pane {
@@ -2509,7 +2552,18 @@
 
         // ===== CHUNK-RELATED FUNCTIONS =====
 
-        // Render chunk bubbles in the middle pane
+        // Generate a short hash from chunk ID
+        function generateChunkHash(chunkId) {
+            const str = `chunk${chunkId}`;
+            let hash = 0;
+            for (let i = 0; i < str.length; i++) {
+                hash = ((hash << 5) - hash) + str.charCodeAt(i);
+                hash = hash & hash;
+            }
+            return Math.abs(hash).toString(16).substring(0, 6);
+        }
+
+        // Render chunks as flowing text with highlights
         function renderChunkBubbles(fileIndex) {
             const chunks = fileChunks[fileIndex];
             const container = document.getElementById(`chunksList_${fileIndex}`);
@@ -2519,44 +2573,51 @@
                 return;
             }
 
-            container.innerHTML = chunks.map((chunk, index) => {
+            let html = '';
+
+            chunks.forEach((chunk, index) => {
                 const audioKey = `${fileIndex}_${chunk.id}`;
                 const audioCount = chunkAudio[audioKey]?.length || 0;
                 const hasAudio = audioCount > 0;
-                const displayName = chunk.nickname || `Chunk ${chunk.id + 1}`;
                 const isPause = chunk.type === 'pause';
+                const isSelected = selectedChunks[fileIndex] === chunk.id;
 
-                return `
-                    <div class="chunk-bubble ${hasAudio ? 'has-audio' : ''} ${isPause ? 'chunk-pause' : ''}"
-                         id="chunkBubble_${fileIndex}_${chunk.id}"
-                         onclick="selectChunk(${fileIndex}, ${chunk.id})"
-                         style="padding: 10px; position: relative; ${isPause ? 'background: linear-gradient(135deg, #f0f0f0 0%, #e0e0e0 100%); font-style: italic;' : ''}">
-                        <!-- Top row: Title/Number on left, Audio counter on right -->
-                        <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 8px;">
-                            <div style="display: flex; align-items: center; gap: 5px; font-size: 11px; font-weight: 600; color: #666;">
-                                <span>#${chunk.id + 1}</span>
-                                <span style="color: #999;">|</span>
-                                <span style="max-width: 150px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">${isPause ? '⏸️ ' : ''}${displayName}</span>
-                                ${!isPause ? `<button class="chunk-edit-btn" onclick="event.stopPropagation(); editChunkText(${fileIndex}, ${chunk.id})" title="Edit chunk" style="font-size: 12px; padding: 2px 6px; opacity: 0.5;">✏️</button>` : ''}
-                            </div>
-                            ${hasAudio ? `<span class="chunk-audio-count" style="font-size: 10px; background: rgba(102,126,234,0.2); padding: 2px 8px; border-radius: 10px;">${audioCount} audio</span>` : ''}
+                // Check if this chunk has a chapter break marker
+                if (chunk.chapter_marker) {
+                    html += `
+                        <div class="chapter-break">
+                            Chapter Break
+                            <span class="chapter-break-actions">
+                                <button onclick="deleteChapterBreak(${fileIndex}, ${chunk.id})" title="Delete chapter break">🗑️</button>
+                            </span>
                         </div>
-                        <!-- Full chunk text below -->
-                        <div style="font-size: 12px; line-height: 1.5; color: #444; overflow: hidden; text-overflow: ellipsis; display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical;">
-                            ${chunk.text}
-                        </div>
-                        <!-- Insert chunk button -->
-                        <button class="btn-insert-chunk" onclick="event.stopPropagation(); showInsertChunkDialog(${fileIndex}, ${chunk.id})"
-                                title="Insert chunk after this"
-                                style="position: absolute; bottom: -12px; left: 50%; transform: translateX(-50%);
-                                       background: #667eea; color: white; border: none; border-radius: 50%;
-                                       width: 24px; height: 24px; font-size: 14px; cursor: pointer;
-                                       display: none; box-shadow: 0 2px 4px rgba(0,0,0,0.2);">
-                            +
-                        </button>
-                    </div>
-                `;
-            }).join('');
+                    `;
+                }
+
+                // Render chunk as inline highlighted text
+                const classes = ['chunk-text'];
+                if (hasAudio) classes.push('has-audio');
+                if (isSelected) classes.push('selected');
+                if (isPause) classes.push('chunk-pause');
+
+                html += `<span class="${classes.join(' ')}"
+                              id="chunkText_${fileIndex}_${chunk.id}"
+                              data-file-index="${fileIndex}"
+                              data-chunk-id="${chunk.id}"
+                              onclick="selectChunk(${fileIndex}, ${chunk.id})"
+                              ondblclick="editChunkText(${fileIndex}, ${chunk.id})"
+                              onmouseenter="highlightChunk(${fileIndex}, ${chunk.id})"
+                              onmouseleave="unhighlightChunk(${fileIndex}, ${chunk.id})">${chunk.text}</span>`;
+
+                // Add chapter break insertion button (only between chunks, not after last)
+                if (index < chunks.length - 1) {
+                    html += ` <button class="insert-chapter-break-btn"
+                                     onclick="insertChapterBreak(${fileIndex}, ${chunk.id})"
+                                     title="Insert chapter break">⊕</button> `;
+                }
+            });
+
+            container.innerHTML = html;
         }
 
         // Select a chunk
@@ -2573,17 +2634,84 @@
             renderChunkDetails(fileIndex, chunkId);
         };
 
-        // Highlight a chunk on hover (simplified since we removed full text pane)
+        // Highlight chunk and corresponding takes on hover
         window.highlightChunk = function(fileIndex, chunkId) {
-            // Function kept for compatibility, no longer highlights full text
+            const chunkElement = document.getElementById(`chunkText_${fileIndex}_${chunkId}`);
+            if (chunkElement) {
+                chunkElement.classList.add('highlighted');
+            }
+
+            // Highlight corresponding takes
+            const takeElements = document.querySelectorAll(`[data-take-file-index="${fileIndex}"][data-take-chunk-id="${chunkId}"]`);
+            takeElements.forEach(el => el.classList.add('highlighted'));
         };
 
         // Remove highlight on hover leave
         window.unhighlightChunk = function(fileIndex, chunkId) {
-            // Function kept for compatibility, no longer highlights full text
+            const chunkElement = document.getElementById(`chunkText_${fileIndex}_${chunkId}`);
+            if (chunkElement) {
+                chunkElement.classList.remove('highlighted');
+            }
+
+            // Remove highlight from takes
+            const takeElements = document.querySelectorAll(`[data-take-file-index="${fileIndex}"][data-take-chunk-id="${chunkId}"]`);
+            takeElements.forEach(el => el.classList.remove('highlighted'));
         };
 
-        // Render chunk details pane
+        // Highlight take and corresponding chunk on hover
+        window.highlightTake = function(fileIndex, chunkId) {
+            highlightChunk(fileIndex, chunkId);
+        };
+
+        // Remove take highlight
+        window.unhighlightTake = function(fileIndex, chunkId) {
+            unhighlightChunk(fileIndex, chunkId);
+        };
+
+        // Insert chapter break after a chunk
+        window.insertChapterBreak = function(fileIndex, chunkId) {
+            // For now, just show a confirmation
+            if (confirm('Insert a chapter break after this chunk?')) {
+                // TODO: Implement backend support for chapter breaks
+                showStatus('Chapter breaks require backend support', 'info');
+            }
+        };
+
+        // Delete chapter break
+        window.deleteChapterBreak = function(fileIndex, chunkId) {
+            if (confirm('Delete this chapter break?')) {
+                // TODO: Implement backend support for chapter breaks
+                showStatus('Chapter breaks require backend support', 'info');
+            }
+        };
+
+        // Play audio for a take
+        window.playTakeAudio = function(audioUrl) {
+            // Stop any currently playing audio
+            const currentAudio = window.currentPlayingAudio;
+            if (currentAudio) {
+                currentAudio.pause();
+                currentAudio.currentTime = 0;
+            }
+
+            // Create and play new audio
+            const audio = new Audio(`http://localhost:5000${audioUrl}`);
+            window.currentPlayingAudio = audio;
+            audio.play();
+        };
+
+        // Show settings modal for a take
+        window.showTakeSettings = function(fileIndex, chunkId, audioFile) {
+            const audioKey = `${fileIndex}_${chunkId}`;
+            const audioList = chunkAudio[audioKey] || [];
+            const take = audioList.find(a => a.audio_file === audioFile);
+
+            if (take) {
+                alert(`Settings for ${audioFile}:\n\nExaggeration: ${take.exaggeration}\nCFG Weight: ${take.cfg_weight}\nVoice: ${take.voice_sample || 'Default'}\n\nNote: Editing settings not yet implemented`);
+            }
+        };
+
+        // Render chunk details pane with one-line takes
         function renderChunkDetails(fileIndex, chunkId) {
             const chunk = fileChunks[fileIndex].find(c => c.id === chunkId);
             const audioKey = `${fileIndex}_${chunkId}`;
@@ -2592,104 +2720,138 @@
 
             const detailsContainer = document.getElementById(`chunkDetails_${fileIndex}`);
 
+            // Generate hash and preview for this chunk
+            const chunkHash = generateChunkHash(chunkId);
+            const textPreview = chunk.text.substring(0, 40) + (chunk.text.length > 40 ? '...' : '');
+
             // Check if all chunks have at least one audio
             const allChunksHaveAudio = fileChunks[fileIndex].every(c => {
                 const key = `${fileIndex}_${c.id}`;
                 return chunkAudio[key] && chunkAudio[key].length > 0;
             });
 
+            let takesHtml = '';
+
+            if (audioList.length > 0) {
+                // Sort by timestamp (earliest first)
+                const sortedAudio = [...audioList].sort((a, b) =>
+                    (a.timestamp || 0) - (b.timestamp || 0)
+                );
+
+                // Find best take (or auto-select first if only one)
+                const shouldAutoSelect = sortedAudio.length === 1 && !sortedAudio[0].is_best_take;
+                let bestTakeIndex = sortedAudio.findIndex(a => a.is_best_take);
+                if (bestTakeIndex === -1 && shouldAutoSelect) {
+                    bestTakeIndex = 0;
+                    setTimeout(() => setChunkBestTake(fileIndex, chunkId, fileName, sortedAudio[0].audio_file), 100);
+                }
+
+                // Render best take first (non-indented), then others (indented)
+                const bestTake = bestTakeIndex >= 0 ? sortedAudio[bestTakeIndex] : null;
+                const otherTakes = sortedAudio.filter((_, idx) => idx !== bestTakeIndex);
+
+                // Render best take
+                if (bestTake) {
+                    const takeHash = generateChunkHash(chunkId + bestTakeIndex);
+                    const takePreview = (bestTake.original_text || chunk.text).substring(0, 50) + '...';
+
+                    takesHtml += `
+                        <div class="audio-item best-take"
+                             data-take-file-index="${fileIndex}"
+                             data-take-chunk-id="${chunkId}"
+                             onmouseenter="highlightTake(${fileIndex}, ${chunkId})"
+                             onmouseleave="unhighlightTake(${fileIndex}, ${chunkId})">
+                            <span class="audio-item-hash">${takeHash}</span>
+                            <span class="audio-item-preview">${takePreview}</span>
+                            <div class="audio-item-icons">
+                                <button class="audio-item-icon" onclick="showTakeSettings(${fileIndex}, ${chunkId}, '${bestTake.audio_file}')" title="Settings">⚙️</button>
+                                <button class="audio-item-icon play-icon" onclick="playTakeAudio('${bestTake.audio_url}')" title="Play">▶️</button>
+                                <button class="audio-item-icon delete-icon" onclick='deleteChunkTake(${fileIndex}, ${chunkId}, "${fileName}", "${bestTake.audio_file}")' title="Delete">🗑️</button>
+                            </div>
+                            <audio><source src="http://localhost:5000${bestTake.audio_url}" type="audio/wav"></audio>
+                        </div>
+                    `;
+                }
+
+                // Render other takes (indented)
+                otherTakes.forEach((item, idx) => {
+                    const takeHash = generateChunkHash(chunkId + idx + 1000);
+                    const takePreview = (item.original_text || chunk.text).substring(0, 50) + '...';
+
+                    takesHtml += `
+                        <div class="audio-item indented"
+                             data-take-file-index="${fileIndex}"
+                             data-take-chunk-id="${chunkId}"
+                             onmouseenter="highlightTake(${fileIndex}, ${chunkId})"
+                             onmouseleave="unhighlightTake(${fileIndex}, ${chunkId})">
+                            <span class="audio-item-hash">${takeHash}</span>
+                            <span class="audio-item-preview">${takePreview}</span>
+                            <div class="audio-item-icons">
+                                <button class="audio-item-icon" onclick="showTakeSettings(${fileIndex}, ${chunkId}, '${item.audio_file}')" title="Settings">⚙️</button>
+                                <button class="audio-item-icon play-icon" onclick="playTakeAudio('${item.audio_url}')" title="Play">▶️</button>
+                                <button class="audio-item-icon delete-icon" onclick='deleteChunkTake(${fileIndex}, ${chunkId}, "${fileName}", "${item.audio_file}")' title="Delete">🗑️</button>
+                            </div>
+                            <audio><source src="http://localhost:5000${item.audio_url}" type="audio/wav"></audio>
+                        </div>
+                    `;
+                });
+            } else {
+                // Placeholder for chunks with no takes
+                takesHtml = `
+                    <div class="audio-item placeholder"
+                         data-take-file-index="${fileIndex}"
+                         data-take-chunk-id="${chunkId}">
+                        <span class="audio-item-hash">${chunkHash}</span>
+                        <span class="audio-item-preview">No audio generated yet</span>
+                        <div class="audio-item-icons">
+                            <button class="audio-item-icon" onclick="alert('Settings panel below')" title="Settings">⚙️</button>
+                            <button class="audio-item-icon generate-icon" onclick="generateChunkAudio(${fileIndex}, ${chunkId})" title="Generate">✨</button>
+                        </div>
+                    </div>
+                `;
+            }
+
+            // Add settings section at bottom
+            const settingsHtml = `
+                <div style="margin-top: 20px; padding: 15px; background: #f5f7fa; border-radius: 8px; border: 1px solid #d0d8e0;">
+                    <h4 style="margin: 0 0 12px 0; color: #667eea; font-size: 13px;">⚙️ Generation Settings</h4>
+                    <div class="control-group" style="margin-bottom: 10px;">
+                        <label style="font-size: 12px;">Voice Sample</label>
+                        <select id="voice_chunk_${fileIndex}_${chunkId}" style="width: 100%; padding: 6px; font-size: 12px;">
+                            ${voiceSamples.map(s => `<option value="${s.name}" ${projectDefaults.voice_sample === s.name ? 'selected' : ''}>${s.name}</option>`).join('')}
+                        </select>
+                    </div>
+                    <div class="control-group" style="margin-bottom: 10px;">
+                        <label style="font-size: 12px;">
+                            Exaggeration: <span class="range-value" id="exag_val_chunk_${fileIndex}_${chunkId}">${projectDefaults.exaggeration}</span>
+                        </label>
+                        <input type="range" id="exaggeration_chunk_${fileIndex}_${chunkId}" min="0" max="1" step="0.1" value="${projectDefaults.exaggeration}"
+                               oninput="document.getElementById('exag_val_chunk_${fileIndex}_${chunkId}').textContent = this.value"
+                               style="width: 100%;">
+                    </div>
+                    <div class="control-group" style="margin-bottom: 10px;">
+                        <label style="font-size: 12px;">
+                            CFG Weight: <span class="range-value" id="cfg_val_chunk_${fileIndex}_${chunkId}">${projectDefaults.cfg_weight}</span>
+                        </label>
+                        <input type="range" id="cfg_weight_chunk_${fileIndex}_${chunkId}" min="0" max="1" step="0.1" value="${projectDefaults.cfg_weight}"
+                               oninput="document.getElementById('cfg_val_chunk_${fileIndex}_${chunkId}').textContent = this.value"
+                               style="width: 100%;">
+                    </div>
+                    <button class="btn btn-primary" onclick="generateChunkAudio(${fileIndex}, ${chunkId})" style="width: 100%; padding: 8px; font-size: 13px;">
+                        ✨ Generate New Take
+                    </button>
+                </div>
+            `;
+
             detailsContainer.innerHTML = `
                 <div style="margin-bottom: 15px;">
-                    <h3 style="color: #667eea; margin: 0 0 10px 0;">${chunk.nickname || `Chunk #${chunkId + 1}`}</h3>
+                    <h3 style="color: #667eea; margin: 0 0 5px 0; font-size: 14px;">${chunkHash}</h3>
+                    <p style="color: #999; font-size: 12px; margin: 0;">${textPreview}</p>
                 </div>
-
                 <div id="chunkAudioList_${fileIndex}_${chunkId}">
-                    ${audioList.length > 0 ? (() => {
-                        // Sort by timestamp (earliest first)
-                        const sortedAudio = [...audioList].sort((a, b) =>
-                            (a.timestamp || 0) - (b.timestamp || 0)
-                        );
-
-                        // Auto-select best take if only one audio exists
-                        const shouldAutoSelect = sortedAudio.length === 1 && !sortedAudio[0].is_best_take;
-
-                        return sortedAudio.map((item, idx) => {
-                            const date = new Date(item.timestamp).toLocaleString();
-                            const isBestTake = item.is_best_take || shouldAutoSelect;
-                            const bestTakeBadge = isBestTake ? '<span class="best-take-badge">Best Take</span>' : '';
-                            const audioItemClass = isBestTake ? 'audio-item best-take' : 'audio-item';
-
-                            // Add outdated flag if chunk text has changed since audio generation
-                            const textChanged = item.original_text && item.original_text !== chunk.text;
-                            const escapedOrigText = item.original_text ? item.original_text.replace(/'/g, "\\'").replace(/"/g, "&quot;") : '';
-                            const outdatedFlag = textChanged ? `<span class="outdated-audio-flag" title="Text has changed since audio was generated. Click to view original." onclick="event.stopPropagation(); alert('Original text:\\n\\n${escapedOrigText}')" style="cursor: pointer;">⚠️</span>` : '';
-
-                            // Auto-select if needed
-                            if (shouldAutoSelect && idx === 0 && item.audio_file) {
-                                setTimeout(() => setChunkBestTake(fileIndex, chunkId, fileName, item.audio_file), 100);
-                            }
-
-                            return `
-                                <div class="${audioItemClass}">
-                                    <div class="audio-item-header">
-                                        <div class="audio-item-title">Generation #${idx + 1} ${bestTakeBadge}${outdatedFlag}</div>
-                                        <div class="audio-item-header-actions">
-                                            <small style="color: #999;">${date}</small>
-                                            <button class="delete-take-btn" onclick='deleteChunkTake(${fileIndex}, ${chunkId}, "${fileName}", "${item.audio_file}")' title="Delete this take">🗑️</button>
-                                        </div>
-                                    </div>
-                                    <div class="best-take-control">
-                                        <input type="radio"
-                                               name="best_take_chunk_${fileIndex}_${chunkId}"
-                                               id="radio_chunk_${fileIndex}_${chunkId}_${idx}"
-                                               value="${item.audio_file}"
-                                               ${isBestTake ? 'checked' : ''}
-                                               onchange='setChunkBestTake(${fileIndex}, ${chunkId}, "${fileName}", "${item.audio_file}")'>
-                                        <label for="radio_chunk_${fileIndex}_${chunkId}_${idx}">Mark as Best Take</label>
-                                    </div>
-                                    <div class="audio-item-params">
-                                        Exaggeration: ${item.exaggeration} | CFG: ${item.cfg_weight} | Voice: ${item.voice_sample || 'Default'}
-                                    </div>
-                                    <audio controls class="audio-player">
-                                        <source src="http://localhost:5000${item.audio_url}" type="audio/wav">
-                                    </audio>
-                                </div>
-                            `;
-                        }).join('');
-                    })() : '<p style="color: #999; font-size: 13px; margin-bottom: 10px;">No audio generated yet for this chunk</p>'}
-
-                    <!-- This Chunk Settings styled as audio-item -->
-                    <div class="audio-item" style="background: linear-gradient(135deg, #f5f7fa 0%, #e8eef5 100%); border: 2px solid #d0d8e0;">
-                        <div class="audio-item-header">
-                            <div class="audio-item-title" style="color: #667eea;">⚙️ This Chunk Settings</div>
-                        </div>
-                        <div class="control-group">
-                            <label>Voice Sample</label>
-                            <select id="voice_chunk_${fileIndex}_${chunkId}">
-                                ${voiceSamples.map(s => `<option value="${s.name}" ${projectDefaults.voice_sample === s.name ? 'selected' : ''}>${s.name}</option>`).join('')}
-                            </select>
-                        </div>
-                        <div class="control-group">
-                            <label>
-                                Exaggeration
-                                <span class="range-value" id="exag_val_chunk_${fileIndex}_${chunkId}">${projectDefaults.exaggeration}</span>
-                            </label>
-                            <input type="range" id="exaggeration_chunk_${fileIndex}_${chunkId}" min="0" max="1" step="0.1" value="${projectDefaults.exaggeration}"
-                                   oninput="document.getElementById('exag_val_chunk_${fileIndex}_${chunkId}').textContent = this.value">
-                        </div>
-                        <div class="control-group">
-                            <label>
-                                CFG Weight
-                                <span class="range-value" id="cfg_val_chunk_${fileIndex}_${chunkId}">${projectDefaults.cfg_weight}</span>
-                            </label>
-                            <input type="range" id="cfg_weight_chunk_${fileIndex}_${chunkId}" min="0" max="1" step="0.1" value="${projectDefaults.cfg_weight}"
-                                   oninput="document.getElementById('cfg_val_chunk_${fileIndex}_${chunkId}').textContent = this.value">
-                        </div>
-                        <button class="btn btn-primary" onclick="generateChunkAudio(${fileIndex}, ${chunkId})" style="width: 100%; margin-top: 8px;">
-                            Generate Audio for This Chunk
-                        </button>
-                    </div>
+                    ${takesHtml}
                 </div>
+                ${settingsHtml}
             `;
         }
 
