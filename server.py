@@ -1316,13 +1316,18 @@ def create_project():
 
         print(f'[CREATE PROJECT API] ✓ Project created successfully')
         print(f'[CREATE PROJECT API] Returning: project_path={project_path}')
+        print(f'[CREATE PROJECT API] Path repr: {repr(project_path)}')
+        print(f'[CREATE PROJECT API] Path bytes: {[hex(ord(c)) for c in project_path]}')
         print('━━━ [CREATE PROJECT API] END ━━━\n')
 
-        return jsonify({
+        result = {
             'success': True,
             'project_path': project_path,
             'metadata': project_metadata
-        })
+        }
+        print(f'[CREATE PROJECT API] JSON being returned: {json.dumps(result, indent=2)}')
+
+        return jsonify(result)
 
     except Exception as e:
         import traceback

@@ -434,9 +434,14 @@
                     const result = await response.json();
                     console.log('[CREATE PROJECT] ✓ Success! Result:', result);
                     console.log('[CREATE PROJECT] Project path:', result.project_path);
+                    console.log('[CREATE PROJECT] Project path type:', typeof result.project_path);
+                    console.log('[CREATE PROJECT] Project path length:', result.project_path.length);
+                    console.log('[CREATE PROJECT] Project path chars:', result.project_path.split('').map(c => `${c}(${c.charCodeAt(0)})`).join(' '));
 
                     // Redirect to main app with project loaded
-                    const redirectUrl = `app.html?project=${encodeURIComponent(result.project_path)}`;
+                    const encoded = encodeURIComponent(result.project_path);
+                    console.log('[CREATE PROJECT] Encoded path:', encoded);
+                    const redirectUrl = `app.html?project=${encoded}`;
                     console.log('[CREATE PROJECT] Redirecting to:', redirectUrl);
                     console.log('━━━ [CREATE PROJECT] END ━━━');
                     window.location.href = redirectUrl;
