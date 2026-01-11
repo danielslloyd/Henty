@@ -96,7 +96,13 @@ class GutenbergTab {
 
         for (const chapter of chapters) {
             const title = chapter.title || chapter.name || 'Untitled';
-            xml += `  <chapter title="${this.escapeXML(title)}">\n`;
+            const isNonVoiced = chapter.non_voiced || false;
+
+            if (isNonVoiced) {
+                xml += `  <non-voiced title="${this.escapeXML(title)}">\n`;
+            } else {
+                xml += `  <chapter title="${this.escapeXML(title)}">\n`;
+            }
 
             if (chapter.chunks) {
                 for (const chunk of chapter.chunks) {
@@ -111,7 +117,11 @@ class GutenbergTab {
                 }
             }
 
-            xml += '  </chapter>\n';
+            if (isNonVoiced) {
+                xml += '  </non-voiced>\n';
+            } else {
+                xml += '  </chapter>\n';
+            }
         }
 
         xml += '</book>';
