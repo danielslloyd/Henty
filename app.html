@@ -113,12 +113,13 @@
             gap: 10px;
             padding: 10px;
             overflow: hidden;
+            min-height: 0; /* Important for proper flex sizing */
         }
 
         /* Dynamic grid based on visible panes */
-        .panes-container.panes-1 { grid-template-columns: 1fr; }
-        .panes-container.panes-2 { grid-template-columns: 1fr 1fr; }
-        .panes-container.panes-3 { grid-template-columns: 1fr 1fr 1fr; }
+        .panes-container.panes-1 { grid-template-columns: 1fr; grid-template-rows: 1fr; }
+        .panes-container.panes-2 { grid-template-columns: 1fr 1fr; grid-template-rows: 1fr; }
+        .panes-container.panes-3 { grid-template-columns: 1fr 1fr 1fr; grid-template-rows: 1fr; }
         .panes-container.panes-4 { grid-template-columns: 1fr 1fr; grid-template-rows: 1fr 1fr; }
 
         /* Pane */
@@ -129,6 +130,8 @@
             display: flex;
             flex-direction: column;
             overflow: hidden;
+            min-height: 0; /* Important for proper flex sizing */
+            height: 100%; /* Fill grid cell */
         }
 
         .pane.hidden {
@@ -190,6 +193,7 @@
             flex: 1;
             overflow: auto;
             padding: 20px;
+            min-height: 0; /* Important for proper flex sizing */
         }
 
         /* Text Display */
@@ -208,9 +212,31 @@
         }
 
         /* XML Editor */
+        .xml-editor-wrapper {
+            flex: 1;
+            display: flex;
+            overflow: hidden;
+            border: 1px solid #e0e0e0;
+            border-radius: 6px;
+            background: #f9f9f9;
+        }
+
+        .xml-line-numbers {
+            padding: 10px 5px;
+            background: #e8e8e8;
+            color: #999;
+            font-family: 'Courier New', monospace;
+            font-size: 13px;
+            line-height: 1.5;
+            text-align: right;
+            user-select: none;
+            overflow: hidden;
+            min-width: 40px;
+            border-right: 1px solid #ccc;
+        }
+
         .xml-editor {
-            width: 100%;
-            height: 100%;
+            flex: 1;
             border: none;
             font-family: 'Courier New', monospace;
             font-size: 13px;
@@ -219,6 +245,14 @@
             background: #f9f9f9;
             color: #333;
             padding: 10px;
+            outline: none;
+            overflow: auto;
+            white-space: pre;
+            tab-size: 4;
+        }
+
+        .xml-editor:focus {
+            background: #fff;
         }
 
         .xml-tips {
@@ -365,7 +399,7 @@
     <div class="pane-toggles">
         <div class="toggle-group">
             <div class="toggle-item">
-                <input type="checkbox" id="toggle-raw" checked onchange="updatePaneVisibility()">
+                <input type="checkbox" id="toggle-raw" onchange="updatePaneVisibility()">
                 <label for="toggle-raw">📄 Raw Text</label>
             </div>
             <div class="toggle-item">
@@ -377,7 +411,7 @@
                 <label for="toggle-tts">🎤 TTS Generation</label>
             </div>
             <div class="toggle-item">
-                <input type="checkbox" id="toggle-reader" checked onchange="updatePaneVisibility()">
+                <input type="checkbox" id="toggle-reader" onchange="updatePaneVisibility()">
                 <label for="toggle-reader">📚 Reader</label>
             </div>
         </div>
@@ -388,7 +422,7 @@
     </div>
 
     <!-- Panes Container -->
-    <div class="panes-container panes-4" id="panesContainer">
+    <div class="panes-container panes-2" id="panesContainer">
         <!-- Pane 1: Raw Text -->
         <div class="pane" id="pane-raw">
             <div class="pane-header">
@@ -423,7 +457,10 @@
                     <button class="xml-btn" onclick="gutenbergTab.insertTag('pause')">+ Pause</button>
                     <button class="xml-btn" onclick="gutenbergTab.wrapSelection('footnote')">Footnote</button>
                 </div>
-                <textarea class="xml-editor" id="pseudoXmlEditor" placeholder="Load or process text to see XML structure..."></textarea>
+                <div class="xml-editor-wrapper">
+                    <div class="xml-line-numbers" id="xmlLineNumbers">1</div>
+                    <textarea class="xml-editor" id="pseudoXmlEditor" placeholder="Load or process text to see XML structure..." oninput="updateLineNumbers()" onscroll="syncLineNumbersScroll()"></textarea>
+                </div>
             </div>
         </div>
 
@@ -492,6 +529,21 @@
                 toggle.classList.remove('active');
                 checkbox.checked = false;
             }
+        }
+
+        function updateLineNumbers() {
+            const editor = document.getElementById('pseudoXmlEditor');
+            const lineNumbers = document.getElementById('xmlLineNumbers');
+
+            const lines = editor.value.split('\n');
+            const lineNumbersText = lines.map((_, i) => i + 1).join('\n');
+            lineNumbers.textContent = lineNumbersText;
+        }
+
+        function syncLineNumbersScroll() {
+            const editor = document.getElementById('pseudoXmlEditor');
+            const lineNumbers = document.getElementById('xmlLineNumbers');
+            lineNumbers.scrollTop = editor.scrollTop;
         }
 
         function updatePaneVisibility() {
