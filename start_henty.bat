@@ -37,7 +37,7 @@ timeout /t 3 /nobreak >nul
 
 REM Open browser
 echo [INFO] Opening browser...
-start http://localhost:5000/index.html
+start http://localhost:5000/landing.html
 
 echo.
 echo ================================================
