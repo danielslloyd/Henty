@@ -47,15 +47,16 @@ class GutenbergTab {
 
     async loadChapters() {
         try {
-            const response = await fetch(`${SERVER_URL}/api/project/info`, {
+            const response = await fetch(`${SERVER_URL}/api/project/text-files`, {
                 headers: {
                     'X-API-Key': API_KEY
                 }
             });
 
             if (response.ok) {
-                const projectInfo = await response.json();
-                this.chapters = projectInfo.chapters || [];
+                const data = await response.json();
+                this.chapters = data.chapters || [];
+                console.log('[LOAD CHAPTERS] Loaded chapters:', this.chapters.length);
                 this.displayChapters();
             }
         } catch (error) {
