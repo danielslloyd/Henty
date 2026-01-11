@@ -1246,18 +1246,27 @@ def list_generated_audio(txt_filename):
 @app.route('/api/project/create', methods=['POST'])
 @auth_manager.require_api_key
 def create_project():
-    """Create a new project in a user-selected folder"""
+    """Create a new project in a user-selected folder or default location"""
     try:
         import json
         import shutil
         from datetime import datetime
 
         data = request.json
-        project_path = data.get('project_path')
-        project_name = data.get('project_name', 'Unnamed Project')
 
-        if not project_path:
-            return jsonify({'error': 'project_path is required'}), 400
+        # Accept both 'name'/'project_name' and 'path'/'project_path' for flexibility
+        project_name = data.get('name') or data.get('project_name', 'Unnamed Project')
+        base_path = data.get('path') or data.get('project_path')
+
+        if not project_name:
+            return jsonify({'error': 'Project name is required'}), 400
+
+        # If no path provided, use default project directory
+        if not base_path:
+            base_path = config.DEFAULT_PROJECT_DIR
+
+        # Construct full project path
+        project_path = os.path.join(base_path, project_name)
 
         # Create project directory structure
         os.makedirs(project_path, exist_ok=True)
@@ -1281,7 +1290,8 @@ def create_project():
                 'seed': 0,
                 'temperature': 0.8,
                 'ref_vad_trimming': False
-            }
+            },
+            'chapters': []
         }
 
         # Save project metadata
@@ -2855,7 +2865,7 @@ def get_recent_projects():
 
                     recent_projects.append({
                         'name': project_data.get('name', item),
-                        'path': project_path,
+                        'path': os.path.abspath(project_path),  # Return absolute path
                         'last_modified': project_data.get('last_modified', ''),
                         'created_at': project_data.get('created_at', '')
                     })
