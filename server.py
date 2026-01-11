@@ -21,10 +21,21 @@ from auth import AuthManager
 app = Flask(__name__)
 
 # Configure CORS for remote access
-cors_config = {
-    'origins': config.ALLOWED_ORIGINS,
-    'supports_credentials': True
-}
+# Note: When using wildcard (*), we can't use credentials
+if config.ALLOWED_ORIGINS == ['*'] or config.ALLOWED_ORIGINS == '*':
+    cors_config = {
+        'origins': '*',
+        'supports_credentials': False,
+        'allow_headers': ['Content-Type', 'X-API-Key'],
+        'expose_headers': ['Content-Type']
+    }
+else:
+    cors_config = {
+        'origins': config.ALLOWED_ORIGINS,
+        'supports_credentials': True,
+        'allow_headers': ['Content-Type', 'X-API-Key'],
+        'expose_headers': ['Content-Type']
+    }
 CORS(app, resources={r"/*": cors_config})
 
 # Initialize SocketIO for real-time updates
