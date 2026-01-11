@@ -192,6 +192,36 @@
             resize: none;
         }
 
+        .xml-editor {
+            flex: 1;
+            width: 100%;
+            border: 1px solid #e0e0e0;
+            border-radius: 6px;
+            padding: 15px;
+            font-family: 'Courier New', monospace;
+            font-size: 13px;
+            line-height: 1.5;
+            resize: none;
+            background: #f9f9f9;
+            color: #333;
+        }
+
+        .xml-btn {
+            padding: 4px 10px;
+            background: #764ba2;
+            border: none;
+            border-radius: 4px;
+            color: white;
+            font-size: 11px;
+            cursor: pointer;
+            margin-left: 6px;
+            transition: background 0.2s;
+        }
+
+        .xml-btn:hover {
+            background: #5e3a82;
+        }
+
         .text-display {
             padding: 15px;
             font-family: Georgia, serif;
@@ -406,23 +436,28 @@
                 </div>
             </div>
 
-            <!-- Right Pane: Pseudo-XML / Chapter Structure -->
+            <!-- Right Pane: Pseudo-XML Editor -->
             <div class="gutenberg-pane">
                 <div class="pane-header">
-                    <h2>Chapter Structure</h2>
+                    <h2>XML Structure</h2>
                     <div class="pane-actions">
-                        <button class="pane-btn" onclick="processText()">Process Text</button>
-                        <button class="pane-btn" onclick="validateChunks()">Validate Chunks</button>
-                        <button class="pane-btn" onclick="showAnnotator()">Annotate</button>
+                        <button class="pane-btn" onclick="gutenbergTab.processText()" title="Auto-detect chapters from raw text">Process Text</button>
+                        <button class="pane-btn" onclick="gutenbergTab.saveXML()" title="Save XML changes">Save XML</button>
+                        <button class="pane-btn" onclick="gutenbergTab.validateChunks()" title="Check for oversized chunks">Validate</button>
+                        <button class="pane-btn" onclick="gutenbergTab.autoRechunk()" title="Auto-fix oversized chunks">Auto-Rechunk</button>
                     </div>
                 </div>
-                <div class="pane-content">
-                    <div id="chapterList" style="display: none;">
-                        <div id="chaptersContainer"></div>
+                <div class="pane-content" style="display: flex; flex-direction: column;">
+                    <div style="margin-bottom: 10px; padding: 8px; background: #f8f9fa; border-radius: 4px; font-size: 12px; color: #666;">
+                        <strong>XML Editing Tips:</strong> Edit directly or use buttons:
+                        <button class="xml-btn" onclick="gutenbergTab.insertTag('chapter')" title="Insert chapter tag">+ Chapter</button>
+                        <button class="xml-btn" onclick="gutenbergTab.insertTag('chunk')" title="Insert chunk tag">+ Chunk</button>
+                        <button class="xml-btn" onclick="gutenbergTab.insertTag('pause')" title="Insert pause tag">+ Pause</button>
+                        <button class="xml-btn" onclick="gutenbergTab.wrapSelection('footnote')" title="Wrap selected text as footnote">Footnote</button>
                     </div>
-                    <textarea class="text-editor" id="pseudoXmlEditor" style="display: none;" placeholder="Processed chapters will appear here..."></textarea>
-                    <div id="chapterPlaceholder" class="text-display">
-                        Process the raw text to see chapter structure and chunks.
+                    <textarea class="xml-editor" id="pseudoXmlEditor" placeholder="Load or process text to see XML structure..."></textarea>
+                    <div id="xmlPlaceholder" class="text-display" style="display: none;">
+                        Load a Gutenberg text or process raw text to see XML structure.
                     </div>
                 </div>
             </div>

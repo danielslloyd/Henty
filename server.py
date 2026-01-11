@@ -3178,7 +3178,7 @@ def merge_chapters():
             return jsonify({'error': 'chapter_id1 and chapter_id2 required'}), 400
 
         project_file = os.path.join(converter.current_project_path, 'project.json')
-        with open(project_file, 'r') as f:
+        with open(project_file, 'r', encoding='utf-8') as f:
             project_data = json.load(f)
 
         chapters = project_data.get('chapters', [])
@@ -3227,8 +3227,8 @@ def merge_chapters():
 
         # Save updated project
         project_data['last_modified'] = datetime.now().isoformat()
-        with open(project_file, 'w') as f:
-            json.dump(project_data, f, indent=2)
+        with open(project_file, 'w', encoding='utf-8') as f:
+            json.dump(project_data, f, indent=2, ensure_ascii=False)
 
         return jsonify({
             'success': True,
@@ -3239,6 +3239,40 @@ def merge_chapters():
     except Exception as e:
         import traceback
         print(f"Error merging chapters: {str(e)}")
+        print(traceback.format_exc())
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/project/save-xml', methods=['POST'])
+@auth_manager.require_api_key
+def save_xml_content():
+    """Save XML content to project"""
+    try:
+        if converter.current_project_path is None:
+            return jsonify({'error': 'No project loaded'}), 400
+
+        data = request.json
+        xml_content = data.get('xml_content')
+
+        if not xml_content:
+            return jsonify({'error': 'xml_content is required'}), 400
+
+        # Save XML content to metadata
+        converter.current_project_metadata['content_xml'] = xml_content
+        converter.current_project_metadata['last_modified'] = datetime.now().isoformat()
+
+        # Save to file
+        project_file = os.path.join(converter.current_project_path, 'project.json')
+        with open(project_file, 'w', encoding='utf-8') as f:
+            json.dump(converter.current_project_metadata, f, indent=2, ensure_ascii=False)
+
+        return jsonify({
+            'success': True,
+            'message': 'XML content saved successfully'
+        })
+
+    except Exception as e:
+        import traceback
+        print(f"Error saving XML content: {str(e)}")
         print(traceback.format_exc())
         return jsonify({'error': str(e)}), 500
 
