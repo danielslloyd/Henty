@@ -12,6 +12,8 @@ from pydub import AudioSegment
 import json
 import time
 import threading
+import uuid
+from datetime import datetime
 from scripts.gutenberg_processor import GutenbergProcessor
 from config import config
 from auth import AuthManager
@@ -2812,6 +2814,368 @@ def generate_all_chapter_chunks():
     except Exception as e:
         import traceback
         print(f"Error generating chapter audio: {str(e)}")
+        print(traceback.format_exc())
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/project/recent', methods=['GET'])
+@auth_manager.require_api_key
+def get_recent_projects():
+    """Get list of recent projects"""
+    try:
+        import os
+        from datetime import datetime
+
+        # Get all project directories from the default projects folder
+        projects_dir = config.DEFAULT_PROJECT_DIR
+        if not os.path.exists(projects_dir):
+            return jsonify([])
+
+        recent_projects = []
+
+        # Scan for project.json files
+        for item in os.listdir(projects_dir):
+            project_path = os.path.join(projects_dir, item)
+            project_file = os.path.join(project_path, 'project.json')
+
+            if os.path.isdir(project_path) and os.path.exists(project_file):
+                try:
+                    with open(project_file, 'r') as f:
+                        project_data = json.load(f)
+
+                    recent_projects.append({
+                        'name': project_data.get('name', item),
+                        'path': project_path,
+                        'last_modified': project_data.get('last_modified', ''),
+                        'created_at': project_data.get('created_at', '')
+                    })
+                except Exception as e:
+                    print(f"Error reading project {project_path}: {e}")
+                    continue
+
+        # Sort by last_modified (most recent first)
+        recent_projects.sort(key=lambda x: x.get('last_modified', ''), reverse=True)
+
+        return jsonify(recent_projects)
+
+    except Exception as e:
+        import traceback
+        print(f"Error getting recent projects: {str(e)}")
+        print(traceback.format_exc())
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/project/raw-text', methods=['GET'])
+@auth_manager.require_api_key
+def get_project_raw_text():
+    """Get raw text for the current project (before processing)"""
+    try:
+        if converter.current_project_path is None:
+            return jsonify({'error': 'No project loaded'}), 400
+
+        # Check for raw_text.txt file in project directory
+        raw_text_file = os.path.join(converter.current_project_path, 'raw_text.txt')
+
+        if os.path.exists(raw_text_file):
+            with open(raw_text_file, 'r', encoding='utf-8') as f:
+                raw_text = f.read()
+            return jsonify({'raw_text': raw_text})
+        else:
+            return jsonify({'raw_text': ''})
+
+    except Exception as e:
+        import traceback
+        print(f"Error getting raw text: {str(e)}")
+        print(traceback.format_exc())
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/project/save-raw-text', methods=['POST'])
+@auth_manager.require_api_key
+def save_project_raw_text():
+    """Save raw text for the current project"""
+    try:
+        if converter.current_project_path is None:
+            return jsonify({'error': 'No project loaded'}), 400
+
+        data = request.json
+        raw_text = data.get('raw_text', '')
+
+        # Save raw text to file
+        raw_text_file = os.path.join(converter.current_project_path, 'raw_text.txt')
+        with open(raw_text_file, 'w', encoding='utf-8') as f:
+            f.write(raw_text)
+
+        return jsonify({'success': True})
+
+    except Exception as e:
+        import traceback
+        print(f"Error saving raw text: {str(e)}")
+        print(traceback.format_exc())
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/project/validate-chunks', methods=['POST'])
+@auth_manager.require_api_key
+def validate_project_chunks():
+    """Validate chunk sizes and identify chunks that are too large"""
+    try:
+        if converter.current_project_path is None:
+            return jsonify({'error': 'No project loaded'}), 400
+
+        data = request.json
+        max_chunk_size = data.get('max_chunk_size', 500)
+
+        project_file = os.path.join(converter.current_project_path, 'project.json')
+        with open(project_file, 'r') as f:
+            project_data = json.load(f)
+
+        oversized_chunks = []
+
+        for chapter in project_data.get('chapters', []):
+            for chunk in chapter.get('chunks', []):
+                chunk_text = chunk.get('text', '')
+                if len(chunk_text) > max_chunk_size:
+                    oversized_chunks.append({
+                        'chapter_id': chapter['id'],
+                        'chapter_name': chapter.get('name', ''),
+                        'chunk_id': chunk['id'],
+                        'chunk_size': len(chunk_text),
+                        'chunk_preview': chunk_text[:50] + '...'
+                    })
+
+        return jsonify({
+            'success': True,
+            'max_chunk_size': max_chunk_size,
+            'total_chunks': sum(len(ch.get('chunks', [])) for ch in project_data.get('chapters', [])),
+            'oversized_count': len(oversized_chunks),
+            'oversized_chunks': oversized_chunks
+        })
+
+    except Exception as e:
+        import traceback
+        print(f"Error validating chunks: {str(e)}")
+        print(traceback.format_exc())
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/project/auto-rechunk', methods=['POST'])
+@auth_manager.require_api_key
+def auto_rechunk_oversized():
+    """Automatically rechunk oversized chunks with minimal disruption"""
+    try:
+        if converter.current_project_path is None:
+            return jsonify({'error': 'No project loaded'}), 400
+
+        data = request.json
+        max_chunk_size = data.get('max_chunk_size', 500)
+        chapter_id = data.get('chapter_id')  # Optional: rechunk specific chapter
+
+        project_file = os.path.join(converter.current_project_path, 'project.json')
+        with open(project_file, 'r') as f:
+            project_data = json.load(f)
+
+        rechunked_count = 0
+
+        for chapter in project_data.get('chapters', []):
+            # Skip if specific chapter requested and this isn't it
+            if chapter_id and chapter['id'] != chapter_id:
+                continue
+
+            chunks = chapter.get('chunks', [])
+            new_chunks = []
+            chunk_id_counter = 0
+
+            for chunk in chunks:
+                chunk_text = chunk.get('text', '')
+
+                if len(chunk_text) <= max_chunk_size:
+                    # Keep chunk as-is, but update ID to maintain sequence
+                    chunk['id'] = chunk_id_counter
+                    new_chunks.append(chunk)
+                    chunk_id_counter += 1
+                else:
+                    # Rechunk this oversized chunk
+                    rechunked_count += 1
+                    sub_chunks = converter.smart_chunk_text(chunk_text, max_chunk_size)
+
+                    for sub_chunk in sub_chunks:
+                        new_chunk = {
+                            'id': chunk_id_counter,
+                            'text': sub_chunk['text'],
+                            'nickname': sub_chunk['nickname'],
+                            'start_pos': sub_chunk['start_pos'],
+                            'end_pos': sub_chunk['end_pos'],
+                            'dirty': False,
+                            'generated_audios': []  # Reset audio for rechunked pieces
+                        }
+                        new_chunks.append(new_chunk)
+                        chunk_id_counter += 1
+
+            chapter['chunks'] = new_chunks
+
+        # Save updated project
+        project_data['last_modified'] = datetime.now().isoformat()
+        with open(project_file, 'w') as f:
+            json.dump(project_data, f, indent=2)
+
+        return jsonify({
+            'success': True,
+            'rechunked_count': rechunked_count,
+            'message': f'Successfully rechunked {rechunked_count} oversized chunks'
+        })
+
+    except Exception as e:
+        import traceback
+        print(f"Error auto-rechunking: {str(e)}")
+        print(traceback.format_exc())
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/project/split-chapter', methods=['POST'])
+@auth_manager.require_api_key
+def split_chapter():
+    """Split a chapter at a specified position"""
+    try:
+        if converter.current_project_path is None:
+            return jsonify({'error': 'No project loaded'}), 400
+
+        data = request.json
+        chapter_id = data.get('chapter_id')
+        split_position = data.get('split_position')  # Character position to split
+
+        if not chapter_id or split_position is None:
+            return jsonify({'error': 'chapter_id and split_position required'}), 400
+
+        project_file = os.path.join(converter.current_project_path, 'project.json')
+        with open(project_file, 'r') as f:
+            project_data = json.load(f)
+
+        # Find the chapter
+        chapter_index = None
+        for i, chapter in enumerate(project_data.get('chapters', [])):
+            if chapter['id'] == chapter_id:
+                chapter_index = i
+                break
+
+        if chapter_index is None:
+            return jsonify({'error': 'Chapter not found'}), 404
+
+        chapter = project_data['chapters'][chapter_index]
+
+        # Reconstruct full chapter text from chunks
+        full_text = '\n\n'.join(chunk['text'] for chunk in chapter.get('chunks', []))
+
+        # Split the text
+        text_part1 = full_text[:split_position].strip()
+        text_part2 = full_text[split_position:].strip()
+
+        # Create two new chapters
+        new_chapter1 = {
+            'id': str(uuid.uuid4()),
+            'name': chapter.get('name', 'Chapter') + ' (Part 1)',
+            'path': chapter.get('path', ''),
+            'chunks': converter.smart_chunk_text(text_part1)
+        }
+
+        new_chapter2 = {
+            'id': str(uuid.uuid4()),
+            'name': chapter.get('name', 'Chapter') + ' (Part 2)',
+            'path': '',
+            'chunks': converter.smart_chunk_text(text_part2)
+        }
+
+        # Replace old chapter with new ones
+        project_data['chapters'][chapter_index:chapter_index+1] = [new_chapter1, new_chapter2]
+
+        # Save updated project
+        project_data['last_modified'] = datetime.now().isoformat()
+        with open(project_file, 'w') as f:
+            json.dump(project_data, f, indent=2)
+
+        return jsonify({
+            'success': True,
+            'new_chapters': [new_chapter1['id'], new_chapter2['id']],
+            'message': 'Chapter split successfully'
+        })
+
+    except Exception as e:
+        import traceback
+        print(f"Error splitting chapter: {str(e)}")
+        print(traceback.format_exc())
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/project/merge-chapters', methods=['POST'])
+@auth_manager.require_api_key
+def merge_chapters():
+    """Merge two adjacent chapters"""
+    try:
+        if converter.current_project_path is None:
+            return jsonify({'error': 'No project loaded'}), 400
+
+        data = request.json
+        chapter_id1 = data.get('chapter_id1')
+        chapter_id2 = data.get('chapter_id2')
+
+        if not chapter_id1 or not chapter_id2:
+            return jsonify({'error': 'chapter_id1 and chapter_id2 required'}), 400
+
+        project_file = os.path.join(converter.current_project_path, 'project.json')
+        with open(project_file, 'r') as f:
+            project_data = json.load(f)
+
+        chapters = project_data.get('chapters', [])
+
+        # Find both chapters
+        chapter1_index = None
+        chapter2_index = None
+
+        for i, chapter in enumerate(chapters):
+            if chapter['id'] == chapter_id1:
+                chapter1_index = i
+            if chapter['id'] == chapter_id2:
+                chapter2_index = i
+
+        if chapter1_index is None or chapter2_index is None:
+            return jsonify({'error': 'One or both chapters not found'}), 404
+
+        # Ensure they're adjacent
+        if abs(chapter1_index - chapter2_index) != 1:
+            return jsonify({'error': 'Chapters must be adjacent to merge'}), 400
+
+        # Order them correctly
+        first_index = min(chapter1_index, chapter2_index)
+        second_index = max(chapter1_index, chapter2_index)
+
+        chapter1 = chapters[first_index]
+        chapter2 = chapters[second_index]
+
+        # Merge the chunks
+        merged_chunks = chapter1.get('chunks', []) + chapter2.get('chunks', [])
+
+        # Renumber chunk IDs
+        for i, chunk in enumerate(merged_chunks):
+            chunk['id'] = i
+
+        # Create merged chapter
+        merged_chapter = {
+            'id': str(uuid.uuid4()),
+            'name': chapter1.get('name', 'Chapter') + ' + ' + chapter2.get('name', 'Chapter'),
+            'path': chapter1.get('path', ''),
+            'chunks': merged_chunks
+        }
+
+        # Replace the two chapters with the merged one
+        chapters[first_index:second_index+1] = [merged_chapter]
+
+        # Save updated project
+        project_data['last_modified'] = datetime.now().isoformat()
+        with open(project_file, 'w') as f:
+            json.dump(project_data, f, indent=2)
+
+        return jsonify({
+            'success': True,
+            'merged_chapter_id': merged_chapter['id'],
+            'message': 'Chapters merged successfully'
+        })
+
+    except Exception as e:
+        import traceback
+        print(f"Error merging chapters: {str(e)}")
         print(traceback.format_exc())
         return jsonify({'error': str(e)}), 500
 

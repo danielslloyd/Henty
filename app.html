@@ -1,0 +1,602 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Henty - Audiobook Creation</title>
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🎤</text></svg>">
+    <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght@300;400;500" rel="stylesheet">
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        .material-symbols-outlined {
+            font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 20;
+            font-size: 18px;
+            vertical-align: middle;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+            background: #f8f9fa;
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+        }
+
+        /* Header */
+        .app-header {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 15px 30px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .app-header h1 {
+            font-size: 1.5em;
+            font-weight: 600;
+        }
+
+        .app-header .project-name {
+            font-size: 0.9em;
+            opacity: 0.9;
+            margin-top: 2px;
+        }
+
+        .header-actions {
+            display: flex;
+            gap: 10px;
+        }
+
+        .header-btn {
+            padding: 8px 16px;
+            background: rgba(255,255,255,0.2);
+            border: none;
+            border-radius: 6px;
+            color: white;
+            font-size: 14px;
+            cursor: pointer;
+            transition: background 0.2s;
+        }
+
+        .header-btn:hover {
+            background: rgba(255,255,255,0.3);
+        }
+
+        /* Tab Navigation */
+        .tab-nav {
+            background: white;
+            border-bottom: 2px solid #e0e0e0;
+            padding: 0 30px;
+            display: flex;
+            gap: 5px;
+        }
+
+        .tab-button {
+            padding: 15px 30px;
+            background: none;
+            border: none;
+            border-bottom: 3px solid transparent;
+            cursor: pointer;
+            font-size: 15px;
+            font-weight: 500;
+            color: #666;
+            transition: all 0.2s;
+            position: relative;
+            top: 2px;
+        }
+
+        .tab-button:hover {
+            color: #667eea;
+            background: #f8f9fa;
+        }
+
+        .tab-button.active {
+            color: #667eea;
+            border-bottom-color: #667eea;
+            font-weight: 600;
+        }
+
+        /* Tab Content */
+        .tab-content {
+            flex: 1;
+            display: none;
+            overflow: auto;
+        }
+
+        .tab-content.active {
+            display: block;
+        }
+
+        /* Tab 1: Gutenberg Processing Styles */
+        .gutenberg-container {
+            display: flex;
+            height: 100%;
+            gap: 20px;
+            padding: 20px;
+        }
+
+        .gutenberg-pane {
+            flex: 1;
+            background: white;
+            border-radius: 10px;
+            padding: 20px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+            display: flex;
+            flex-direction: column;
+        }
+
+        .pane-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 15px;
+            padding-bottom: 15px;
+            border-bottom: 2px solid #f0f0f0;
+        }
+
+        .pane-header h2 {
+            font-size: 1.2em;
+            color: #333;
+        }
+
+        .pane-actions {
+            display: flex;
+            gap: 8px;
+        }
+
+        .pane-btn {
+            padding: 8px 16px;
+            background: #667eea;
+            border: none;
+            border-radius: 6px;
+            color: white;
+            font-size: 13px;
+            cursor: pointer;
+            transition: background 0.2s;
+        }
+
+        .pane-btn:hover {
+            background: #5568d3;
+        }
+
+        .pane-btn.secondary {
+            background: #f0f0f0;
+            color: #666;
+        }
+
+        .pane-btn.secondary:hover {
+            background: #e0e0e0;
+        }
+
+        .pane-content {
+            flex: 1;
+            overflow: auto;
+        }
+
+        .text-editor {
+            width: 100%;
+            height: 100%;
+            border: 1px solid #e0e0e0;
+            border-radius: 6px;
+            padding: 15px;
+            font-family: 'Courier New', monospace;
+            font-size: 14px;
+            line-height: 1.6;
+            resize: none;
+        }
+
+        .text-display {
+            padding: 15px;
+            font-family: Georgia, serif;
+            font-size: 16px;
+            line-height: 1.8;
+            color: #333;
+            white-space: pre-wrap;
+        }
+
+        .chapter-item {
+            padding: 12px;
+            margin-bottom: 8px;
+            background: #f8f9fa;
+            border-radius: 6px;
+            cursor: pointer;
+            transition: background 0.2s;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .chapter-item:hover {
+            background: #e9ecef;
+        }
+
+        .chapter-item.active {
+            background: #667eea;
+            color: white;
+        }
+
+        .chapter-actions {
+            display: flex;
+            gap: 5px;
+        }
+
+        .icon-btn {
+            padding: 4px 8px;
+            background: rgba(0,0,0,0.1);
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 12px;
+            transition: background 0.2s;
+        }
+
+        .icon-btn:hover {
+            background: rgba(0,0,0,0.2);
+        }
+
+        /* Tab 2: TTS Module Styles */
+        .tts-container {
+            padding: 20px;
+            max-width: 1400px;
+            margin: 0 auto;
+        }
+
+        .tts-header {
+            background: white;
+            border-radius: 10px;
+            padding: 20px;
+            margin-bottom: 20px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+
+        .chapter-select {
+            display: flex;
+            align-items: center;
+            gap: 15px;
+        }
+
+        .chapter-select label {
+            font-weight: 600;
+            color: #555;
+        }
+
+        .chapter-select select {
+            flex: 1;
+            max-width: 400px;
+            padding: 10px 15px;
+            border: 2px solid #e0e0e0;
+            border-radius: 6px;
+            font-size: 14px;
+        }
+
+        /* Tab 3: Reader Styles */
+        .reader-container {
+            padding: 20px;
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+
+        .reader-controls {
+            background: white;
+            border-radius: 10px;
+            padding: 20px;
+            margin-bottom: 20px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .play-btn {
+            padding: 12px 30px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            border: none;
+            border-radius: 8px;
+            color: white;
+            font-size: 16px;
+            font-weight: 600;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            transition: transform 0.2s;
+        }
+
+        .play-btn:hover {
+            transform: translateY(-2px);
+        }
+
+        .reader-content {
+            background: white;
+            border-radius: 10px;
+            padding: 40px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+            font-family: Georgia, serif;
+            font-size: 18px;
+            line-height: 1.8;
+        }
+
+        .highlight {
+            background: linear-gradient(120deg, #84fab0 0%, #8fd3f4 100%);
+            padding: 2px 0;
+            animation: highlightPulse 1s ease-in-out infinite;
+        }
+
+        @keyframes highlightPulse {
+            0%, 100% { opacity: 0.7; }
+            50% { opacity: 1; }
+        }
+
+        /* Utility Classes */
+        .loading {
+            text-align: center;
+            padding: 40px;
+            color: #666;
+        }
+
+        .error {
+            background: #fee;
+            border: 1px solid #fcc;
+            border-radius: 6px;
+            padding: 15px;
+            color: #c00;
+            margin: 20px;
+        }
+
+        /* Responsive */
+        @media (max-width: 1024px) {
+            .gutenberg-container {
+                flex-direction: column;
+            }
+
+            .gutenberg-pane {
+                height: 50vh;
+            }
+        }
+    </style>
+</head>
+<body>
+    <!-- Header -->
+    <div class="app-header">
+        <div>
+            <h1>🎤 Henty</h1>
+            <div class="project-name" id="projectName">Loading project...</div>
+        </div>
+        <div class="header-actions">
+            <button class="header-btn" onclick="window.location.href='landing.html'">← Back to Projects</button>
+        </div>
+    </div>
+
+    <!-- Tab Navigation -->
+    <div class="tab-nav">
+        <button class="tab-button active" onclick="switchTab('gutenberg')">
+            📖 Gutenberg Processing
+        </button>
+        <button class="tab-button" onclick="switchTab('tts')">
+            🎤 TTS Module
+        </button>
+        <button class="tab-button" onclick="switchTab('reader')">
+            📚 Reader
+        </button>
+    </div>
+
+    <!-- Tab 1: Gutenberg Processing -->
+    <div id="gutenberg-tab" class="tab-content active">
+        <div class="gutenberg-container">
+            <!-- Left Pane: Raw Text -->
+            <div class="gutenberg-pane">
+                <div class="pane-header">
+                    <h2>Raw Text</h2>
+                    <div class="pane-actions">
+                        <button class="pane-btn" onclick="loadGutenbergText()">Load from URL</button>
+                        <button class="pane-btn secondary" onclick="uploadTextFile()">Upload File</button>
+                    </div>
+                </div>
+                <div class="pane-content">
+                    <div class="text-display" id="rawTextDisplay">
+                        No text loaded. Load a Project Gutenberg text or upload a file to begin.
+                    </div>
+                </div>
+            </div>
+
+            <!-- Right Pane: Pseudo-XML / Chapter Structure -->
+            <div class="gutenberg-pane">
+                <div class="pane-header">
+                    <h2>Chapter Structure</h2>
+                    <div class="pane-actions">
+                        <button class="pane-btn" onclick="processText()">Process Text</button>
+                        <button class="pane-btn" onclick="validateChunks()">Validate Chunks</button>
+                        <button class="pane-btn" onclick="showAnnotator()">Annotate</button>
+                    </div>
+                </div>
+                <div class="pane-content">
+                    <div id="chapterList" style="display: none;">
+                        <div id="chaptersContainer"></div>
+                    </div>
+                    <textarea class="text-editor" id="pseudoXmlEditor" style="display: none;" placeholder="Processed chapters will appear here..."></textarea>
+                    <div id="chapterPlaceholder" class="text-display">
+                        Process the raw text to see chapter structure and chunks.
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Tab 2: TTS Module -->
+    <div id="tts-tab" class="tab-content">
+        <div class="tts-container">
+            <div class="tts-header">
+                <div class="chapter-select">
+                    <label>Select Chapter:</label>
+                    <select id="ttsChapterSelect" onchange="loadTTSChapter()">
+                        <option value="">-- Select a chapter --</option>
+                    </select>
+                </div>
+            </div>
+            <div id="ttsContent">
+                <div class="loading">Select a chapter to view TTS controls</div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Tab 3: Reader -->
+    <div id="reader-tab" class="tab-content">
+        <div class="reader-container">
+            <div class="reader-controls">
+                <button class="play-btn" onclick="playAllBestTakes()">
+                    <span class="material-symbols-outlined">play_arrow</span>
+                    Play All Best Takes
+                </button>
+                <div>
+                    <label>Font Size: </label>
+                    <button class="icon-btn" onclick="adjustReaderFontSize(-2)">-</button>
+                    <span id="readerFontSize">18</span>px
+                    <button class="icon-btn" onclick="adjustReaderFontSize(2)">+</button>
+                </div>
+            </div>
+            <div class="reader-content" id="readerContent">
+                <div class="loading">No content available. Generate audio in the TTS Module first.</div>
+            </div>
+        </div>
+    </div>
+
+    <script src="client_config.js"></script>
+    <script src="gutenberg_tab.js"></script>
+    <script src="tts_tab.js"></script>
+    <script src="reader_tab.js"></script>
+    <script>
+        // Global state
+        let currentProject = null;
+        let currentTab = 'gutenberg';
+
+        // Initialize app
+        window.addEventListener('DOMContentLoaded', initApp);
+
+        async function initApp() {
+            // Get project from URL parameter
+            const urlParams = new URLSearchParams(window.location.search);
+            const projectPath = urlParams.get('project');
+
+            if (!projectPath) {
+                alert('No project specified. Redirecting to landing page.');
+                window.location.href = 'landing.html';
+                return;
+            }
+
+            // Load project
+            await loadProject(projectPath);
+        }
+
+        async function loadProject(path) {
+            try {
+                const response = await fetch(`${SERVER_URL}/api/project/load`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'X-API-Key': API_KEY
+                    },
+                    body: JSON.stringify({ path })
+                });
+
+                if (!response.ok) {
+                    throw new Error('Failed to load project');
+                }
+
+                const result = await response.json();
+                currentProject = result;
+
+                // Update UI
+                document.getElementById('projectName').textContent = result.name || 'Unnamed Project';
+
+                // Load project data
+                await loadProjectData();
+            } catch (error) {
+                console.error('Error loading project:', error);
+                alert('Failed to load project: ' + error.message);
+                window.location.href = 'landing.html';
+            }
+        }
+
+        async function loadProjectData() {
+            try {
+                // Load project info
+                const infoResponse = await fetch(`${SERVER_URL}/api/project/info`, {
+                    headers: {
+                        'X-API-Key': API_KEY
+                    }
+                });
+
+                if (infoResponse.ok) {
+                    const projectInfo = await infoResponse.json();
+
+                    // Update TTS chapter dropdown
+                    updateTTSChapterDropdown();
+
+                    // Initialize all tabs
+                    await gutenbergTab.init();
+                    await ttsTab.init();
+                    await readerTab.init();
+                }
+            } catch (error) {
+                console.error('Error loading project data:', error);
+            }
+        }
+
+        async function updateTTSChapterDropdown() {
+            try {
+                const infoResponse = await fetch(`${SERVER_URL}/api/project/info`, {
+                    headers: {
+                        'X-API-Key': API_KEY
+                    }
+                });
+
+                if (infoResponse.ok) {
+                    const projectInfo = await infoResponse.json();
+                    const chapters = projectInfo.chapters || [];
+
+                    const select = document.getElementById('ttsChapterSelect');
+                    select.innerHTML = '<option value="">-- Select a chapter --</option>';
+
+                    chapters.forEach((chapter, index) => {
+                        const option = document.createElement('option');
+                        option.value = index;
+                        option.textContent = chapter.name || `Chapter ${index + 1}`;
+                        select.appendChild(option);
+                    });
+                }
+            } catch (error) {
+                console.error('Error updating chapter dropdown:', error);
+            }
+        }
+
+        // Tab switching
+        function switchTab(tabName) {
+            // Update tab buttons
+            const buttons = document.querySelectorAll('.tab-button');
+            buttons.forEach(btn => btn.classList.remove('active'));
+
+            // Find and activate the clicked button
+            const clickedButton = Array.from(buttons).find(btn =>
+                btn.onclick && btn.onclick.toString().includes(tabName)
+            );
+            if (clickedButton) {
+                clickedButton.classList.add('active');
+            }
+
+            // Update tab content
+            const tabs = document.querySelectorAll('.tab-content');
+            tabs.forEach(tab => tab.classList.remove('active'));
+            document.getElementById(`${tabName}-tab`).classList.add('active');
+
+            currentTab = tabName;
+        }
+    </script>
+</body>
+</html>
