@@ -502,7 +502,7 @@
                         'Content-Type': 'application/json',
                         'X-API-Key': API_KEY
                     },
-                    body: JSON.stringify({ path })
+                    body: JSON.stringify({ project_path: path })
                 });
 
                 if (!response.ok) {
@@ -513,7 +513,7 @@
                 currentProject = result;
 
                 // Update UI
-                document.getElementById('projectName').textContent = result.name || 'Unnamed Project';
+                document.getElementById('projectName').textContent = result.metadata?.name || 'Unnamed Project';
 
                 // Load project data
                 await loadProjectData();
