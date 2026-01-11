@@ -68,12 +68,18 @@ class GutenbergTab {
         const placeholder = document.getElementById('chapterPlaceholder');
         const chapterList = document.getElementById('chapterList');
 
+        console.log('[DISPLAY CHAPTERS] Called');
+        console.log('[DISPLAY CHAPTERS] this.chapters:', this.chapters);
+        console.log('[DISPLAY CHAPTERS] chapters length:', this.chapters.length);
+
         if (this.chapters.length === 0) {
+            console.log('[DISPLAY CHAPTERS] No chapters, showing placeholder');
             chapterList.style.display = 'none';
             placeholder.style.display = 'block';
             return;
         }
 
+        console.log('[DISPLAY CHAPTERS] Displaying', this.chapters.length, 'chapters');
         chapterList.style.display = 'block';
         placeholder.style.display = 'none';
 
