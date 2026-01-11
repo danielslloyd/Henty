@@ -1350,12 +1350,19 @@ def create_project():
                 print(f'[CREATE PROJECT API] Using uploaded file: {source_filename}')
                 print(f'[CREATE PROJECT API] File content length: {len(text_content) if text_content else 0}')
 
-            # Save the text content to the texts directory
+            # Save the text content to both the texts directory and as raw_text.txt
             if text_content:
+                # Save to texts directory for archival
                 text_file_path = os.path.join(texts_dir, source_filename)
                 with open(text_file_path, 'w', encoding='utf-8') as f:
                     f.write(text_content)
                 print(f'[CREATE PROJECT API] Saved text to: {text_file_path}')
+
+                # Also save as raw_text.txt in project root for the UI to load
+                raw_text_path = os.path.join(project_path, 'raw_text.txt')
+                with open(raw_text_path, 'w', encoding='utf-8') as f:
+                    f.write(text_content)
+                print(f'[CREATE PROJECT API] Saved raw text to: {raw_text_path}')
 
         # Create project metadata
         project_metadata = {
@@ -2998,27 +3005,37 @@ def get_recent_projects():
         print(traceback.format_exc())
         return jsonify({'error': str(e)}), 500
 
-@app.route('/api/project/raw-text', methods=['GET'])
+@app.route('/api/project/raw-text', methods=['GET', 'POST'])
 @auth_manager.require_api_key
-def get_project_raw_text():
-    """Get raw text for the current project (before processing)"""
+def project_raw_text():
+    """Get or save raw text for the current project"""
     try:
         if converter.current_project_path is None:
             return jsonify({'error': 'No project loaded'}), 400
 
-        # Check for raw_text.txt file in project directory
         raw_text_file = os.path.join(converter.current_project_path, 'raw_text.txt')
 
-        if os.path.exists(raw_text_file):
-            with open(raw_text_file, 'r', encoding='utf-8') as f:
-                raw_text = f.read()
-            return jsonify({'raw_text': raw_text})
+        if request.method == 'POST':
+            # Save raw text
+            data = request.json
+            raw_text = data.get('raw_text', '')
+
+            with open(raw_text_file, 'w', encoding='utf-8') as f:
+                f.write(raw_text)
+
+            return jsonify({'success': True})
         else:
-            return jsonify({'raw_text': ''})
+            # Get raw text
+            if os.path.exists(raw_text_file):
+                with open(raw_text_file, 'r', encoding='utf-8') as f:
+                    raw_text = f.read()
+                return jsonify({'raw_text': raw_text})
+            else:
+                return jsonify({'raw_text': ''})
 
     except Exception as e:
         import traceback
-        print(f"Error getting raw text: {str(e)}")
+        print(f"Error with raw text: {str(e)}")
         print(traceback.format_exc())
         return jsonify({'error': str(e)}), 500
 
