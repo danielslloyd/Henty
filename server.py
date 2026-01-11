@@ -1290,18 +1290,21 @@ def create_project():
     try:
         import json
         import shutil
+        import urllib.request
         from datetime import datetime
 
         print('\n━━━ [CREATE PROJECT API] START ━━━')
         data = request.json
-        print(f'[CREATE PROJECT API] Request data: {data}')
+        print(f'[CREATE PROJECT API] Request data keys: {data.keys() if data else None}')
 
         # Accept both 'name'/'project_name' and 'path'/'project_path' for flexibility
         project_name = data.get('name') or data.get('project_name', 'Unnamed Project')
         base_path = data.get('path') or data.get('project_path')
+        text_source = data.get('text_source')
 
         print(f'[CREATE PROJECT API] Project name: {project_name}')
         print(f'[CREATE PROJECT API] Base path: {base_path or "(using default)"}')
+        print(f'[CREATE PROJECT API] Text source: {text_source.get("type") if text_source else "None"}')
 
         if not project_name:
             print('[CREATE PROJECT API] ✗ ERROR: Project name is required')
@@ -1324,6 +1327,35 @@ def create_project():
 
         os.makedirs(texts_dir, exist_ok=True)
         os.makedirs(audio_dir, exist_ok=True)
+
+        # Handle text source if provided
+        if text_source:
+            text_content = None
+            source_filename = 'source.txt'
+
+            if text_source.get('type') == 'url':
+                url = text_source.get('url')
+                print(f'[CREATE PROJECT API] Downloading text from URL: {url}')
+                try:
+                    with urllib.request.urlopen(url) as response:
+                        text_content = response.read().decode('utf-8')
+                    print(f'[CREATE PROJECT API] Downloaded {len(text_content)} characters')
+                except Exception as e:
+                    print(f'[CREATE PROJECT API] ✗ ERROR downloading from URL: {str(e)}')
+                    return jsonify({'error': f'Failed to download from URL: {str(e)}'}), 400
+
+            elif text_source.get('type') == 'file':
+                text_content = text_source.get('content')
+                source_filename = text_source.get('filename', 'source.txt')
+                print(f'[CREATE PROJECT API] Using uploaded file: {source_filename}')
+                print(f'[CREATE PROJECT API] File content length: {len(text_content) if text_content else 0}')
+
+            # Save the text content to the texts directory
+            if text_content:
+                text_file_path = os.path.join(texts_dir, source_filename)
+                with open(text_file_path, 'w', encoding='utf-8') as f:
+                    f.write(text_content)
+                print(f'[CREATE PROJECT API] Saved text to: {text_file_path}')
 
         # Create project metadata
         project_metadata = {

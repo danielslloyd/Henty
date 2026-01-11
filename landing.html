@@ -292,6 +292,25 @@
                         Default: Projects folder
                     </small>
                 </div>
+                <div class="form-group">
+                    <label>Text Source</label>
+                    <div style="margin-bottom: 15px;">
+                        <label style="display: inline-flex; align-items: center; margin-right: 20px; font-weight: normal; cursor: pointer;">
+                            <input type="radio" name="textSourceType" value="url" checked onchange="toggleTextSourceInput()" style="margin-right: 8px; width: auto;">
+                            Gutenberg URL
+                        </label>
+                        <label style="display: inline-flex; align-items: center; font-weight: normal; cursor: pointer;">
+                            <input type="radio" name="textSourceType" value="file" onchange="toggleTextSourceInput()" style="margin-right: 8px; width: auto;">
+                            Upload Text File
+                        </label>
+                    </div>
+                    <div id="urlSourceInput">
+                        <input type="url" id="gutenbergUrl" placeholder="Enter Gutenberg URL" value="https://www.gutenberg.org/cache/epub/4932/pg4932.txt">
+                    </div>
+                    <div id="fileSourceInput" style="display: none;">
+                        <input type="file" id="textFile" accept=".txt" style="padding: 8px;">
+                    </div>
+                </div>
                 <div class="error-message" id="newProjectError"></div>
                 <div class="btn-container">
                     <button type="button" class="btn btn-secondary" onclick="closeNewProjectModal()">Cancel</button>
@@ -377,6 +396,21 @@
             document.getElementById('newProjectModal').classList.remove('active');
             document.getElementById('newProjectError').textContent = '';
             document.getElementById('newProjectForm').reset();
+            toggleTextSourceInput(); // Reset to default view
+        }
+
+        function toggleTextSourceInput() {
+            const sourceType = document.querySelector('input[name="textSourceType"]:checked').value;
+            const urlInput = document.getElementById('urlSourceInput');
+            const fileInput = document.getElementById('fileSourceInput');
+
+            if (sourceType === 'url') {
+                urlInput.style.display = 'block';
+                fileInput.style.display = 'none';
+            } else {
+                urlInput.style.display = 'none';
+                fileInput.style.display = 'block';
+            }
         }
 
         function showLoadProjectModal() {
@@ -396,10 +430,12 @@
             const name = document.getElementById('projectName').value.trim();
             const path = document.getElementById('projectPath').value.trim();
             const errorDiv = document.getElementById('newProjectError');
+            const sourceType = document.querySelector('input[name="textSourceType"]:checked').value;
 
             console.log('━━━ [CREATE PROJECT] START ━━━');
             console.log('[CREATE PROJECT] Name:', name);
             console.log('[CREATE PROJECT] Path:', path || '(using default)');
+            console.log('[CREATE PROJECT] Source Type:', sourceType);
             console.log('[CREATE PROJECT] SERVER_URL:', SERVER_URL);
             console.log('[CREATE PROJECT] API_KEY:', API_KEY ? 'Present' : 'Missing');
 
@@ -411,7 +447,43 @@
                 requestBody.path = path;
             }
 
-            console.log('[CREATE PROJECT] Request body:', JSON.stringify(requestBody, null, 2));
+            // Handle text source
+            if (sourceType === 'url') {
+                const url = document.getElementById('gutenbergUrl').value.trim();
+                if (!url) {
+                    errorDiv.textContent = 'Please enter a Gutenberg URL';
+                    return;
+                }
+                requestBody.text_source = {
+                    type: 'url',
+                    url: url
+                };
+                console.log('[CREATE PROJECT] Text Source URL:', url);
+            } else {
+                const fileInput = document.getElementById('textFile');
+                if (!fileInput.files || fileInput.files.length === 0) {
+                    errorDiv.textContent = 'Please select a text file';
+                    return;
+                }
+                const file = fileInput.files[0];
+                console.log('[CREATE PROJECT] Reading file:', file.name, 'Size:', file.size);
+
+                try {
+                    const fileContent = await file.text();
+                    requestBody.text_source = {
+                        type: 'file',
+                        content: fileContent,
+                        filename: file.name
+                    };
+                    console.log('[CREATE PROJECT] File content length:', fileContent.length);
+                } catch (err) {
+                    console.error('[CREATE PROJECT] File read error:', err);
+                    errorDiv.textContent = 'Failed to read file: ' + err.message;
+                    return;
+                }
+            }
+
+            console.log('[CREATE PROJECT] Request body keys:', Object.keys(requestBody));
 
             try {
                 const url = `${SERVER_URL}/api/project/create`;
