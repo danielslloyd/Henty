@@ -3242,6 +3242,40 @@ def merge_chapters():
         print(traceback.format_exc())
         return jsonify({'error': str(e)}), 500
 
+@app.route('/api/project/save-xml', methods=['POST'])
+@auth_manager.require_api_key
+def save_xml_content():
+    """Save XML content to project"""
+    try:
+        if converter.current_project_path is None:
+            return jsonify({'error': 'No project loaded'}), 400
+
+        data = request.json
+        xml_content = data.get('xml_content')
+
+        if not xml_content:
+            return jsonify({'error': 'xml_content is required'}), 400
+
+        # Save XML content to metadata
+        converter.current_project_metadata['content_xml'] = xml_content
+        converter.current_project_metadata['last_modified'] = datetime.now().isoformat()
+
+        # Save to file
+        project_file = os.path.join(converter.current_project_path, 'project.json')
+        with open(project_file, 'w', encoding='utf-8') as f:
+            json.dump(converter.current_project_metadata, f, indent=2, ensure_ascii=False)
+
+        return jsonify({
+            'success': True,
+            'message': 'XML content saved successfully'
+        })
+
+    except Exception as e:
+        import traceback
+        print(f"Error saving XML content: {str(e)}")
+        print(traceback.format_exc())
+        return jsonify({'error': str(e)}), 500
+
 # Serve static HTML and JavaScript files
 @app.route('/')
 def serve_landing():
