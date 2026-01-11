@@ -254,40 +254,42 @@ class GutenbergTab {
             return;
         }
 
-        const confirmation = confirm('Process text into chapters and chunks? This will create a new chapter structure.');
-        if (!confirmation) return;
+        // Check if chapters already exist
+        if (this.chapters.length > 0) {
+            const overwrite = confirm(
+                `This project already has ${this.chapters.length} chapter(s).\n\n` +
+                'Processing the text will REPLACE all existing chapters with a new single chapter.\n\n' +
+                'Are you sure you want to continue?'
+            );
+            if (!overwrite) return;
+        } else {
+            const confirmation = confirm('Process text into chapters and chunks? This will create a new chapter structure.');
+            if (!confirmation) return;
+        }
 
         try {
-            // Use the existing chunk-text endpoint
-            const response = await fetch(`${SERVER_URL}/api/chunk-text`, {
+            // Save the raw text first
+            await this.saveRawText();
+
+            // Use a simple approach: create a text blob and upload it
+            const blob = new Blob([this.rawText], { type: 'text/plain' });
+            const formData = new FormData();
+            formData.append('file', blob, 'manual_text.txt');
+
+            const response = await fetch(`${SERVER_URL}/api/project/add-text-file`, {
                 method: 'POST',
                 headers: {
-                    'Content-Type': 'application/json',
                     'X-API-Key': API_KEY
                 },
-                body: JSON.stringify({
-                    text: this.rawText,
-                    max_chunk_size: 500
-                })
+                body: formData
             });
 
             if (response.ok) {
-                const chunks = await response.json();
-
-                // Create a single chapter with these chunks
-                const chapter = {
-                    id: this.generateId(),
-                    name: 'Main Content',
-                    path: '',
-                    chunks: chunks
-                };
-
-                // Add to project
-                await this.addChapterToProject(chapter);
                 await this.loadChapters();
                 alert('Text processed successfully!');
             } else {
-                throw new Error('Failed to process text');
+                const error = await response.json();
+                throw new Error(error.error || 'Failed to process text');
             }
         } catch (error) {
             console.error('Error processing text:', error);
