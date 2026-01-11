@@ -480,45 +480,79 @@
         window.addEventListener('DOMContentLoaded', initApp);
 
         async function initApp() {
+            console.log('━━━ [APP INIT] START ━━━');
+
             // Get project from URL parameter
             const urlParams = new URLSearchParams(window.location.search);
             const projectPath = urlParams.get('project');
 
+            console.log('[APP INIT] URL search params:', window.location.search);
+            console.log('[APP INIT] Project path from URL:', projectPath);
+            console.log('[APP INIT] SERVER_URL:', SERVER_URL);
+            console.log('[APP INIT] API_KEY:', API_KEY ? 'Present' : 'Missing');
+
             if (!projectPath) {
+                console.error('[APP INIT] ✗ No project path specified');
                 alert('No project specified. Redirecting to landing page.');
                 window.location.href = 'landing.html';
                 return;
             }
 
             // Load project
+            console.log('[APP INIT] Calling loadProject...');
             await loadProject(projectPath);
+            console.log('━━━ [APP INIT] END ━━━');
         }
 
         async function loadProject(path) {
+            console.log('━━━ [APP LOAD PROJECT] START ━━━');
+            console.log('[APP LOAD PROJECT] Path:', path);
+
             try {
-                const response = await fetch(`${SERVER_URL}/api/project/load`, {
+                const url = `${SERVER_URL}/api/project/load`;
+                const requestBody = { project_path: path };
+
+                console.log('[APP LOAD PROJECT] URL:', url);
+                console.log('[APP LOAD PROJECT] Request body:', JSON.stringify(requestBody, null, 2));
+
+                const response = await fetch(url, {
                     method: 'POST',
                     headers: {
                         'Content-Type': 'application/json',
                         'X-API-Key': API_KEY
                     },
-                    body: JSON.stringify({ project_path: path })
+                    body: JSON.stringify(requestBody)
                 });
 
+                console.log('[APP LOAD PROJECT] Response status:', response.status);
+                console.log('[APP LOAD PROJECT] Response ok:', response.ok);
+                console.log('[APP LOAD PROJECT] Response headers:', Object.fromEntries(response.headers.entries()));
+
                 if (!response.ok) {
-                    throw new Error('Failed to load project');
+                    const errorText = await response.text();
+                    console.error('[APP LOAD PROJECT] ✗ Error response text:', errorText);
+                    throw new Error(`Failed to load project (${response.status}): ${errorText}`);
                 }
 
                 const result = await response.json();
+                console.log('[APP LOAD PROJECT] ✓ Result:', result);
+                console.log('[APP LOAD PROJECT] Metadata:', result.metadata);
+
                 currentProject = result;
 
                 // Update UI
-                document.getElementById('projectName').textContent = result.metadata?.name || 'Unnamed Project';
+                const projectName = result.metadata?.name || 'Unnamed Project';
+                console.log('[APP LOAD PROJECT] Setting project name to:', projectName);
+                document.getElementById('projectName').textContent = projectName;
 
                 // Load project data
+                console.log('[APP LOAD PROJECT] Calling loadProjectData...');
                 await loadProjectData();
+                console.log('━━━ [APP LOAD PROJECT] END ━━━');
             } catch (error) {
-                console.error('Error loading project:', error);
+                console.error('━━━ [APP LOAD PROJECT] ✗ ERROR ━━━');
+                console.error('[APP LOAD PROJECT] Exception:', error);
+                console.error('[APP LOAD PROJECT] Stack:', error.stack);
                 alert('Failed to load project: ' + error.message);
                 window.location.href = 'landing.html';
             }

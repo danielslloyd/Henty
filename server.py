@@ -1252,23 +1252,32 @@ def create_project():
         import shutil
         from datetime import datetime
 
+        print('\n━━━ [CREATE PROJECT API] START ━━━')
         data = request.json
+        print(f'[CREATE PROJECT API] Request data: {data}')
 
         # Accept both 'name'/'project_name' and 'path'/'project_path' for flexibility
         project_name = data.get('name') or data.get('project_name', 'Unnamed Project')
         base_path = data.get('path') or data.get('project_path')
 
+        print(f'[CREATE PROJECT API] Project name: {project_name}')
+        print(f'[CREATE PROJECT API] Base path: {base_path or "(using default)"}')
+
         if not project_name:
+            print('[CREATE PROJECT API] ✗ ERROR: Project name is required')
             return jsonify({'error': 'Project name is required'}), 400
 
         # If no path provided, use default project directory
         if not base_path:
             base_path = config.DEFAULT_PROJECT_DIR
+            print(f'[CREATE PROJECT API] Using default path: {base_path}')
 
         # Construct full project path
         project_path = os.path.join(base_path, project_name)
+        print(f'[CREATE PROJECT API] Full project path: {project_path}')
 
         # Create project directory structure
+        print(f'[CREATE PROJECT API] Creating directories...')
         os.makedirs(project_path, exist_ok=True)
         texts_dir = os.path.join(project_path, 'texts')
         audio_dir = os.path.join(project_path, 'audio')
@@ -1305,6 +1314,10 @@ def create_project():
         converter.audio_dir = audio_dir
         # Keep voice_samples_dir pointing to main folder (not project-specific)
 
+        print(f'[CREATE PROJECT API] ✓ Project created successfully')
+        print(f'[CREATE PROJECT API] Returning: project_path={project_path}')
+        print('━━━ [CREATE PROJECT API] END ━━━\n')
+
         return jsonify({
             'success': True,
             'project_path': project_path,
@@ -1313,8 +1326,9 @@ def create_project():
 
     except Exception as e:
         import traceback
-        print(f"Error creating project: {str(e)}")
+        print(f"[CREATE PROJECT API] ✗ ERROR: {str(e)}")
         print(traceback.format_exc())
+        print('━━━ [CREATE PROJECT API] END (ERROR) ━━━\n')
         return jsonify({'error': str(e)}), 500
 
 @app.route('/api/project/load', methods=['POST'])
@@ -1325,22 +1339,34 @@ def load_project():
         import json
         from datetime import datetime
 
+        print('\n━━━ [LOAD PROJECT API] START ━━━')
         data = request.json
+        print(f'[LOAD PROJECT API] Request data: {data}')
+
         project_path = data.get('project_path')
+        print(f'[LOAD PROJECT API] Project path: {project_path}')
 
         if not project_path:
+            print('[LOAD PROJECT API] ✗ ERROR: project_path is required')
             return jsonify({'error': 'project_path is required'}), 400
 
+        print(f'[LOAD PROJECT API] Checking if path exists: {project_path}')
         if not os.path.exists(project_path):
+            print(f'[LOAD PROJECT API] ✗ ERROR: Path does not exist')
             return jsonify({'error': 'Project path does not exist'}), 404
 
         # Load project metadata
         project_file = os.path.join(project_path, 'project.json')
+        print(f'[LOAD PROJECT API] Looking for project file: {project_file}')
+
         if not os.path.exists(project_file):
+            print(f'[LOAD PROJECT API] ✗ ERROR: project.json not found')
             return jsonify({'error': 'Not a valid project folder (project.json not found)'}), 400
 
+        print(f'[LOAD PROJECT API] Reading project.json...')
         with open(project_file, 'r', encoding='utf-8') as f:
             project_metadata = json.load(f)
+        print(f'[LOAD PROJECT API] Project metadata: {project_metadata}')
 
         # Add default audio settings if not present (backwards compatibility)
         if 'default_audio_settings' not in project_metadata:
@@ -1370,6 +1396,10 @@ def load_project():
         if os.path.exists(texts_dir):
             text_files = [f for f in os.listdir(texts_dir) if f.endswith('.txt')]
 
+        print(f'[LOAD PROJECT API] ✓ Project loaded successfully')
+        print(f'[LOAD PROJECT API] Text files found: {len(text_files)}')
+        print('━━━ [LOAD PROJECT API] END ━━━\n')
+
         return jsonify({
             'success': True,
             'project_path': project_path,
@@ -1379,8 +1409,9 @@ def load_project():
 
     except Exception as e:
         import traceback
-        print(f"Error loading project: {str(e)}")
+        print(f"[LOAD PROJECT API] ✗ ERROR: {str(e)}")
         print(traceback.format_exc())
+        print('━━━ [LOAD PROJECT API] END (ERROR) ━━━\n')
         return jsonify({'error': str(e)}), 500
 
 @app.route('/api/project/info', methods=['GET'])
