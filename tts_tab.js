@@ -19,6 +19,7 @@ class TTSTab {
     async init() {
         await this.loadVoiceSamples();
         await this.loadProjectDefaults();
+        await this.refreshChapters();
         this.setupProgressUpdater();
     }
 
@@ -55,6 +56,41 @@ class TTSTab {
         }
     }
 
+    async refreshChapters() {
+        try {
+            console.log('[TTS TAB] Refreshing chapters...');
+            const response = await fetch(`${SERVER_URL}/api/project/info`, {
+                headers: {
+                    'X-API-Key': API_KEY
+                }
+            });
+
+            if (response.ok) {
+                const projectInfo = await response.json();
+                const chapters = projectInfo.chapters || [];
+                console.log('[TTS TAB] Found', chapters.length, 'chapters');
+
+                // Populate the dropdown
+                const select = document.getElementById('ttsChapterSelect');
+                if (select) {
+                    select.innerHTML = '<option value="">-- Select a chapter --</option>' +
+                        chapters.map((chapter, index) =>
+                            `<option value="${index}">${chapter.title || chapter.name || `Chapter ${index + 1}`}</option>`
+                        ).join('');
+
+                    // Auto-load first chapter if chapters exist
+                    if (chapters.length > 0) {
+                        console.log('[TTS TAB] Auto-loading first chapter');
+                        select.value = '0';
+                        await this.loadChapter(0);
+                    }
+                }
+            }
+        } catch (error) {
+            console.error('Error refreshing chapters:', error);
+        }
+    }
+
     async loadChapter(chapterIndex) {
         try {
             const response = await fetch(`${SERVER_URL}/api/project/info`, {
@@ -79,8 +115,13 @@ class TTSTab {
 
     renderChapter() {
         const container = document.getElementById('ttsContent');
+        if (!container) {
+            console.error('[TTS TAB] Container ttsContent not found');
+            return;
+        }
+
         if (!this.currentChapter) {
-            container.innerHTML = '<div class="loading">Select a chapter to view TTS controls</div>';
+            container.innerHTML = '<div style="color: #999; text-align: center; padding: 40px;">Select a chapter to view TTS controls</div>';
             return;
         }
 
@@ -89,7 +130,7 @@ class TTSTab {
         container.innerHTML = `
             <div style="background: white; border-radius: 10px; padding: 20px; box-shadow: 0 2px 10px rgba(0,0,0,0.1);">
                 <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
-                    <h2 style="margin: 0;">${this.currentChapter.name || 'Untitled Chapter'}</h2>
+                    <h2 style="margin: 0;">${this.currentChapter.title || this.currentChapter.name || 'Untitled Chapter'}</h2>
                     <div style="display: flex; gap: 10px;">
                         <button class="pane-btn" onclick="ttsTab.generateAllChunks()">
                             Generate All
