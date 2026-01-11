@@ -286,8 +286,11 @@
                     <input type="text" id="projectName" required placeholder="Enter project name">
                 </div>
                 <div class="form-group">
-                    <label for="projectPath">Project Location</label>
-                    <input type="text" id="projectPath" required placeholder="/path/to/projects">
+                    <label for="projectPath">Project Location (optional)</label>
+                    <input type="text" id="projectPath" placeholder="Leave empty to use default location">
+                    <small style="color: #666; font-size: 12px; margin-top: 4px; display: block;">
+                        Default: Projects folder
+                    </small>
                 </div>
                 <div class="error-message" id="newProjectError"></div>
                 <div class="btn-container">
@@ -396,6 +399,12 @@
 
             errorDiv.textContent = '';
 
+            // Build request body - only include path if provided
+            const requestBody = { name };
+            if (path) {
+                requestBody.path = path;
+            }
+
             try {
                 const response = await fetch(`${SERVER_URL}/api/project/create`, {
                     method: 'POST',
@@ -403,7 +412,7 @@
                         'Content-Type': 'application/json',
                         'X-API-Key': API_KEY
                     },
-                    body: JSON.stringify({ name, path })
+                    body: JSON.stringify(requestBody)
                 });
 
                 if (response.ok) {
