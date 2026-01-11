@@ -525,6 +525,7 @@ class TextToAudioConverter:
         """
         Detect chapters in text using various patterns.
         Returns list of chapter dicts with: id, title, text, start_pos, end_pos
+        Also preserves pre-chapter text as non-voiced content.
         """
         import uuid
 
@@ -548,8 +549,14 @@ class TextToAudioConverter:
         # Find all chapter markers
         for pattern in chapter_patterns:
             for match in re.finditer(pattern, text, re.MULTILINE | re.IGNORECASE):
+                # Find the end of the title line
+                title_end = text.find('\n', match.start())
+                if title_end == -1:
+                    title_end = len(text)
+
                 chapter_positions.append({
                     'pos': match.start(),
+                    'title_end': title_end,
                     'title': match.group(1).strip(),
                     'pattern': pattern
                 })
@@ -562,6 +569,7 @@ class TextToAudioConverter:
                 for i, match in enumerate(section_breaks):
                     chapter_positions.append({
                         'pos': match.end(),
+                        'title_end': match.end(),
                         'title': f'Section {i+1}',
                         'pattern': 'section_break'
                     })
@@ -571,8 +579,28 @@ class TextToAudioConverter:
 
         # If we found chapter markers, create chapters
         if chapter_positions:
+            # Preserve text before first chapter as non-voiced content
+            first_chapter_pos = chapter_positions[0]['pos']
+            if first_chapter_pos > 0:
+                pre_chapter_text = text[0:first_chapter_pos].strip()
+                if pre_chapter_text:
+                    chapters.append({
+                        'id': str(uuid.uuid4()),
+                        'title': '[Non-voiced Preface]',
+                        'text': pre_chapter_text,
+                        'start_pos': 0,
+                        'end_pos': first_chapter_pos,
+                        'order': -1,
+                        'non_voiced': True
+                    })
+
             for i, chapter_info in enumerate(chapter_positions):
-                start_pos = chapter_info['pos']
+                # Start reading text AFTER the title line
+                start_pos = chapter_info['title_end']
+                # Skip any newlines immediately after title
+                while start_pos < len(text) and text[start_pos] in '\n\r':
+                    start_pos += 1
+
                 # Find end position (start of next chapter or end of text)
                 end_pos = chapter_positions[i+1]['pos'] if i+1 < len(chapter_positions) else len(text)
 
@@ -584,7 +612,8 @@ class TextToAudioConverter:
                     'text': chapter_text,
                     'start_pos': start_pos,
                     'end_pos': end_pos,
-                    'order': i
+                    'order': i,
+                    'non_voiced': False
                 })
         else:
             # No chapters detected, treat entire text as single chapter
@@ -594,7 +623,8 @@ class TextToAudioConverter:
                 'text': text,
                 'start_pos': 0,
                 'end_pos': len(text),
-                'order': 0
+                'order': 0,
+                'non_voiced': False
             })
 
         return chapters
@@ -609,6 +639,7 @@ class TextToAudioConverter:
         """
         Convert text (with optional detected chapters) to XML-embedded-in-JSON format.
         Returns a string of XML content.
+        Wraps non-voiced content in <non-voiced> tags.
         """
         if chapters is None:
             chapters = self.detect_chapters(text)
@@ -618,7 +649,13 @@ class TextToAudioConverter:
 
         for chapter in chapters:
             chapter_title = chapter['title'].replace('&', '&amp;').replace('<', '&lt;').replace('>', '&gt;')
-            xml_lines.append(f'  <chapter id="{chapter["id"]}" title="{chapter_title}" order="{chapter["order"]}">')
+            is_non_voiced = chapter.get('non_voiced', False)
+
+            if is_non_voiced:
+                # Wrap non-voiced content
+                xml_lines.append(f'  <non-voiced title="{chapter_title}">')
+            else:
+                xml_lines.append(f'  <chapter id="{chapter["id"]}" title="{chapter_title}" order="{chapter["order"]}">')
 
             # Split chapter text into paragraphs
             paragraphs = [p.strip() for p in chapter['text'].split('\n\n') if p.strip()]
@@ -628,7 +665,10 @@ class TextToAudioConverter:
                 para_escaped = para.replace('&', '&amp;').replace('<', '&lt;').replace('>', '&gt;')
                 xml_lines.append(f'    <p>{para_escaped}</p>')
 
-            xml_lines.append('  </chapter>')
+            if is_non_voiced:
+                xml_lines.append('  </non-voiced>')
+            else:
+                xml_lines.append('  </chapter>')
 
         xml_lines.append('</book>')
 
