@@ -1,21 +1,20 @@
 /**
  * Gutenberg Processing Tab Logic
- * Handles raw text loading, chapter processing, editing, and validation
+ * Handles raw text loading, XML editing, chapter processing, and validation
  */
 
 class GutenbergTab {
     constructor() {
         this.rawText = '';
+        this.xmlContent = '';
         this.chapters = [];
-        this.selectedChapterId = null;
-        this.pseudoXmlMode = false;
     }
 
     async init() {
         // Load raw text from project if available
         await this.loadRawText();
-        // Load chapters from project
-        await this.loadChapters();
+        // Load XML content from project
+        await this.loadXML();
     }
 
     async loadRawText() {
@@ -45,7 +44,7 @@ class GutenbergTab {
         }
     }
 
-    async loadChapters() {
+    async loadXML() {
         try {
             const response = await fetch(`${SERVER_URL}/api/project/get-text-files`, {
                 headers: {
@@ -56,102 +55,70 @@ class GutenbergTab {
             if (response.ok) {
                 const data = await response.json();
                 this.chapters = data.chapters || [];
-                console.log('[LOAD CHAPTERS] Loaded chapters:', this.chapters.length);
-                this.displayChapters();
+                this.xmlContent = data.content_xml || '';
+
+                console.log('[LOAD XML] Loaded chapters:', this.chapters.length);
+                console.log('[LOAD XML] XML length:', this.xmlContent.length);
+
+                // If we have chapters but no XML, generate XML from chapters
+                if (this.chapters.length > 0 && !this.xmlContent) {
+                    this.xmlContent = this.chaptersToXML(this.chapters);
+                }
+
+                this.displayXML();
             }
         } catch (error) {
-            console.error('Error loading chapters:', error);
+            console.error('Error loading XML:', error);
         }
     }
 
-    displayChapters() {
-        const container = document.getElementById('chaptersContainer');
-        const placeholder = document.getElementById('chapterPlaceholder');
-        const chapterList = document.getElementById('chapterList');
+    displayXML() {
+        const editor = document.getElementById('pseudoXmlEditor');
+        const placeholder = document.getElementById('xmlPlaceholder');
 
-        console.log('[DISPLAY CHAPTERS] Called');
-        console.log('[DISPLAY CHAPTERS] this.chapters:', this.chapters);
-        console.log('[DISPLAY CHAPTERS] chapters length:', this.chapters.length);
+        console.log('[DISPLAY XML] Called');
+        console.log('[DISPLAY XML] XML length:', this.xmlContent.length);
 
-        if (this.chapters.length === 0) {
-            console.log('[DISPLAY CHAPTERS] No chapters, showing placeholder');
-            chapterList.style.display = 'none';
+        if (!this.xmlContent) {
+            editor.style.display = 'none';
             placeholder.style.display = 'block';
             return;
         }
 
-        console.log('[DISPLAY CHAPTERS] Displaying', this.chapters.length, 'chapters');
-        chapterList.style.display = 'block';
-        placeholder.style.display = 'none';
-
-        container.innerHTML = this.chapters.map((chapter, index) => {
-            const chunkCount = chapter.chunks ? chapter.chunks.length : 0;
-            const totalChars = chapter.chunks ?
-                chapter.chunks.reduce((sum, chunk) => sum + (chunk.text?.length || 0), 0) : 0;
-
-            return `
-                <div class="chapter-item ${this.selectedChapterId === chapter.id ? 'active' : ''}"
-                     onclick="gutenbergTab.selectChapter('${chapter.id}')">
-                    <div>
-                        <strong>${chapter.name || chapter.title || `Chapter ${index + 1}`}</strong>
-                        <div style="font-size: 12px; color: #888; margin-top: 4px;">
-                            ${chunkCount} chunks, ${totalChars} characters
-                        </div>
-                    </div>
-                    <div class="chapter-actions">
-                        <button class="icon-btn" onclick="event.stopPropagation(); gutenbergTab.editChapterName('${chapter.id}')" title="Rename">
-                            ✏️
-                        </button>
-                        <button class="icon-btn" onclick="event.stopPropagation(); gutenbergTab.splitChapter('${chapter.id}')" title="Split">
-                            ✂️
-                        </button>
-                        ${index < this.chapters.length - 1 ? `
-                        <button class="icon-btn" onclick="event.stopPropagation(); gutenbergTab.mergeWithNext('${chapter.id}')" title="Merge with next">
-                            🔗
-                        </button>
-                        ` : ''}
-                    </div>
-                </div>
-            `;
-        }).join('');
-    }
-
-    selectChapter(chapterId) {
-        this.selectedChapterId = chapterId;
-        const chapter = this.chapters.find(ch => ch.id === chapterId);
-
-        if (chapter) {
-            this.displayChapterContent(chapter);
-        }
-
-        this.displayChapters(); // Refresh to show active state
-    }
-
-    displayChapterContent(chapter) {
-        const editor = document.getElementById('pseudoXmlEditor');
         editor.style.display = 'block';
-
-        // Convert chapter to pseudo-XML format
-        const xml = this.chapterToPseudoXml(chapter);
-        editor.value = xml;
+        placeholder.style.display = 'none';
+        editor.value = this.xmlContent;
     }
 
-    chapterToPseudoXml(chapter) {
-        let xml = `<chapter id="${chapter.id}" name="${this.escapeXml(chapter.name || 'Untitled')}">\n`;
+    chaptersToXML(chapters) {
+        // Convert chapters array to pseudo-XML format
+        let xml = '<?xml version="1.0" encoding="UTF-8"?>\n<book>\n';
 
-        if (chapter.chunks) {
-            chapter.chunks.forEach(chunk => {
-                xml += `  <chunk id="${chunk.id}" start="${chunk.start_pos || 0}" end="${chunk.end_pos || 0}">\n`;
-                xml += `    ${this.escapeXml(chunk.text || '')}\n`;
-                xml += `  </chunk>\n`;
-            });
+        for (const chapter of chapters) {
+            const title = chapter.title || chapter.name || 'Untitled';
+            xml += `  <chapter title="${this.escapeXML(title)}">\n`;
+
+            if (chapter.chunks) {
+                for (const chunk of chapter.chunks) {
+                    if (chunk.type === 'pause') {
+                        xml += `    <pause duration="${chunk.duration || 1.0}"/>\n`;
+                    } else if (chunk.type === 'common_file') {
+                        xml += `    <common_file path="${this.escapeXML(chunk.path || '')}"/>\n`;
+                    } else {
+                        const text = chunk.text || '';
+                        xml += `    <chunk>${this.escapeXML(text)}</chunk>\n`;
+                    }
+                }
+            }
+
+            xml += '  </chapter>\n';
         }
 
-        xml += `</chapter>`;
+        xml += '</book>';
         return xml;
     }
 
-    escapeXml(text) {
+    escapeXML(text) {
         return text
             .replace(/&/g, '&amp;')
             .replace(/</g, '&lt;')
@@ -160,14 +127,148 @@ class GutenbergTab {
             .replace(/'/g, '&apos;');
     }
 
-    async loadGutenbergUrl() {
-        const url = prompt('Enter Project Gutenberg URL (must be .txt file):');
-        if (!url) return;
+    unescapeXML(text) {
+        return text
+            .replace(/&apos;/g, "'")
+            .replace(/&quot;/g, '"')
+            .replace(/&gt;/g, '>')
+            .replace(/&lt;/g, '<')
+            .replace(/&amp;/g, '&');
+    }
 
-        if (!url.includes('gutenberg.org') || !url.endsWith('.txt')) {
-            alert('Please provide a valid Project Gutenberg .txt URL');
+    async saveXML() {
+        try {
+            const editor = document.getElementById('pseudoXmlEditor');
+            const xmlContent = editor.value;
+
+            // TODO: Parse XML and convert to chapters format
+            // For now, just save the XML content
+            const response = await fetch(`${SERVER_URL}/api/project/save-xml`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-API-Key': API_KEY
+                },
+                body: JSON.stringify({
+                    xml_content: xmlContent
+                })
+            });
+
+            if (response.ok) {
+                alert('XML saved successfully!');
+                this.xmlContent = xmlContent;
+                await this.loadXML();  // Reload to sync
+            } else {
+                const error = await response.json();
+                throw new Error(error.error || 'Failed to save XML');
+            }
+        } catch (error) {
+            console.error('Error saving XML:', error);
+            alert('Error saving XML: ' + error.message);
+        }
+    }
+
+    insertTag(tagType) {
+        const editor = document.getElementById('pseudoXmlEditor');
+        const cursorPos = editor.selectionStart;
+        const textBefore = editor.value.substring(0, cursorPos);
+        const textAfter = editor.value.substring(cursorPos);
+
+        let insertText = '';
+        if (tagType === 'chapter') {
+            insertText = '\n  <chapter title="New Chapter">\n    <chunk>Chapter text goes here</chunk>\n  </chapter>\n';
+        } else if (tagType === 'chunk') {
+            insertText = '\n    <chunk>Chunk text goes here</chunk>\n';
+        } else if (tagType === 'pause') {
+            insertText = '\n    <pause duration="1.0"/>\n';
+        }
+
+        editor.value = textBefore + insertText + textAfter;
+        editor.selectionStart = editor.selectionEnd = cursorPos + insertText.length;
+        editor.focus();
+    }
+
+    wrapSelection(tagType) {
+        const editor = document.getElementById('pseudoXmlEditor');
+        const start = editor.selectionStart;
+        const end = editor.selectionEnd;
+
+        if (start === end) {
+            alert('Please select some text first');
             return;
         }
+
+        const selectedText = editor.value.substring(start, end);
+        const textBefore = editor.value.substring(0, start);
+        const textAfter = editor.value.substring(end);
+
+        let wrappedText = '';
+        if (tagType === 'footnote') {
+            wrappedText = `<footnote>${selectedText}</footnote>`;
+        }
+
+        editor.value = textBefore + wrappedText + textAfter;
+        editor.selectionStart = start;
+        editor.selectionEnd = start + wrappedText.length;
+        editor.focus();
+    }
+
+    async validateChunks() {
+        try {
+            const response = await fetch(`${SERVER_URL}/api/project/validate-chunks`, {
+                headers: {
+                    'X-API-Key': API_KEY
+                }
+            });
+
+            if (response.ok) {
+                const result = await response.json();
+                if (result.oversized_chunks && result.oversized_chunks.length > 0) {
+                    const msg = `Found ${result.oversized_chunks.length} oversized chunks:\n\n` +
+                        result.oversized_chunks.map(c =>
+                            `Chapter: ${c.chapter_title}, Chunk ${c.chunk_id}: ${c.size} chars`
+                        ).join('\n');
+                    alert(msg);
+                } else {
+                    alert('All chunks are valid!');
+                }
+            } else {
+                throw new Error('Failed to validate chunks');
+            }
+        } catch (error) {
+            console.error('Error validating chunks:', error);
+            alert('Error validating chunks: ' + error.message);
+        }
+    }
+
+    async autoRechunk() {
+        try {
+            const confirmation = confirm('This will automatically split oversized chunks. Continue?');
+            if (!confirmation) return;
+
+            const response = await fetch(`${SERVER_URL}/api/project/auto-rechunk`, {
+                method: 'POST',
+                headers: {
+                    'X-API-Key': API_KEY
+                }
+            });
+
+            if (response.ok) {
+                const result = await response.json();
+                alert(`Rechunking complete! Fixed ${result.chunks_fixed || 0} chunks.`);
+                await this.loadXML();  // Reload XML
+            } else {
+                throw new Error('Failed to auto-rechunk');
+            }
+        } catch (error) {
+            console.error('Error auto-rechunking:', error);
+            alert('Error auto-rechunking: ' + error.message);
+        }
+    }
+
+    async loadGutenbergUrl() {
+        const url = prompt('Enter Project Gutenberg URL:');
+        if (!url) return;
 
         console.log('[GUTENBERG] Loading URL:', url);
 
@@ -188,28 +289,28 @@ class GutenbergTab {
                 console.log('[GUTENBERG] Success! Result:', result);
                 console.log('[GUTENBERG] Chapters received:', result.chapters?.length || 0);
 
-                alert('Gutenberg text loaded successfully!');
-
+                // Reload both raw text and XML
                 console.log('[GUTENBERG] Reloading raw text...');
                 await this.loadRawText();
                 console.log('[GUTENBERG] Raw text loaded. Length:', this.rawText.length);
 
-                console.log('[GUTENBERG] Reloading chapters...');
-                await this.loadChapters();
-                console.log('[GUTENBERG] Chapters loaded. Count:', this.chapters.length);
+                console.log('[GUTENBERG] Reloading XML...');
+                await this.loadXML();
+                console.log('[GUTENBERG] XML loaded. Count:', this.chapters.length);
 
                 console.log('[GUTENBERG] Displaying content...');
                 this.displayRawText();
-                this.displayChapters();
+                this.displayXML();
                 console.log('[GUTENBERG] Complete!');
+
+                alert(`Successfully loaded! ${result.chapters?.length || 0} chapters created.`);
             } else {
                 const error = await response.json();
-                console.error('[GUTENBERG] Error:', error);
-                alert('Error: ' + (error.error || 'Failed to load text'));
+                throw new Error(error.error || 'Failed to load Gutenberg text');
             }
         } catch (error) {
-            console.error('[GUTENBERG] Exception:', error);
-            alert('Network error: ' + error.message);
+            console.error('Error loading Gutenberg text:', error);
+            alert('Error loading Gutenberg text: ' + error.message);
         }
     }
 
@@ -217,26 +318,39 @@ class GutenbergTab {
         const input = document.createElement('input');
         input.type = 'file';
         input.accept = '.txt';
+
         input.onchange = async (e) => {
             const file = e.target.files[0];
-            if (file) {
-                this.rawText = await file.text();
-                await this.saveRawText();
+            if (!file) return;
+
+            try {
+                const text = await file.text();
+                this.rawText = text;
                 this.displayRawText();
+
+                // Save to project
+                await this.saveRawText();
+                alert('Text file loaded successfully!');
+            } catch (error) {
+                console.error('Error loading file:', error);
+                alert('Error loading file: ' + error.message);
             }
         };
+
         input.click();
     }
 
     async saveRawText() {
         try {
-            const response = await fetch(`${SERVER_URL}/api/project/save-raw-text`, {
+            const response = await fetch(`${SERVER_URL}/api/project/raw-text`, {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
                     'X-API-Key': API_KEY
                 },
-                body: JSON.stringify({ raw_text: this.rawText })
+                body: JSON.stringify({
+                    raw_text: this.rawText
+                })
             });
 
             if (!response.ok) {
@@ -285,7 +399,7 @@ class GutenbergTab {
             });
 
             if (response.ok) {
-                await this.loadChapters();
+                await this.loadXML();
                 alert('Text processed successfully!');
             } else {
                 const error = await response.json();
@@ -297,215 +411,31 @@ class GutenbergTab {
         }
     }
 
-    async addChapterToProject(chapter) {
-        try {
-            const response = await fetch(`${SERVER_URL}/api/project/add-text-file`, {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                    'X-API-Key': API_KEY
-                },
-                body: JSON.stringify({
-                    file_path: chapter.path || 'generated',
-                    file_name: chapter.name,
-                    chunks: chapter.chunks
-                })
-            });
-
-            if (!response.ok) {
-                throw new Error('Failed to add chapter to project');
-            }
-        } catch (error) {
-            console.error('Error adding chapter:', error);
-            throw error;
-        }
-    }
-
-    async validateChunks() {
-        const maxSize = prompt('Maximum chunk size (characters):', '500');
-        if (!maxSize) return;
-
-        try {
-            const response = await fetch(`${SERVER_URL}/api/project/validate-chunks`, {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                    'X-API-Key': API_KEY
-                },
-                body: JSON.stringify({
-                    max_chunk_size: parseInt(maxSize)
-                })
-            });
-
-            if (response.ok) {
-                const result = await response.json();
-
-                if (result.oversized_count === 0) {
-                    alert(`All chunks are within ${maxSize} characters! ✓\n\nTotal chunks: ${result.total_chunks}`);
-                } else {
-                    const message = `Found ${result.oversized_count} oversized chunks out of ${result.total_chunks} total.\n\n` +
-                                  `Would you like to automatically rechunk them?`;
-
-                    if (confirm(message)) {
-                        await this.autoRechunk(parseInt(maxSize));
-                    } else {
-                        // Show details
-                        const details = result.oversized_chunks.map(chunk =>
-                            `${chunk.chapter_name} - Chunk ${chunk.chunk_id}: ${chunk.chunk_size} chars`
-                        ).join('\n');
-                        alert('Oversized chunks:\n\n' + details);
-                    }
-                }
-            } else {
-                throw new Error('Failed to validate chunks');
-            }
-        } catch (error) {
-            console.error('Error validating chunks:', error);
-            alert('Error validating chunks: ' + error.message);
-        }
-    }
-
-    async autoRechunk(maxSize) {
-        try {
-            const response = await fetch(`${SERVER_URL}/api/project/auto-rechunk`, {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                    'X-API-Key': API_KEY
-                },
-                body: JSON.stringify({
-                    max_chunk_size: maxSize
-                })
-            });
-
-            if (response.ok) {
-                const result = await response.json();
-                alert(result.message);
-                await this.loadChapters();
-            } else {
-                throw new Error('Failed to rechunk');
-            }
-        } catch (error) {
-            console.error('Error rechunking:', error);
-            alert('Error rechunking: ' + error.message);
-        }
-    }
-
-    async editChapterName(chapterId) {
-        const chapter = this.chapters.find(ch => ch.id === chapterId);
-        if (!chapter) return;
-
-        const newName = prompt('Enter new chapter name:', chapter.name || '');
-        if (!newName || newName === chapter.name) return;
-
-        chapter.name = newName;
-
-        // Save to project (this would need a new endpoint or update existing one)
-        await this.saveChapterChanges();
-        this.displayChapters();
-    }
-
-    async splitChapter(chapterId) {
-        const chapter = this.chapters.find(ch => ch.id === chapterId);
-        if (!chapter) return;
-
-        const fullText = chapter.chunks.map(c => c.text).join('\n\n');
-        const position = prompt(`Split chapter at character position (0-${fullText.length}):`,
-                               Math.floor(fullText.length / 2).toString());
-
-        if (position === null) return;
-
-        const splitPos = parseInt(position);
-        if (isNaN(splitPos) || splitPos < 0 || splitPos > fullText.length) {
-            alert('Invalid position');
-            return;
-        }
-
-        try {
-            const response = await fetch(`${SERVER_URL}/api/project/split-chapter`, {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                    'X-API-Key': API_KEY
-                },
-                body: JSON.stringify({
-                    chapter_id: chapterId,
-                    split_position: splitPos
-                })
-            });
-
-            if (response.ok) {
-                alert('Chapter split successfully!');
-                await this.loadChapters();
-            } else {
-                const error = await response.json();
-                throw new Error(error.error || 'Failed to split chapter');
-            }
-        } catch (error) {
-            console.error('Error splitting chapter:', error);
-            alert('Error splitting chapter: ' + error.message);
-        }
-    }
-
-    async mergeWithNext(chapterId) {
-        const chapterIndex = this.chapters.findIndex(ch => ch.id === chapterId);
-        if (chapterIndex === -1 || chapterIndex >= this.chapters.length - 1) return;
-
-        const chapter1 = this.chapters[chapterIndex];
-        const chapter2 = this.chapters[chapterIndex + 1];
-
-        const confirmation = confirm(`Merge "${chapter1.name}" with "${chapter2.name}"?`);
-        if (!confirmation) return;
-
-        try {
-            const response = await fetch(`${SERVER_URL}/api/project/merge-chapters`, {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                    'X-API-Key': API_KEY
-                },
-                body: JSON.stringify({
-                    chapter_id1: chapter1.id,
-                    chapter_id2: chapter2.id
-                })
-            });
-
-            if (response.ok) {
-                alert('Chapters merged successfully!');
-                await this.loadChapters();
-            } else {
-                const error = await response.json();
-                throw new Error(error.error || 'Failed to merge chapters');
-            }
-        } catch (error) {
-            console.error('Error merging chapters:', error);
-            alert('Error merging chapters: ' + error.message);
-        }
-    }
-
-    async saveChapterChanges() {
-        // This would save the current chapters back to the project
-        // For now, just reload to reflect any server-side changes
-        await this.loadChapters();
-    }
-
-    showAnnotator() {
-        alert('Annotator functionality will be integrated here.\n\n' +
-              'This will allow you to add footnotes and annotations to the text ' +
-              'that will be ignored by the TTS module.');
-    }
-
     generateId() {
-        return 'ch_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9);
+        return 'id_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9);
     }
 }
 
-// Global instance
+// Create global instance
 const gutenbergTab = new GutenbergTab();
 
-// Export functions for HTML onclick handlers
-window.loadGutenbergText = () => gutenbergTab.loadGutenbergUrl();
-window.uploadTextFile = () => gutenbergTab.uploadTextFile();
-window.processText = () => gutenbergTab.processText();
-window.validateChunks = () => gutenbergTab.validateChunks();
-window.showAnnotator = () => gutenbergTab.showAnnotator();
+// Global helper functions for onclick handlers
+function loadGutenbergText() {
+    gutenbergTab.loadGutenbergUrl();
+}
+
+function uploadTextFile() {
+    gutenbergTab.uploadTextFile();
+}
+
+function processText() {
+    gutenbergTab.processText();
+}
+
+function validateChunks() {
+    gutenbergTab.validateChunks();
+}
+
+function showAnnotator() {
+    alert('Annotator feature coming soon!');
+}
