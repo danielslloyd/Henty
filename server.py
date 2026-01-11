@@ -1328,43 +1328,7 @@ def create_project():
         os.makedirs(texts_dir, exist_ok=True)
         os.makedirs(audio_dir, exist_ok=True)
 
-        # Handle text source if provided
-        if text_source:
-            text_content = None
-            source_filename = 'source.txt'
-
-            if text_source.get('type') == 'url':
-                url = text_source.get('url')
-                print(f'[CREATE PROJECT API] Downloading text from URL: {url}')
-                try:
-                    with urllib.request.urlopen(url) as response:
-                        text_content = response.read().decode('utf-8')
-                    print(f'[CREATE PROJECT API] Downloaded {len(text_content)} characters')
-                except Exception as e:
-                    print(f'[CREATE PROJECT API] ✗ ERROR downloading from URL: {str(e)}')
-                    return jsonify({'error': f'Failed to download from URL: {str(e)}'}), 400
-
-            elif text_source.get('type') == 'file':
-                text_content = text_source.get('content')
-                source_filename = text_source.get('filename', 'source.txt')
-                print(f'[CREATE PROJECT API] Using uploaded file: {source_filename}')
-                print(f'[CREATE PROJECT API] File content length: {len(text_content) if text_content else 0}')
-
-            # Save the text content to both the texts directory and as raw_text.txt
-            if text_content:
-                # Save to texts directory for archival
-                text_file_path = os.path.join(texts_dir, source_filename)
-                with open(text_file_path, 'w', encoding='utf-8') as f:
-                    f.write(text_content)
-                print(f'[CREATE PROJECT API] Saved text to: {text_file_path}')
-
-                # Also save as raw_text.txt in project root for the UI to load
-                raw_text_path = os.path.join(project_path, 'raw_text.txt')
-                with open(raw_text_path, 'w', encoding='utf-8') as f:
-                    f.write(text_content)
-                print(f'[CREATE PROJECT API] Saved raw text to: {raw_text_path}')
-
-        # Create project metadata
+        # Create initial project metadata
         project_metadata = {
             'name': project_name,
             'created_at': datetime.now().isoformat(),
@@ -1382,16 +1346,150 @@ def create_project():
             'chapters': []
         }
 
-        # Save project metadata
-        project_file = os.path.join(project_path, 'project.json')
-        with open(project_file, 'w', encoding='utf-8') as f:
-            json.dump(project_metadata, f, indent=2, ensure_ascii=False)
-
-        # Update converter paths
+        # Update converter paths (must be done before processing text)
         converter.current_project_path = project_path
         converter.current_project_metadata = project_metadata
         converter.audio_dir = audio_dir
         # Keep voice_samples_dir pointing to main folder (not project-specific)
+
+        # Handle text source if provided
+        if text_source:
+            source_type = text_source.get('type')
+
+            if source_type == 'url':
+                url = text_source.get('url')
+                print(f'[CREATE PROJECT API] Processing URL: {url}')
+
+                # Check if it's a Gutenberg URL
+                if 'gutenberg.org' in url.lower():
+                    print(f'[CREATE PROJECT API] Using Gutenberg processing for: {url}')
+                    try:
+                        # Use GutenbergProcessor for special Gutenberg handling
+                        processor = GutenbergProcessor(output_dir=project_path)
+
+                        # Download text
+                        print(f'[CREATE PROJECT API] Downloading text from Gutenberg...')
+                        text = processor.download_text(url)
+
+                        # Extract title
+                        title = processor.extract_title(text)
+                        if not title:
+                            title = processor.extract_book_name(url)
+                        print(f'[CREATE PROJECT API] Extracted title: {title}')
+
+                        # Strip Gutenberg metadata
+                        text = processor.strip_gutenberg_metadata(text, title)
+
+                        # Process carriage returns
+                        text = processor.process_carriage_returns(text)
+
+                        # Replace SECTION_BREAK markers
+                        text = text.replace('<<<SECTION_BREAK>>>', '\n\n')
+
+                        print(f'[CREATE PROJECT API] Processed text length: {len(text)} characters')
+
+                        # Save raw text to raw_text.txt
+                        raw_text_file = os.path.join(project_path, 'raw_text.txt')
+                        with open(raw_text_file, 'w', encoding='utf-8') as f:
+                            f.write(text)
+                        print(f'[CREATE PROJECT API] Saved raw text to {raw_text_file}')
+
+                        # Also save to texts directory
+                        text_file_path = os.path.join(texts_dir, f'{title}.txt')
+                        with open(text_file_path, 'w', encoding='utf-8') as f:
+                            f.write(text)
+
+                        # Detect chapters
+                        detected_chapters = converter.detect_chapters(text)
+                        print(f'[CREATE PROJECT API] Detected {len(detected_chapters)} chapter(s)')
+
+                        # Generate XML content
+                        xml_content = converter.text_to_xml_content(text, detected_chapters)
+
+                        # Create chapters with chunks
+                        new_chapters = []
+                        for detected_chapter in detected_chapters:
+                            chunks = converter.smart_chunk_text(detected_chapter['text'], max_chunk_size=500)
+
+                            # Add chunk structure
+                            for chunk in chunks:
+                                chunk['dirty'] = False
+                                chunk['generated_audios'] = []
+
+                            chapter_entry = {
+                                'id': detected_chapter['id'],
+                                'title': detected_chapter['title'],
+                                'order': detected_chapter['order'],
+                                'chunks': chunks,
+                                'audio_output': None,
+                                'added_at': datetime.now().isoformat(),
+                                'source': 'gutenberg',
+                                'source_url': url
+                            }
+
+                            new_chapters.append(chapter_entry)
+
+                        # Update metadata with chapters and XML
+                        project_metadata['chapters'] = new_chapters
+                        project_metadata['content_xml'] = xml_content
+                        project_metadata['original_filename'] = f"{title}.txt"
+                        project_metadata['version'] = '3.0'
+
+                        print(f'[CREATE PROJECT API] Created {len(new_chapters)} chapters with Gutenberg processing')
+
+                    except Exception as e:
+                        print(f'[CREATE PROJECT API] ✗ ERROR in Gutenberg processing: {str(e)}')
+                        import traceback
+                        print(traceback.format_exc())
+                        return jsonify({'error': f'Failed to process Gutenberg URL: {str(e)}'}), 400
+                else:
+                    # Regular URL (non-Gutenberg)
+                    print(f'[CREATE PROJECT API] Downloading from non-Gutenberg URL')
+                    try:
+                        with urllib.request.urlopen(url) as response:
+                            text_content = response.read().decode('utf-8')
+
+                        # Save raw text
+                        raw_text_path = os.path.join(project_path, 'raw_text.txt')
+                        with open(raw_text_path, 'w', encoding='utf-8') as f:
+                            f.write(text_content)
+
+                        # Also save to texts directory
+                        text_file_path = os.path.join(texts_dir, 'source.txt')
+                        with open(text_file_path, 'w', encoding='utf-8') as f:
+                            f.write(text_content)
+
+                        print(f'[CREATE PROJECT API] Downloaded and saved {len(text_content)} characters')
+                    except Exception as e:
+                        print(f'[CREATE PROJECT API] ✗ ERROR downloading from URL: {str(e)}')
+                        return jsonify({'error': f'Failed to download from URL: {str(e)}'}), 400
+
+            elif source_type == 'file':
+                # Uploaded file
+                text_content = text_source.get('content')
+                source_filename = text_source.get('filename', 'source.txt')
+                print(f'[CREATE PROJECT API] Using uploaded file: {source_filename}')
+
+                # Save raw text
+                raw_text_path = os.path.join(project_path, 'raw_text.txt')
+                with open(raw_text_path, 'w', encoding='utf-8') as f:
+                    f.write(text_content)
+
+                # Also save to texts directory
+                text_file_path = os.path.join(texts_dir, source_filename)
+                with open(text_file_path, 'w', encoding='utf-8') as f:
+                    f.write(text_content)
+
+                print(f'[CREATE PROJECT API] Saved {len(text_content)} characters')
+
+        # Update converter metadata reference
+        converter.current_project_metadata = project_metadata
+
+        # Save project metadata to file
+        project_file = os.path.join(project_path, 'project.json')
+        with open(project_file, 'w', encoding='utf-8') as f:
+            json.dump(project_metadata, f, indent=2, ensure_ascii=False)
+        print(f'[CREATE PROJECT API] Saved project metadata to {project_file}')
 
         print(f'[CREATE PROJECT API] ✓ Project created successfully')
         print(f'[CREATE PROJECT API] Returning: project_path={project_path}')
