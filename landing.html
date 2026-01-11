@@ -443,7 +443,7 @@
                         'Content-Type': 'application/json',
                         'X-API-Key': API_KEY
                     },
-                    body: JSON.stringify({ path })
+                    body: JSON.stringify({ project_path: path })
                 });
 
                 if (response.ok) {
