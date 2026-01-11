@@ -3190,6 +3190,55 @@ def merge_chapters():
         print(traceback.format_exc())
         return jsonify({'error': str(e)}), 500
 
+# Serve static HTML and JavaScript files
+@app.route('/')
+def serve_landing():
+    """Serve the landing page"""
+    return send_file('index.html')
+
+@app.route('/index.html')
+def serve_index():
+    """Serve the landing page"""
+    return send_file('index.html')
+
+@app.route('/app.html')
+def serve_app():
+    """Serve the main application"""
+    return send_file('app.html')
+
+@app.route('/landing.html')
+def serve_landing_alt():
+    """Serve the landing page (alternative route)"""
+    return send_file('landing.html')
+
+@app.route('/reader.html')
+def serve_reader():
+    """Serve the reader page"""
+    return send_file('reader.html')
+
+@app.route('/index_old.html')
+def serve_old_index():
+    """Serve the old index page"""
+    return send_file('index_old.html')
+
+# Serve JavaScript files
+@app.route('/<path:filename>.js')
+def serve_js(filename):
+    """Serve JavaScript files"""
+    js_file = f'{filename}.js'
+    if os.path.exists(js_file):
+        return send_file(js_file, mimetype='application/javascript')
+    return jsonify({'error': 'File not found'}), 404
+
+# Serve CSS files
+@app.route('/<path:filename>.css')
+def serve_css(filename):
+    """Serve CSS files"""
+    css_file = f'{filename}.css'
+    if os.path.exists(css_file):
+        return send_file(css_file, mimetype='text/css')
+    return jsonify({'error': 'File not found'}), 404
+
 if __name__ == '__main__':
     print(f"Starting Text to Audio Converter API...")
     print(f"Using device: {converter.device}")
