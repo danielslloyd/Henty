@@ -21,7 +21,7 @@ const HentyConfig = {
 
     // API Key for authentication (if server has REQUIRE_AUTH=True)
     // Get this from the server administrator
-    API_KEY: '',
+    API_KEY: 'tq01SBP8SYLpWIbOsmNx8vYRlVMFRxvfMAKXQynCn7o',
 
     // WebSocket URL (usually same as server but with /socket.io)
     // Auto-generated from SERVER_URL if not set
@@ -167,3 +167,7 @@ console.log('Henty Client Configuration:', {
 
 // Make available globally
 window.HentyConfig = HentyConfig;
+
+// Create global aliases for backward compatibility
+window.SERVER_URL = HentyConfig.SERVER_URL;
+window.API_KEY = HentyConfig.API_KEY;
