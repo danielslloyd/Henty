@@ -47,7 +47,7 @@ class GutenbergTab {
 
     async loadChapters() {
         try {
-            const response = await fetch(`${SERVER_URL}/api/project/text-files`, {
+            const response = await fetch(`${SERVER_URL}/api/project/get-text-files`, {
                 headers: {
                     'X-API-Key': API_KEY
                 }
