@@ -19,38 +19,7 @@ class TTSTab {
     async init() {
         await this.loadVoiceSamples();
         await this.loadProjectDefaults();
-        await this.refreshChapters();
         this.setupProgressUpdater();
-    }
-
-    async refreshChapters() {
-        try {
-            const response = await fetch(`${SERVER_URL}/api/project/get-text-files`, {
-                headers: {
-                    'X-API-Key': API_KEY
-                }
-            });
-
-            if (response.ok) {
-                const data = await response.json();
-                const chapters = data.chapters || [];
-
-                // Populate chapter dropdown
-                const select = document.getElementById('ttsChapterSelect');
-                select.innerHTML = '<option value="">-- Select a chapter --</option>';
-
-                chapters.forEach((chapter, index) => {
-                    const option = document.createElement('option');
-                    option.value = index;
-                    option.textContent = chapter.title || chapter.name || `Chapter ${index + 1}`;
-                    select.appendChild(option);
-                });
-
-                console.log('[TTS] Loaded', chapters.length, 'chapters into dropdown');
-            }
-        } catch (error) {
-            console.error('Error refreshing chapters:', error);
-        }
     }
 
     async loadVoiceSamples() {
@@ -88,21 +57,19 @@ class TTSTab {
 
     async loadChapter(chapterIndex) {
         try {
-            const response = await fetch(`${SERVER_URL}/api/project/get-text-files`, {
+            const response = await fetch(`${SERVER_URL}/api/project/info`, {
                 headers: {
                     'X-API-Key': API_KEY
                 }
             });
 
             if (response.ok) {
-                const data = await response.json();
-                const chapters = data.chapters || [];
+                const projectInfo = await response.json();
+                const chapters = projectInfo.chapters || [];
                 this.currentChapter = chapters[chapterIndex];
 
                 if (this.currentChapter) {
                     this.renderChapter();
-                } else {
-                    console.error('[TTS] Chapter not found at index', chapterIndex);
                 }
             }
         } catch (error) {

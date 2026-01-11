@@ -81,17 +81,10 @@ class GutenbergTab {
         if (!this.xmlContent) {
             editor.value = '';
             editor.placeholder = 'Load or process text to see XML structure...';
-            if (typeof updateLineNumbers === 'function') {
-                updateLineNumbers();
-            }
             return;
         }
 
         editor.value = this.xmlContent;
-        // Update line numbers after setting content
-        if (typeof updateLineNumbers === 'function') {
-            updateLineNumbers();
-        }
     }
 
     chaptersToXML(chapters) {
