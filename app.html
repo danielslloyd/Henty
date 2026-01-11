@@ -365,7 +365,7 @@
     <div class="pane-toggles">
         <div class="toggle-group">
             <div class="toggle-item">
-                <input type="checkbox" id="toggle-raw" checked onchange="updatePaneVisibility()">
+                <input type="checkbox" id="toggle-raw" onchange="updatePaneVisibility()">
                 <label for="toggle-raw">📄 Raw Text</label>
             </div>
             <div class="toggle-item">
@@ -377,7 +377,7 @@
                 <label for="toggle-tts">🎤 TTS Generation</label>
             </div>
             <div class="toggle-item">
-                <input type="checkbox" id="toggle-reader" checked onchange="updatePaneVisibility()">
+                <input type="checkbox" id="toggle-reader" onchange="updatePaneVisibility()">
                 <label for="toggle-reader">📚 Reader</label>
             </div>
         </div>
@@ -388,9 +388,9 @@
     </div>
 
     <!-- Panes Container -->
-    <div class="panes-container panes-4" id="panesContainer">
+    <div class="panes-container panes-2" id="panesContainer">
         <!-- Pane 1: Raw Text -->
-        <div class="pane" id="pane-raw">
+        <div class="pane hidden" id="pane-raw">
             <div class="pane-header">
                 <h2>Raw Text</h2>
                 <div class="pane-actions">
@@ -451,7 +451,7 @@
         </div>
 
         <!-- Pane 4: Reader -->
-        <div class="pane" id="pane-reader">
+        <div class="pane hidden" id="pane-reader">
             <div class="pane-header">
                 <h2>Reader</h2>
                 <div class="pane-actions">
