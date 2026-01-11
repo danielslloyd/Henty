@@ -3178,7 +3178,7 @@ def merge_chapters():
             return jsonify({'error': 'chapter_id1 and chapter_id2 required'}), 400
 
         project_file = os.path.join(converter.current_project_path, 'project.json')
-        with open(project_file, 'r') as f:
+        with open(project_file, 'r', encoding='utf-8') as f:
             project_data = json.load(f)
 
         chapters = project_data.get('chapters', [])
@@ -3227,8 +3227,8 @@ def merge_chapters():
 
         # Save updated project
         project_data['last_modified'] = datetime.now().isoformat()
-        with open(project_file, 'w') as f:
-            json.dump(project_data, f, indent=2)
+        with open(project_file, 'w', encoding='utf-8') as f:
+            json.dump(project_data, f, indent=2, ensure_ascii=False)
 
         return jsonify({
             'success': True,
