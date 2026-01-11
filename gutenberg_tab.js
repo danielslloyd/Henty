@@ -74,19 +74,16 @@ class GutenbergTab {
 
     displayXML() {
         const editor = document.getElementById('pseudoXmlEditor');
-        const placeholder = document.getElementById('xmlPlaceholder');
 
         console.log('[DISPLAY XML] Called');
         console.log('[DISPLAY XML] XML length:', this.xmlContent.length);
 
         if (!this.xmlContent) {
-            editor.style.display = 'none';
-            placeholder.style.display = 'block';
+            editor.value = '';
+            editor.placeholder = 'Load or process text to see XML structure...';
             return;
         }
 
-        editor.style.display = 'block';
-        placeholder.style.display = 'none';
         editor.value = this.xmlContent;
     }
 
