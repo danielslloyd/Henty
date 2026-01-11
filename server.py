@@ -2666,6 +2666,12 @@ def add_gutenberg_url_to_project():
 
         print(f"Processed text length: {len(text)} characters")
 
+        # Save raw text to raw_text.txt in project directory
+        raw_text_file = os.path.join(converter.current_project_path, 'raw_text.txt')
+        with open(raw_text_file, 'w', encoding='utf-8') as f:
+            f.write(text)
+        print(f"Saved raw text to {raw_text_file}")
+
         # Detect chapters in the processed text
         detected_chapters = converter.detect_chapters(text)
         print(f"Detected {len(detected_chapters)} chapter(s)")

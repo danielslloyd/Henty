@@ -86,7 +86,7 @@ class GutenbergTab {
                 <div class="chapter-item ${this.selectedChapterId === chapter.id ? 'active' : ''}"
                      onclick="gutenbergTab.selectChapter('${chapter.id}')">
                     <div>
-                        <strong>${chapter.name || `Chapter ${index + 1}`}</strong>
+                        <strong>${chapter.name || chapter.title || `Chapter ${index + 1}`}</strong>
                         <div style="font-size: 12px; color: #888; margin-top: 4px;">
                             ${chunkCount} chunks, ${totalChars} characters
                         </div>
@@ -162,6 +162,8 @@ class GutenbergTab {
             return;
         }
 
+        console.log('[GUTENBERG] Loading URL:', url);
+
         try {
             const response = await fetch(`${SERVER_URL}/api/project/add-gutenberg-url`, {
                 method: 'POST',
@@ -172,15 +174,34 @@ class GutenbergTab {
                 body: JSON.stringify({ url })
             });
 
+            console.log('[GUTENBERG] Response status:', response.status);
+
             if (response.ok) {
+                const result = await response.json();
+                console.log('[GUTENBERG] Success! Result:', result);
+                console.log('[GUTENBERG] Chapters received:', result.chapters?.length || 0);
+
                 alert('Gutenberg text loaded successfully!');
+
+                console.log('[GUTENBERG] Reloading raw text...');
                 await this.loadRawText();
+                console.log('[GUTENBERG] Raw text loaded. Length:', this.rawText.length);
+
+                console.log('[GUTENBERG] Reloading chapters...');
                 await this.loadChapters();
+                console.log('[GUTENBERG] Chapters loaded. Count:', this.chapters.length);
+
+                console.log('[GUTENBERG] Displaying content...');
+                this.displayRawText();
+                this.displayChapters();
+                console.log('[GUTENBERG] Complete!');
             } else {
                 const error = await response.json();
+                console.error('[GUTENBERG] Error:', error);
                 alert('Error: ' + (error.error || 'Failed to load text'));
             }
         } catch (error) {
+            console.error('[GUTENBERG] Exception:', error);
             alert('Network error: ' + error.message);
         }
     }
