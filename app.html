@@ -4,6 +4,14 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Henty - Audiobook Creator</title>
+    <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght@300;400;500" rel="stylesheet">
+    <style>
+        .material-symbols-outlined {
+            font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 20;
+            font-size: 18px;
+            vertical-align: middle;
+        }
+
     <style>
         * {
             margin: 0;
@@ -347,6 +355,295 @@
             border-left: 3px solid #ffc107;
             padding-left: 15px !important;
         }
+
+        /* TTS UI - Inline Chunk Text Display */
+        .chunk-text {
+            display: inline;
+            padding: 2px 6px;
+            margin: 0 1px;
+            border-radius: 4px;
+            background: transparent;
+            transition: all 0.15s ease;
+            cursor: pointer;
+            position: relative;
+        }
+
+        .chunk-text:hover {
+            background: rgba(59, 130, 246, 0.08);
+        }
+
+        .chunk-text.selected {
+            background: rgba(59, 130, 246, 0.12);
+        }
+
+        .chunk-text.has-audio {
+            background: rgba(16, 185, 129, 0.08);
+        }
+
+        .chunk-text.has-audio:hover {
+            background: rgba(16, 185, 129, 0.15);
+        }
+
+        .chunk-text.selected.has-audio {
+            background: rgba(59, 130, 246, 0.15);
+        }
+
+        .insert-chapter-break-btn {
+            display: inline-flex;
+            align-items: center;
+            background: none;
+            border: none;
+            color: #cbd5e1;
+            cursor: pointer;
+            padding: 0;
+            margin: 0 2px;
+            transition: color 0.15s;
+        }
+
+        .insert-chapter-break-btn:hover {
+            color: #3b82f6;
+        }
+
+        /* TTS UI - Chunk Take Rows */
+        .chunk-take-row {
+            border-bottom: 1px solid #f0f0f0;
+            border-left: 3px solid transparent;
+            transition: all 0.15s ease;
+        }
+
+        .chunk-take-row:hover {
+            background: #fafbfc;
+        }
+
+        .chunk-take-row.best-take {
+            background: rgba(59, 130, 246, 0.03);
+            border-left-color: #3b82f6;
+        }
+
+        .chunk-take-row.non-best-take {
+            background: rgba(100, 116, 139, 0.02);
+            border-left-color: #cbd5e1;
+        }
+
+        .chunk-take-row.no-takes {
+            background: rgba(241, 245, 249, 0.5);
+        }
+
+        .chunk-take-row.additional-take .chunk-left {
+            visibility: hidden;
+        }
+
+        .chunk-take-row.generating {
+            background: rgba(139, 92, 246, 0.03);
+            border-left-color: #8b5cf6;
+            animation: pulse 2s ease-in-out infinite;
+        }
+
+        .chunk-take-row.highlighted {
+            background: rgba(251, 191, 36, 0.08) !important;
+            border-left-color: #fbbf24 !important;
+        }
+
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.7; }
+        }
+
+        .chunk-take-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 10px 16px;
+            cursor: pointer;
+        }
+
+        .chunk-left {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            flex: 1;
+        }
+
+        .chunk-preview-text {
+            font-size: 13px;
+            font-weight: 500;
+            color: #334155;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+
+        .chunk-icon {
+            background: none;
+            border: none;
+            color: #64748b;
+            cursor: pointer;
+            padding: 4px;
+            border-radius: 4px;
+            transition: all 0.15s;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .chunk-icon:hover {
+            background: rgba(100, 116, 139, 0.1);
+            color: #3b82f6;
+        }
+
+        .chunk-icon .material-symbols-outlined {
+            font-size: 18px;
+        }
+
+        .take-icons {
+            display: flex;
+            gap: 4px;
+            margin-left: auto;
+            opacity: 1;
+            transition: opacity 0.15s;
+        }
+
+        .take-icon {
+            background: none;
+            border: none;
+            cursor: pointer;
+            padding: 6px;
+            color: #94a3b8;
+            transition: all 0.15s;
+            border-radius: 4px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .take-icon:hover {
+            background: rgba(59, 130, 246, 0.08);
+            color: #3b82f6;
+        }
+
+        .take-icon.play:hover {
+            background: rgba(16, 185, 129, 0.08);
+            color: #10b981;
+        }
+
+        .take-icon.delete:hover {
+            background: rgba(239, 68, 68, 0.08);
+            color: #ef4444;
+        }
+
+        .take-icon.settings.expanded {
+            background: rgba(59, 130, 246, 0.08);
+            color: #3b82f6;
+        }
+
+        .take-icon.check-circle {
+            padding: 0;
+            margin-right: 4px;
+        }
+
+        .take-icon.check-circle.best {
+            color: #3b82f6;
+        }
+
+        .take-icon.check-circle:not(.best) {
+            color: #cbd5e1;
+        }
+
+        .take-icon.check-circle:not(.best):hover {
+            color: #94a3b8;
+        }
+
+        .take-icon.check-circle .material-symbols-outlined {
+            font-size: 20px;
+        }
+
+        /* Expandable Settings */
+        .take-settings {
+            display: none;
+            padding: 16px 16px 16px 32px;
+            background: #fafbfc;
+            border-top: 1px solid #f0f0f0;
+        }
+
+        .take-settings.expanded {
+            display: block;
+        }
+
+        .setting-row {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            margin-bottom: 12px;
+        }
+
+        .setting-row:last-child {
+            margin-bottom: 0;
+        }
+
+        .setting-label {
+            font-size: 11px;
+            color: #64748b;
+            min-width: 80px;
+            text-transform: uppercase;
+            letter-spacing: 0.3px;
+            font-weight: 500;
+        }
+
+        .setting-value {
+            font-size: 12px;
+            color: #475569;
+            font-weight: 500;
+        }
+
+        .setting-control {
+            flex: 1;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .setting-control select,
+        .setting-control input[type="range"] {
+            flex: 1;
+            font-size: 12px;
+            padding: 6px 8px;
+            border: 1px solid #e0e0e0;
+            border-radius: 4px;
+        }
+
+        /* TTS Sections */
+        .tts-section {
+            margin-bottom: 30px;
+        }
+
+        .tts-section h3 {
+            font-size: 16px;
+            font-weight: 600;
+            color: #1e293b;
+            margin-bottom: 15px;
+            padding-bottom: 10px;
+            border-bottom: 2px solid #e2e8f0;
+        }
+
+        .chunks-text-container {
+            background: white;
+            border: 1px solid #e2e8f0;
+            border-radius: 8px;
+            padding: 20px;
+            font-family: Georgia, serif;
+            font-size: 15px;
+            line-height: 1.8;
+            color: #333;
+            max-height: 400px;
+            overflow-y: auto;
+        }
+
+        .all-takes-container {
+            background: white;
+            border: 1px solid #e2e8f0;
+            border-radius: 8px;
+            overflow: hidden;
+        }
     </style>
 </head>
 <body>
@@ -432,6 +729,8 @@
             <div class="pane-header">
                 <h2>TTS Generation</h2>
                 <div class="pane-actions">
+                    <button class="pane-btn" onclick="ttsTab.generateAllChunks()">Generate All</button>
+                    <button class="pane-btn" onclick="ttsTab.stitchBestTakes()">Stitch Best Takes</button>
                     <button class="pane-btn" onclick="ttsTab.refreshChapters()">Refresh</button>
                 </div>
             </div>
