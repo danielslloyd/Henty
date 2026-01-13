@@ -454,6 +454,46 @@
             50% { opacity: 0.7; }
         }
 
+        /* Progress bar for chunk generation */
+        .chunk-progress-bar {
+            position: absolute;
+            bottom: 0;
+            left: 0;
+            right: 0;
+            height: 3px;
+            background: rgba(59, 130, 246, 0.1);
+            overflow: hidden;
+        }
+
+        .chunk-progress-fill {
+            height: 100%;
+            background: linear-gradient(90deg, #3b82f6, #8b5cf6);
+            transition: width 0.3s ease;
+            width: 0%;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .chunk-progress-fill::after {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            bottom: 0;
+            right: 0;
+            background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.3), transparent);
+            animation: shimmer 1.5s infinite;
+        }
+
+        @keyframes shimmer {
+            0% { transform: translateX(-100%); }
+            100% { transform: translateX(100%); }
+        }
+
+        .chunk-take-row {
+            position: relative;
+        }
+
         .chunk-take-header {
             display: flex;
             align-items: center;

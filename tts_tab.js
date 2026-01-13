@@ -642,6 +642,10 @@ class TTSTab {
 
         console.log('[TTS TAB] Generating audio for chunk:', chunkId);
 
+        // Show progress bar
+        this.showProgressBar(chunkId);
+        const progressInterval = this.startProgressPolling(chunkId);
+
         try {
             const response = await fetch(`${SERVER_URL}/api/project/generate-chunk-audio`, {
                 method: 'POST',
@@ -668,12 +672,59 @@ class TTSTab {
 
             console.log('[TTS TAB] Audio generated successfully');
 
+            // Clear progress polling
+            clearInterval(progressInterval);
+            this.hideProgressBar(chunkId);
+
             // Reload chapter to get updated takes
             await this.loadChapter(this.currentChapterIndex);
         } catch (error) {
             console.error('Error generating chunk audio:', error);
+            clearInterval(progressInterval);
+            this.hideProgressBar(chunkId);
             showToast('Failed to generate audio: ' + error.message, 'error');
         }
+    }
+
+    showProgressBar(chunkId) {
+        const rows = document.querySelectorAll(`[data-chunk-id="${chunkId}"]`);
+        rows.forEach(row => {
+            // Check if progress bar already exists
+            if (row.querySelector('.chunk-progress-bar')) return;
+
+            const progressBar = document.createElement('div');
+            progressBar.className = 'chunk-progress-bar';
+            progressBar.innerHTML = `
+                <div class="chunk-progress-fill" data-chunk-id="${chunkId}"></div>
+            `;
+            row.appendChild(progressBar);
+        });
+    }
+
+    hideProgressBar(chunkId) {
+        const progressBars = document.querySelectorAll(`[data-chunk-id="${chunkId}"] .chunk-progress-bar`);
+        progressBars.forEach(bar => bar.remove());
+    }
+
+    startProgressPolling(chunkId) {
+        return setInterval(async () => {
+            try {
+                const response = await fetch(`${SERVER_URL}/api/generation-progress`, {
+                    headers: { 'X-API-Key': API_KEY }
+                });
+                const data = await response.json();
+
+                if (data.in_progress) {
+                    const progress = data.progress_percent || 0;
+                    const fills = document.querySelectorAll(`.chunk-progress-fill[data-chunk-id="${chunkId}"]`);
+                    fills.forEach(fill => {
+                        fill.style.width = `${Math.min(progress, 95)}%`;
+                    });
+                }
+            } catch (error) {
+                console.error('Error polling progress:', error);
+            }
+        }, 200); // Poll every 200ms
     }
 
     async setBestTake(chunkId, audioFile) {
