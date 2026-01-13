@@ -351,9 +351,14 @@
 
         /* Highlight Sync */
         .highlighted {
+            background: rgba(251, 191, 36, 0.08) !important;
+            border-left-color: #fbbf24 !important;
+        }
+
+        /* Playing state for audio playback */
+        .chunk-text.playing {
             background: #fff3cd !important;
-            border-left: 3px solid #ffc107;
-            padding-left: 15px !important;
+            box-shadow: 0 0 0 2px #ffc107;
         }
 
         /* TTS UI - Inline Chunk Text Display */
@@ -848,7 +853,7 @@
             </div>
             <div class="pane-content">
                 <div class="reader-controls">
-                    <button class="play-btn" onclick="readerTab.playAllBestTakes()">▶ Play All Best Takes</button>
+                    <button class="play-btn" onclick="readerTab.playAllBestTakes()"><span class="material-symbols-outlined">play_arrow</span> Play All Best Takes</button>
                 </div>
                 <div id="readerContent" class="reader-content">
                     <div style="color: #999; text-align: center; padding: 40px;">

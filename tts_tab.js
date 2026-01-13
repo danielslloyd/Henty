@@ -231,13 +231,6 @@ class TTSTab {
             ${this.renderProjectSettings()}
 
             <div class="tts-section">
-                <h3>Chapter Text</h3>
-                <div class="chunks-text-container" id="chunksTextDisplay">
-                    ${this.renderChunkBubbles()}
-                </div>
-            </div>
-
-            <div class="tts-section">
                 <h3>All Takes</h3>
                 <div class="all-takes-container" id="allTakesDisplay">
                     ${this.renderChunkDetails()}
