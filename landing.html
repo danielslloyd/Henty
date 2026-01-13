@@ -305,7 +305,7 @@
                         </label>
                     </div>
                     <div id="urlSourceInput">
-                        <input type="url" id="gutenbergUrl" placeholder="Enter Gutenberg URL" value="https://www.gutenberg.org/cache/epub/4932/pg4932.txt">
+                        <input type="url" id="gutenbergUrl" placeholder="Enter Gutenberg URL" value="">
                     </div>
                     <div id="fileSourceInput" style="display: none;">
                         <input type="file" id="textFile" accept=".txt" style="padding: 8px;">
@@ -340,8 +340,24 @@
 
     <script src="client_config.js"></script>
     <script>
-        // Load recent projects on page load
-        window.addEventListener('DOMContentLoaded', loadRecentProjects);
+        // Load recent projects and default Gutenberg URL on page load
+        window.addEventListener('DOMContentLoaded', async () => {
+            await loadDefaultGutenbergUrl();
+            await loadRecentProjects();
+        });
+
+        async function loadDefaultGutenbergUrl() {
+            try {
+                const config = await HentyConfig.getServerConfig();
+                const defaultUrl = config.default_gutenberg_url || 'https://www.gutenberg.org/cache/epub/4932/pg4932.txt';
+                const urlInput = document.getElementById('gutenbergUrl');
+                if (urlInput) {
+                    urlInput.value = defaultUrl;
+                }
+            } catch (error) {
+                console.error('Error loading default Gutenberg URL:', error);
+            }
+        }
 
         async function loadRecentProjects() {
             try {

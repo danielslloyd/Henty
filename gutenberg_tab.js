@@ -8,13 +8,30 @@ class GutenbergTab {
         this.rawText = '';
         this.xmlContent = '';
         this.chapters = [];
+        this.defaultGutenbergUrl = '';
     }
 
     async init() {
+        // Load default Gutenberg URL from config
+        await this.loadDefaultUrl();
         // Load raw text from project if available
         await this.loadRawText();
         // Load XML content from project
         await this.loadXML();
+    }
+
+    async loadDefaultUrl() {
+        try {
+            const response = await fetch(`${SERVER_URL}/api/config`);
+            if (response.ok) {
+                const config = await response.json();
+                this.defaultGutenbergUrl = config.default_gutenberg_url || 'https://www.gutenberg.org/cache/epub/4932/pg4932.txt';
+                console.log('[GUTENBERG] Default URL loaded:', this.defaultGutenbergUrl);
+            }
+        } catch (error) {
+            console.error('Error loading default URL:', error);
+            this.defaultGutenbergUrl = 'https://www.gutenberg.org/cache/epub/4932/pg4932.txt';
+        }
     }
 
     async loadRawText() {
@@ -274,7 +291,7 @@ class GutenbergTab {
     }
 
     async loadGutenbergUrl() {
-        const url = prompt('Enter Project Gutenberg URL:');
+        const url = prompt('Enter Project Gutenberg URL:', this.defaultGutenbergUrl);
         if (!url) return;
 
         console.log('[GUTENBERG] Loading URL:', url);
