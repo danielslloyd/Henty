@@ -3,9 +3,79 @@
  * Handles audio generation, voice settings, and take management
  */
 
+/**
+ * Global audio manager to handle play/pause state and ensure only one audio plays at a time
+ */
+class AudioManager {
+    constructor() {
+        this.currentAudio = null;
+        this.currentButton = null;
+    }
+
+    stop() {
+        if (this.currentAudio) {
+            this.currentAudio.pause();
+            this.currentAudio.currentTime = 0;
+            this.currentAudio = null;
+        }
+        if (this.currentButton) {
+            this.updateButtonIcon(this.currentButton, false);
+            this.currentButton = null;
+        }
+    }
+
+    play(audioUrl, buttonElement) {
+        // If clicking the same button, toggle pause
+        if (this.currentButton === buttonElement && this.currentAudio && !this.currentAudio.paused) {
+            this.currentAudio.pause();
+            this.updateButtonIcon(buttonElement, false);
+            return;
+        }
+
+        // Stop any currently playing audio
+        this.stop();
+
+        // Create and play new audio
+        const audio = new Audio(`${SERVER_URL}${audioUrl}`);
+        this.currentAudio = audio;
+        this.currentButton = buttonElement;
+
+        audio.play().catch(err => {
+            console.error('Error playing audio:', err);
+            this.stop();
+        });
+
+        // Update button to show pause icon
+        this.updateButtonIcon(buttonElement, true);
+
+        // When audio ends, reset button to play icon
+        audio.addEventListener('ended', () => {
+            this.updateButtonIcon(buttonElement, false);
+            this.currentAudio = null;
+            this.currentButton = null;
+        });
+
+        // Handle audio errors
+        audio.addEventListener('error', () => {
+            this.updateButtonIcon(buttonElement, false);
+            this.currentAudio = null;
+            this.currentButton = null;
+        });
+    }
+
+    updateButtonIcon(buttonElement, isPlaying) {
+        if (!buttonElement) return;
+        const icon = buttonElement.querySelector('.material-symbols-outlined');
+        if (icon) {
+            icon.textContent = isPlaying ? 'pause' : 'play_arrow';
+        }
+    }
+}
+
 class TTSTab {
     constructor() {
         this.currentChapter = null;
+        this.currentChapterIndex = null;
         this.voiceSamples = [];
         this.projectDefaults = {
             exaggeration: 0.6,
@@ -14,6 +84,8 @@ class TTSTab {
             temperature: 0.8
         };
         this.activeGenerations = {};
+        this.selectedChunkId = null;
+        this.audioManager = new AudioManager();
     }
 
     async init() {
