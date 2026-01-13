@@ -67,7 +67,7 @@ class TTSTab {
 
             if (response.ok) {
                 const projectInfo = await response.json();
-                const chapters = projectInfo.chapters || [];
+                const chapters = projectInfo.metadata?.chapters || projectInfo.chapters || [];
                 console.log('[TTS TAB] Found', chapters.length, 'chapters');
 
                 // Populate the dropdown
@@ -101,7 +101,7 @@ class TTSTab {
 
             if (response.ok) {
                 const projectInfo = await response.json();
-                const chapters = projectInfo.chapters || [];
+                const chapters = projectInfo.metadata?.chapters || projectInfo.chapters || [];
                 this.currentChapter = chapters[chapterIndex];
 
                 if (this.currentChapter) {
