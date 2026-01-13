@@ -407,6 +407,13 @@ class GutenbergTab {
 
             if (response.ok) {
                 await this.loadXML();
+
+                // Refresh TTS tab chapters dropdown after processing
+                if (typeof ttsTab !== 'undefined' && ttsTab.refreshChapters) {
+                    console.log('[GUTENBERG] Refreshing TTS dropdown after chapter processing...');
+                    await ttsTab.refreshChapters();
+                }
+
                 alert('Text processed successfully!');
             } else {
                 const error = await response.json();
