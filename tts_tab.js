@@ -32,10 +32,13 @@ class TTSTab {
             });
 
             if (response.ok) {
-                this.voiceSamples = await response.json();
+                const data = await response.json();
+                this.voiceSamples = data.samples || [];
+                console.log('[TTS TAB] Loaded', this.voiceSamples.length, 'voice samples');
             }
         } catch (error) {
             console.error('Error loading voice samples:', error);
+            this.voiceSamples = []; // Ensure it's always an array
         }
     }
 
@@ -189,8 +192,8 @@ class TTSTab {
 
     renderVoiceSampleOptions() {
         return this.voiceSamples.map(sample => `
-            <option value="${sample}" ${sample === this.projectDefaults.voice_sample ? 'selected' : ''}>
-                ${sample}
+            <option value="${sample.name}" ${sample.name === this.projectDefaults.voice_sample ? 'selected' : ''}>
+                ${sample.name}
             </option>
         `).join('');
     }
