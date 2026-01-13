@@ -90,9 +90,33 @@ class TTSTab {
 
     async init() {
         await this.loadVoiceSamples();
+        await this.loadDefaultVoice();
         await this.loadProjectDefaults();
         await this.refreshChapters();
         this.setupProgressUpdater();
+    }
+
+    async loadDefaultVoice() {
+        try {
+            const response = await fetch(`${SERVER_URL}/api/config`);
+            if (response.ok) {
+                const config = await response.json();
+                const defaultVoice = config.default_voice || 'Stoker Extended';
+
+                // Find matching voice sample (file extension agnostic)
+                const matchingVoice = this.voiceSamples.find(v => {
+                    const voiceName = v.name.replace(/\.[^/.]+$/, ''); // Remove extension
+                    return voiceName === defaultVoice || v.name === defaultVoice;
+                });
+
+                if (matchingVoice) {
+                    this.projectDefaults.voice_sample = matchingVoice.name;
+                    console.log('[TTS TAB] Default voice set to:', matchingVoice.name);
+                }
+            }
+        } catch (error) {
+            console.error('Error loading default voice:', error);
+        }
     }
 
     async loadVoiceSamples() {
@@ -204,12 +228,7 @@ class TTSTab {
         const chunks = this.currentChapter.chunks || [];
 
         container.innerHTML = `
-            <div class="tts-section">
-                <h3>Chapter Text</h3>
-                <div class="chunks-text-container" id="chunksTextDisplay">
-                    ${this.renderChunkBubbles()}
-                </div>
-            </div>
+            ${this.renderProjectSettings()}
 
             <div class="tts-section">
                 <h3>All Takes</h3>
@@ -218,6 +237,65 @@ class TTSTab {
                 </div>
             </div>
         `;
+    }
+
+    renderProjectSettings() {
+        return `
+            <div class="project-settings-box">
+                <div class="project-settings-header" onclick="ttsTab.toggleProjectSettings()">
+                    <span class="material-symbols-outlined">settings</span>
+                    <span>Project Defaults</span>
+                </div>
+                <div class="project-settings-content" id="projectSettingsContent">
+                    <div class="project-settings-grid">
+                        <div class="project-setting-item">
+                            <label class="project-setting-label">Voice Sample</label>
+                            <div class="project-setting-control">
+                                <select id="projectDefaultVoice" onchange="ttsTab.updateProjectDefault('voice_sample', this.value)">
+                                    ${this.voiceSamples.map(s => `<option value="${s.name}" ${this.projectDefaults.voice_sample === s.name ? 'selected' : ''}>${s.name}</option>`).join('')}
+                                </select>
+                            </div>
+                        </div>
+                        <div class="project-setting-item">
+                            <label class="project-setting-label">Exaggeration</label>
+                            <div class="project-setting-control">
+                                <input type="range" id="projectDefaultExaggeration" min="0" max="1" step="0.1" value="${this.projectDefaults.exaggeration}"
+                                       oninput="ttsTab.updateProjectDefault('exaggeration', parseFloat(this.value)); document.getElementById('projectExagValue').textContent = this.value">
+                                <span class="project-setting-value" id="projectExagValue">${this.projectDefaults.exaggeration}</span>
+                            </div>
+                        </div>
+                        <div class="project-setting-item">
+                            <label class="project-setting-label">CFG Weight</label>
+                            <div class="project-setting-control">
+                                <input type="range" id="projectDefaultCfgWeight" min="0" max="1" step="0.1" value="${this.projectDefaults.cfg_weight}"
+                                       oninput="ttsTab.updateProjectDefault('cfg_weight', parseFloat(this.value)); document.getElementById('projectCfgValue').textContent = this.value">
+                                <span class="project-setting-value" id="projectCfgValue">${this.projectDefaults.cfg_weight}</span>
+                            </div>
+                        </div>
+                        <div class="project-setting-item">
+                            <label class="project-setting-label">Temperature</label>
+                            <div class="project-setting-control">
+                                <input type="range" id="projectDefaultTemperature" min="0" max="1" step="0.1" value="${this.projectDefaults.temperature}"
+                                       oninput="ttsTab.updateProjectDefault('temperature', parseFloat(this.value)); document.getElementById('projectTempValue').textContent = this.value">
+                                <span class="project-setting-value" id="projectTempValue">${this.projectDefaults.temperature}</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        `;
+    }
+
+    toggleProjectSettings() {
+        const content = document.getElementById('projectSettingsContent');
+        if (content) {
+            content.classList.toggle('expanded');
+        }
+    }
+
+    updateProjectDefault(key, value) {
+        this.projectDefaults[key] = value;
+        console.log('[TTS TAB] Updated project default:', key, '=', value);
     }
 
     renderChunkBubbles() {

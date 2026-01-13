@@ -27,7 +27,8 @@ class ReaderTab {
 
             if (response.ok) {
                 const projectInfo = await response.json();
-                this.chapters = projectInfo.chapters || [];
+                this.chapters = projectInfo.metadata?.chapters || projectInfo.chapters || [];
+                console.log('[READER] Loaded', this.chapters.length, 'chapters');
             }
         } catch (error) {
             console.error('Error loading chapters:', error);
@@ -42,26 +43,31 @@ class ReaderTab {
             return;
         }
 
-        // Render all chapters with their chunks
+        // Render all chapters with their chunks as inline text
         const html = this.chapters.map((chapter, chapterIndex) => {
             const chunks = chapter.chunks || [];
+
+            // Build inline text with chunk spans
+            const chunkSpans = chunks.map((chunk, chunkIndex) => {
+                const hasBestTake = chunk.generated_audios?.some(a => a.is_best_take);
+                const classes = ['chunk-text'];
+                if (hasBestTake) classes.push('has-audio');
+
+                return `<span class="${classes.join(' ')}"
+                              id="readerChunk_${chapterIndex}_${chunkIndex}"
+                              data-chapter="${chapterIndex}"
+                              data-chunk="${chunkIndex}"
+                              data-chunk-id="${chunk.id}">${chunk.text}</span>`;
+            }).join(' ');
 
             return `
                 <div class="chapter-section" style="margin-bottom: 40px;">
                     <h2 style="color: #667eea; margin-bottom: 20px; font-size: 1.8em;">
-                        ${chapter.name || `Chapter ${chapterIndex + 1}`}
+                        ${chapter.title || chapter.name || `Chapter ${chapterIndex + 1}`}
                     </h2>
-                    ${chunks.map((chunk, chunkIndex) => {
-                        const hasBestTake = chunk.generated_audios?.some(a => a.is_best_take);
-                        return `
-                            <p class="chunk-text"
-                               data-chapter="${chapterIndex}"
-                               data-chunk="${chunkIndex}"
-                               style="margin-bottom: 1.5em; line-height: 1.8; ${!hasBestTake ? 'color: #ccc;' : ''}">
-                                ${chunk.text}
-                            </p>
-                        `;
-                    }).join('')}
+                    <div class="chunks-text-container" style="font-family: Georgia, serif; font-size: 15px; line-height: 1.8; color: #333;">
+                        ${chunkSpans}
+                    </div>
                 </div>
             `;
         }).join('');
@@ -103,7 +109,7 @@ class ReaderTab {
         // Update button
         const playBtn = document.querySelector('.play-btn');
         if (playBtn) {
-            playBtn.innerHTML = '<span class="material-symbols-outlined">stop</span> Stop';
+            playBtn.innerHTML = '<span class="material-symbols-outlined">stop</span> Stop Playback';
         }
 
         this.playNext();
@@ -149,9 +155,9 @@ class ReaderTab {
             this.currentAudio = null;
         }
 
-        // Remove all highlights
+        // Remove all playing highlights
         document.querySelectorAll('.chunk-text').forEach(el => {
-            el.classList.remove('highlight');
+            el.classList.remove('playing');
         });
 
         // Update button
@@ -162,18 +168,18 @@ class ReaderTab {
     }
 
     highlightChunk(chapterIndex, chunkIndex) {
-        // Remove previous highlights
+        // Remove previous playing highlights
         document.querySelectorAll('.chunk-text').forEach(el => {
-            el.classList.remove('highlight');
+            el.classList.remove('playing');
         });
 
-        // Add highlight to current chunk
+        // Add playing highlight to current chunk
         const chunk = document.querySelector(
             `.chunk-text[data-chapter="${chapterIndex}"][data-chunk="${chunkIndex}"]`
         );
 
         if (chunk) {
-            chunk.classList.add('highlight');
+            chunk.classList.add('playing');
             chunk.scrollIntoView({ behavior: 'smooth', block: 'center' });
         }
     }

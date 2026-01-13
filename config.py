@@ -39,6 +39,9 @@ class ServerConfig:
         # Default Gutenberg URL
         self.DEFAULT_GUTENBERG_URL = os.getenv('DEFAULT_GUTENBERG_URL', 'https://www.gutenberg.org/cache/epub/4932/pg4932.txt')
 
+        # Default Voice Sample (file extension agnostic)
+        self.DEFAULT_VOICE = os.getenv('DEFAULT_VOICE', 'Stoker Extended')
+
         # Initialize API key if needed
         if self.REQUIRE_AUTH and not self.API_KEY:
             self._generate_api_key()
@@ -65,7 +68,8 @@ class ServerConfig:
             'max_upload_size': self.MAX_UPLOAD_SIZE,
             'default_project_dir': self.DEFAULT_PROJECT_DIR,
             'common_files_dir': self.COMMON_FILES_DIR,
-            'default_gutenberg_url': self.DEFAULT_GUTENBERG_URL
+            'default_gutenberg_url': self.DEFAULT_GUTENBERG_URL,
+            'default_voice': self.DEFAULT_VOICE
         }
 
     @staticmethod
