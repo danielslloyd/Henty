@@ -2246,13 +2246,19 @@ def generate_project_chunk_audio():
         print(f"Voice: {voice_sample}")
         print(f"Exaggeration: {exaggeration}, CFG: {cfg_weight}, Temp: {temperature}")
 
+        # Generate audio filename with timestamp and chunk ID
+        timestamp = int(time.time() * 1000)
+        audio_filename = f"chunk{chunk_id}_{timestamp}.wav"
+        audio_path = os.path.join(converter.audio_dir, audio_filename)
+
         # Generate the audio
         result = converter.generate_audio(
             text=chunk_text,
+            output_path=audio_path,
+            audio_prompt_path=audio_prompt_path,
             language_id=language_id,
             exaggeration=exaggeration,
-            cfg_weight=cfg_weight,
-            audio_prompt_path=audio_prompt_path
+            cfg_weight=cfg_weight
         )
 
         if 'error' in result:

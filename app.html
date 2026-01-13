@@ -1128,11 +1128,13 @@
 
             container.appendChild(toast);
 
-            // Auto-remove after duration
-            setTimeout(() => {
-                toast.classList.add('fade-out');
-                setTimeout(() => toast.remove(), 300);
-            }, duration);
+            // Auto-remove after duration (but not for errors - they persist until dismissed)
+            if (type !== 'error') {
+                setTimeout(() => {
+                    toast.classList.add('fade-out');
+                    setTimeout(() => toast.remove(), 300);
+                }, duration);
+            }
         }
 
         function createToastContainer() {
