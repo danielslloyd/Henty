@@ -178,6 +178,7 @@ class TTSTab {
                 const projectInfo = await response.json();
                 const chapters = projectInfo.metadata?.chapters || projectInfo.chapters || [];
                 this.currentChapter = chapters[chapterIndex];
+                this.currentChapterIndex = chapterIndex;
 
                 if (this.currentChapter) {
                     this.renderChapter();
@@ -203,63 +204,261 @@ class TTSTab {
         const chunks = this.currentChapter.chunks || [];
 
         container.innerHTML = `
-            <div style="background: white; border-radius: 10px; padding: 20px; box-shadow: 0 2px 10px rgba(0,0,0,0.1);">
-                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
-                    <h2 style="margin: 0;">${this.currentChapter.title || this.currentChapter.name || 'Untitled Chapter'}</h2>
-                    <div style="display: flex; gap: 10px;">
-                        <button class="pane-btn" onclick="ttsTab.generateAllChunks()">
-                            Generate All
-                        </button>
-                        <button class="pane-btn secondary" onclick="ttsTab.stitchBestTakes()">
-                            Stitch Best Takes
-                        </button>
-                    </div>
+            <div class="tts-section">
+                <h3>Chapter Text</h3>
+                <div class="chunks-text-container" id="chunksTextDisplay">
+                    ${this.renderChunkBubbles()}
                 </div>
+            </div>
 
-                <div style="background: #f8f9fa; border-radius: 8px; padding: 15px; margin-bottom: 20px;">
-                    <h3 style="font-size: 14px; margin-bottom: 12px; color: #555;">Audio Settings</h3>
-                    <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 15px;">
-                        <div>
-                            <label style="font-size: 12px; color: #666; display: block; margin-bottom: 4px;">Voice Sample</label>
-                            <select id="voiceSampleSelect" style="width: 100%; padding: 8px; border: 1px solid #ddd; border-radius: 4px;" onchange="ttsTab.updateDefaultVoice(this.value)">
-                                ${this.renderVoiceSampleOptions()}
-                            </select>
-                        </div>
-                        <div>
-                            <label style="font-size: 12px; color: #666; display: block; margin-bottom: 4px;">
-                                Exaggeration: <span id="exaggerationValue">${this.projectDefaults.exaggeration}</span>
-                            </label>
-                            <input type="range" id="exaggerationSlider" min="0" max="1" step="0.1"
-                                   value="${this.projectDefaults.exaggeration}"
-                                   style="width: 100%;"
-                                   oninput="document.getElementById('exaggerationValue').textContent = this.value; ttsTab.projectDefaults.exaggeration = parseFloat(this.value);">
-                        </div>
-                        <div>
-                            <label style="font-size: 12px; color: #666; display: block; margin-bottom: 4px;">
-                                CFG Weight: <span id="cfgWeightValue">${this.projectDefaults.cfg_weight}</span>
-                            </label>
-                            <input type="range" id="cfgWeightSlider" min="0" max="1" step="0.1"
-                                   value="${this.projectDefaults.cfg_weight}"
-                                   style="width: 100%;"
-                                   oninput="document.getElementById('cfgWeightValue').textContent = this.value; ttsTab.projectDefaults.cfg_weight = parseFloat(this.value);">
-                        </div>
-                        <div>
-                            <label style="font-size: 12px; color: #666; display: block; margin-bottom: 4px;">
-                                Temperature: <span id="temperatureValue">${this.projectDefaults.temperature}</span>
-                            </label>
-                            <input type="range" id="temperatureSlider" min="0" max="1" step="0.1"
-                                   value="${this.projectDefaults.temperature}"
-                                   style="width: 100%;"
-                                   oninput="document.getElementById('temperatureValue').textContent = this.value; ttsTab.projectDefaults.temperature = parseFloat(this.value);">
-                        </div>
-                    </div>
-                </div>
-
-                <div id="chunksContainer">
-                    ${chunks.map((chunk, index) => this.renderChunk(chunk, index)).join('')}
+            <div class="tts-section">
+                <h3>All Takes</h3>
+                <div class="all-takes-container" id="allTakesDisplay">
+                    ${this.renderChunkDetails()}
                 </div>
             </div>
         `;
+    }
+
+    renderChunkBubbles() {
+        if (!this.currentChapter) return '';
+
+        const chunks = this.currentChapter.chunks || [];
+        if (chunks.length === 0) {
+            return '<p style="color: #999; text-align: center;">No chunks available</p>';
+        }
+
+        let html = '';
+        chunks.forEach((chunk, index) => {
+            const audioList = chunk.generated_audios || [];
+            const hasAudio = audioList.length > 0;
+            const isSelected = this.selectedChunkId === chunk.id;
+
+            const classes = ['chunk-text'];
+            if (hasAudio) classes.push('has-audio');
+            if (isSelected) classes.push('selected');
+
+            html += `<span class="${classes.join(' ')}"
+                          id="chunkText_${chunk.id}"
+                          data-chunk-id="${chunk.id}"
+                          onclick="ttsTab.selectChunk(${chunk.id})"
+                          onmouseenter="ttsTab.highlightChunk(${chunk.id})"
+                          onmouseleave="ttsTab.unhighlightChunk(${chunk.id})">${chunk.text}</span>`;
+
+            // Add space between chunks
+            if (index < chunks.length - 1) {
+                html += ' ';
+            }
+        });
+
+        return html;
+    }
+
+    renderChunkDetails() {
+        if (!this.currentChapter) return '';
+
+        const chunks = this.currentChapter.chunks || [];
+        if (chunks.length === 0) {
+            return '<div style="padding: 40px 20px; text-align: center; color: #94a3b8;">No chunks available</div>';
+        }
+
+        let allTakesHtml = '';
+        let takeCounter = 0;
+
+        chunks.forEach((chunk) => {
+            const audioList = chunk.generated_audios || [];
+            const chunkPreview = chunk.text.substring(0, 48) + (chunk.text.length > 48 ? '...' : '');
+            const chunkPreviewId = `chunk_preview_${chunk.id}`;
+
+            if (audioList.length > 0) {
+                // Sort takes: best take first, then by timestamp
+                const sortedAudio = [...audioList].sort((a, b) => {
+                    if (a.is_best_take && !b.is_best_take) return -1;
+                    if (!a.is_best_take && b.is_best_take) return 1;
+                    return (a.timestamp || 0) - (b.timestamp || 0);
+                });
+
+                // First take: chunk preview + icons
+                const firstTake = sortedAudio[0];
+                const isBest = firstTake.is_best_take;
+                const takeId = `take_${chunk.id}_${takeCounter++}`;
+
+                allTakesHtml += `
+                    <div class="chunk-take-row ${isBest ? 'best-take' : 'non-best-take'}"
+                         data-chunk-id="${chunk.id}">
+                        <div class="chunk-take-header"
+                             onclick="ttsTab.highlightChunk(${chunk.id}, true)"
+                             onmouseenter="ttsTab.highlightChunk(${chunk.id})"
+                             onmouseleave="ttsTab.unhighlightChunk(${chunk.id})">
+                            <div class="chunk-left">
+                                <button class="chunk-icon tune" onclick="event.stopPropagation(); ttsTab.selectChunk(${chunk.id}); setTimeout(() => ttsTab.toggleTakeSettings('${chunkPreviewId}_settings'), 100)" title="Tune settings">
+                                    <span class="material-symbols-outlined">tune</span>
+                                </button>
+                                <button class="chunk-icon add" onclick="event.stopPropagation(); ttsTab.selectChunk(${chunk.id}); setTimeout(() => ttsTab.generateChunkAudio(${chunk.id}), 100)" title="Generate take">
+                                    <span class="material-symbols-outlined">add</span>
+                                </button>
+                                <span class="chunk-preview-text">${chunkPreview}</span>
+                            </div>
+                            <div class="take-icons">
+                                <button class="take-icon check-circle ${isBest ? 'best' : ''}"
+                                        onclick='event.stopPropagation(); ttsTab.setBestTake(${chunk.id}, "${firstTake.audio_file}")'
+                                        title="${isBest ? 'Best take' : 'Set as best take'}">
+                                    <span class="material-symbols-outlined">${isBest ? 'check_circle' : 'radio_button_unchecked'}</span>
+                                </button>
+                                <button class="take-icon settings" data-settings-for="${takeId}" onclick="event.stopPropagation(); ttsTab.toggleTakeSettings('${takeId}')" title="Settings">
+                                    <span class="material-symbols-outlined">settings</span>
+                                </button>
+                                <button class="take-icon play" onclick="event.stopPropagation(); ttsTab.playTakeAudio('${firstTake.audio_url}', event)" title="Play">
+                                    <span class="material-symbols-outlined">play_arrow</span>
+                                </button>
+                                <button class="take-icon delete" onclick='event.stopPropagation(); ttsTab.deleteTake(${chunk.id}, "${firstTake.audio_file}")' title="Delete">
+                                    <span class="material-symbols-outlined">delete</span>
+                                </button>
+                            </div>
+                        </div>
+                        <div class="take-settings" id="${chunkPreviewId}_settings">
+                            <div class="setting-row">
+                                <span class="setting-label">Voice</span>
+                                <div class="setting-control">
+                                    <select id="voice_chunk_${chunk.id}">
+                                        ${this.voiceSamples.map(s => `<option value="${s.name}" ${this.projectDefaults.voice_sample === s.name ? 'selected' : ''}>${s.name}</option>`).join('')}
+                                    </select>
+                                </div>
+                            </div>
+                            <div class="setting-row">
+                                <span class="setting-label">Exaggeration</span>
+                                <div class="setting-control">
+                                    <input type="range" id="exaggeration_chunk_${chunk.id}" min="0" max="1" step="0.1" value="${this.projectDefaults.exaggeration}"
+                                           oninput="document.getElementById('exag_val_${chunkPreviewId}').textContent = this.value">
+                                    <span class="setting-value" id="exag_val_${chunkPreviewId}">${this.projectDefaults.exaggeration}</span>
+                                </div>
+                            </div>
+                            <div class="setting-row">
+                                <span class="setting-label">CFG Weight</span>
+                                <div class="setting-control">
+                                    <input type="range" id="cfg_weight_chunk_${chunk.id}" min="0" max="1" step="0.1" value="${this.projectDefaults.cfg_weight}"
+                                           oninput="document.getElementById('cfg_val_${chunkPreviewId}').textContent = this.value">
+                                    <span class="setting-value" id="cfg_val_${chunkPreviewId}">${this.projectDefaults.cfg_weight}</span>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="take-settings" id="settings_${takeId}">
+                            <div class="setting-row">
+                                <span class="setting-label">Voice</span>
+                                <span class="setting-value">${firstTake.voice_sample || 'Default'}</span>
+                            </div>
+                            <div class="setting-row">
+                                <span class="setting-label">Exaggeration</span>
+                                <span class="setting-value">${firstTake.exaggeration}</span>
+                            </div>
+                            <div class="setting-row">
+                                <span class="setting-label">CFG Weight</span>
+                                <span class="setting-value">${firstTake.cfg_weight}</span>
+                            </div>
+                        </div>
+                    </div>
+                `;
+
+                // Additional takes: only icons on right
+                for (let i = 1; i < sortedAudio.length; i++) {
+                    const take = sortedAudio[i];
+                    const isBest = take.is_best_take;
+                    const takeId = `take_${chunk.id}_${takeCounter++}`;
+
+                    allTakesHtml += `
+                        <div class="chunk-take-row additional-take ${isBest ? 'best-take' : 'non-best-take'}"
+                             data-chunk-id="${chunk.id}">
+                            <div class="chunk-take-header"
+                                 onclick="ttsTab.highlightChunk(${chunk.id}, true)"
+                                 onmouseenter="ttsTab.highlightChunk(${chunk.id})"
+                                 onmouseleave="ttsTab.unhighlightChunk(${chunk.id})">
+                                <div class="chunk-left"></div>
+                                <div class="take-icons">
+                                    <button class="take-icon check-circle ${isBest ? 'best' : ''}"
+                                            onclick='event.stopPropagation(); ttsTab.setBestTake(${chunk.id}, "${take.audio_file}")'
+                                            title="${isBest ? 'Best take' : 'Set as best take'}">
+                                        <span class="material-symbols-outlined">${isBest ? 'check_circle' : 'radio_button_unchecked'}</span>
+                                    </button>
+                                    <button class="take-icon settings" data-settings-for="${takeId}" onclick="event.stopPropagation(); ttsTab.toggleTakeSettings('${takeId}')" title="Settings">
+                                        <span class="material-symbols-outlined">settings</span>
+                                    </button>
+                                    <button class="take-icon play" onclick="event.stopPropagation(); ttsTab.playTakeAudio('${take.audio_url}', event)" title="Play">
+                                        <span class="material-symbols-outlined">play_arrow</span>
+                                    </button>
+                                    <button class="take-icon delete" onclick='event.stopPropagation(); ttsTab.deleteTake(${chunk.id}, "${take.audio_file}")' title="Delete">
+                                        <span class="material-symbols-outlined">delete</span>
+                                    </button>
+                                </div>
+                            </div>
+                            <div class="take-settings" id="settings_${takeId}">
+                                <div class="setting-row">
+                                    <span class="setting-label">Voice</span>
+                                    <span class="setting-value">${take.voice_sample || 'Default'}</span>
+                                </div>
+                                <div class="setting-row">
+                                    <span class="setting-label">Exaggeration</span>
+                                    <span class="setting-value">${take.exaggeration}</span>
+                                </div>
+                                <div class="setting-row">
+                                    <span class="setting-label">CFG Weight</span>
+                                    <span class="setting-value">${take.cfg_weight}</span>
+                                </div>
+                            </div>
+                        </div>
+                    `;
+                }
+            } else {
+                // No takes: just chunk preview with tune/add icons
+                allTakesHtml += `
+                    <div class="chunk-take-row no-takes"
+                         data-chunk-id="${chunk.id}">
+                        <div class="chunk-take-header"
+                             onclick="ttsTab.highlightChunk(${chunk.id}, true)"
+                             onmouseenter="ttsTab.highlightChunk(${chunk.id})"
+                             onmouseleave="ttsTab.unhighlightChunk(${chunk.id})">
+                            <div class="chunk-left">
+                                <button class="chunk-icon tune" onclick="event.stopPropagation(); ttsTab.selectChunk(${chunk.id}); setTimeout(() => ttsTab.toggleTakeSettings('${chunkPreviewId}_settings'), 100)" title="Tune settings">
+                                    <span class="material-symbols-outlined">tune</span>
+                                </button>
+                                <button class="chunk-icon add" onclick="event.stopPropagation(); ttsTab.selectChunk(${chunk.id}); setTimeout(() => ttsTab.generateChunkAudio(${chunk.id}), 100)" title="Generate take">
+                                    <span class="material-symbols-outlined">add</span>
+                                </button>
+                                <span class="chunk-preview-text">${chunkPreview}</span>
+                            </div>
+                            <div class="take-icons"></div>
+                        </div>
+                        <div class="take-settings" id="${chunkPreviewId}_settings">
+                            <div class="setting-row">
+                                <span class="setting-label">Voice</span>
+                                <div class="setting-control">
+                                    <select id="voice_chunk_${chunk.id}">
+                                        ${this.voiceSamples.map(s => `<option value="${s.name}" ${this.projectDefaults.voice_sample === s.name ? 'selected' : ''}>${s.name}</option>`).join('')}
+                                    </select>
+                                </div>
+                            </div>
+                            <div class="setting-row">
+                                <span class="setting-label">Exaggeration</span>
+                                <div class="setting-control">
+                                    <input type="range" id="exaggeration_chunk_${chunk.id}" min="0" max="1" step="0.1" value="${this.projectDefaults.exaggeration}"
+                                           oninput="document.getElementById('exag_val_${chunkPreviewId}').textContent = this.value">
+                                    <span class="setting-value" id="exag_val_${chunkPreviewId}">${this.projectDefaults.exaggeration}</span>
+                                </div>
+                            </div>
+                            <div class="setting-row">
+                                <span class="setting-label">CFG Weight</span>
+                                <div class="setting-control">
+                                    <input type="range" id="cfg_weight_chunk_${chunk.id}" min="0" max="1" step="0.1" value="${this.projectDefaults.cfg_weight}"
+                                           oninput="document.getElementById('cfg_val_${chunkPreviewId}').textContent = this.value">
+                                    <span class="setting-value" id="cfg_val_${chunkPreviewId}">${this.projectDefaults.cfg_weight}</span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                `;
+            }
+        });
+
+        return allTakesHtml || '<div style="padding: 40px 20px; text-align: center; color: #94a3b8;">No takes available</div>';
     }
 
     renderVoiceSampleOptions() {
@@ -270,99 +469,100 @@ class TTSTab {
         `).join('');
     }
 
-    renderChunk(chunk, index) {
-        const audios = chunk.generated_audios || [];
-        const bestTake = audios.find(a => a.is_best_take);
-        const hasAudio = audios.length > 0;
+    // Interaction methods
+    selectChunk(chunkId) {
+        this.selectedChunkId = chunkId;
 
-        return `
-            <div class="chunk-container" style="background: white; border: 1px solid #e0e0e0; border-radius: 8px; padding: 15px; margin-bottom: 15px;">
-                <div style="display: flex; justify-content: space-between; align-items: start; margin-bottom: 10px;">
-                    <div style="flex: 1;">
-                        <div style="font-weight: 600; color: #333; margin-bottom: 5px;">
-                            Chunk ${chunk.id + 1}
-                            ${chunk.dirty ? '<span style="color: #ff9800; font-size: 12px;">● Modified</span>' : ''}
-                        </div>
-                        <div style="font-size: 13px; color: #666; line-height: 1.5;">
-                            ${chunk.text.substring(0, 200)}${chunk.text.length > 200 ? '...' : ''}
-                        </div>
-                        <div style="font-size: 12px; color: #999; margin-top: 5px;">
-                            ${chunk.text.length} characters
-                        </div>
-                    </div>
-                    <button class="pane-btn" style="margin-left: 10px;"
-                            onclick="ttsTab.generateChunk(${index})"
-                            id="generateBtn_${index}">
-                        Generate
-                    </button>
-                </div>
+        // Update text selection styling
+        const allChunks = document.querySelectorAll('.chunk-text');
+        allChunks.forEach(c => c.classList.remove('selected'));
+        const selectedChunk = document.getElementById(`chunkText_${chunkId}`);
+        if (selectedChunk) selectedChunk.classList.add('selected');
 
-                <div id="takesContainer_${index}" style="margin-top: 15px;">
-                    ${hasAudio ? this.renderTakes(chunk, index) : '<div style="color: #999; font-size: 13px; text-align: center; padding: 10px;">No audio generated yet</div>'}
-                </div>
-
-                <div id="generationProgress_${index}" style="display: none; margin-top: 10px; padding: 10px; background: #f0f0f0; border-radius: 6px;">
-                    <div style="font-size: 13px; color: #666; margin-bottom: 5px;">Generating...</div>
-                    <div style="background: #ddd; height: 6px; border-radius: 3px; overflow: hidden;">
-                        <div id="progressBar_${index}" style="background: linear-gradient(90deg, #667eea, #764ba2); height: 100%; width: 0%; transition: width 0.3s;"></div>
-                    </div>
-                </div>
-            </div>
-        `;
+        // Scroll to corresponding takes
+        this.scrollToTakes(chunkId);
     }
 
-    renderTakes(chunk, chunkIndex) {
-        const audios = chunk.generated_audios || [];
+    highlightChunk(chunkId, scroll = false) {
+        const chunkElement = document.getElementById(`chunkText_${chunkId}`);
+        if (chunkElement) {
+            chunkElement.classList.add('highlighted');
+        }
 
-        return `
-            <div style="border-top: 1px solid #e0e0e0; padding-top: 10px;">
-                <div style="font-size: 13px; font-weight: 600; color: #666; margin-bottom: 8px;">
-                    Takes (${audios.length})
-                </div>
-                ${audios.map((audio, takeIndex) => this.renderTake(audio, chunkIndex, takeIndex)).join('')}
-            </div>
-        `;
+        // Highlight corresponding takes
+        const takeElements = document.querySelectorAll(`[data-chunk-id="${chunkId}"]`);
+        takeElements.forEach(el => el.classList.add('highlighted'));
+
+        // Scroll to chunk if requested (on click)
+        if (scroll) {
+            if (chunkElement) {
+                chunkElement.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            }
+        }
     }
 
-    renderTake(audio, chunkIndex, takeIndex) {
-        const isBest = audio.is_best_take;
-        const timestamp = new Date(audio.timestamp).toLocaleString();
+    unhighlightChunk(chunkId) {
+        const chunkElement = document.getElementById(`chunkText_${chunkId}`);
+        if (chunkElement) {
+            chunkElement.classList.remove('highlighted');
+        }
 
-        return `
-            <div style="display: flex; align-items: center; gap: 10px; padding: 8px; background: ${isBest ? '#e8eaf6' : '#f8f9fa'}; border-radius: 6px; margin-bottom: 6px;">
-                <button onclick="ttsTab.playAudio('${audio.audio_url}')"
-                        style="padding: 6px 12px; background: #667eea; border: none; border-radius: 4px; color: white; cursor: pointer; font-size: 12px;">
-                    ▶ Play
-                </button>
-                <div style="flex: 1; font-size: 12px; color: #666;">
-                    ${isBest ? '<strong style="color: #667eea;">★ Best Take</strong> · ' : ''}
-                    ${timestamp}
-                </div>
-                ${!isBest ? `
-                    <button onclick="ttsTab.setBestTake(${chunkIndex}, ${takeIndex})"
-                            style="padding: 4px 8px; background: #f0f0f0; border: none; border-radius: 4px; cursor: pointer; font-size: 11px;">
-                        Set as Best
-                    </button>
-                ` : ''}
-                <button onclick="ttsTab.deleteTake(${chunkIndex}, ${takeIndex})"
-                        style="padding: 4px 8px; background: #fee; border: none; border-radius: 4px; cursor: pointer; font-size: 11px; color: #c00;">
-                    Delete
-                </button>
-            </div>
-        `;
+        // Remove highlight from takes
+        const takeElements = document.querySelectorAll(`[data-chunk-id="${chunkId}"]`);
+        takeElements.forEach(el => el.classList.remove('highlighted'));
     }
 
-    async generateChunk(chunkIndex) {
-        const chunk = this.currentChapter.chunks[chunkIndex];
-        const btnId = `generateBtn_${chunkIndex}`;
-        const progressId = `generationProgress_${chunkIndex}`;
-        const progressBarId = `progressBar_${chunkIndex}`;
+    scrollToTakes(chunkId) {
+        const takeElements = document.querySelectorAll(`[data-chunk-id="${chunkId}"]`);
+        if (takeElements.length > 0) {
+            takeElements[0].scrollIntoView({ behavior: 'smooth', block: 'center' });
+        }
+    }
 
-        const btn = document.getElementById(btnId);
-        const progress = document.getElementById(progressId);
+    playTakeAudio(audioUrl, event) {
+        const buttonElement = event ? event.currentTarget : null;
+        this.audioManager.play(audioUrl, buttonElement);
+    }
 
-        if (btn) btn.disabled = true;
-        if (progress) progress.style.display = 'block';
+    toggleTakeSettings(settingsId) {
+        const settingsEl = document.getElementById(settingsId);
+        if (settingsEl) {
+            const wasExpanded = settingsEl.classList.contains('expanded');
+
+            // Close all other settings panels
+            document.querySelectorAll('.take-settings.expanded').forEach(el => {
+                el.classList.remove('expanded');
+            });
+
+            // Toggle the settings icons
+            document.querySelectorAll('.take-icon.settings.expanded').forEach(el => {
+                el.classList.remove('expanded');
+            });
+
+            // Toggle this one
+            if (!wasExpanded) {
+                settingsEl.classList.add('expanded');
+                // Find and mark the corresponding settings button as expanded
+                const settingsBtn = document.querySelector(`[data-settings-for="${settingsId}"]`);
+                if (settingsBtn) {
+                    settingsBtn.classList.add('expanded');
+                }
+            }
+        }
+    }
+
+    async generateChunkAudio(chunkId) {
+        const chunk = this.currentChapter.chunks.find(c => c.id === chunkId);
+        if (!chunk) {
+            console.error('Chunk not found:', chunkId);
+            return;
+        }
+
+        const voice = document.getElementById(`voice_chunk_${chunkId}`)?.value || this.projectDefaults.voice_sample;
+        const exaggeration = document.getElementById(`exaggeration_chunk_${chunkId}`)?.value || this.projectDefaults.exaggeration;
+        const cfgWeight = document.getElementById(`cfg_weight_chunk_${chunkId}`)?.value || this.projectDefaults.cfg_weight;
+
+        console.log('[TTS TAB] Generating audio for chunk:', chunkId);
 
         try {
             const response = await fetch(`${SERVER_URL}/api/generate-chunk`, {
@@ -372,47 +572,91 @@ class TTSTab {
                     'X-API-Key': API_KEY
                 },
                 body: JSON.stringify({
-                    text: chunk.text,
                     text_file_id: this.currentChapter.id,
-                    chunk_id: chunk.id,
-                    exaggeration: this.projectDefaults.exaggeration,
-                    cfg_weight: this.projectDefaults.cfg_weight,
-                    temperature: this.projectDefaults.temperature,
-                    voice_sample: this.projectDefaults.voice_sample,
-                    language_id: 'en'
+                    chunk_id: chunkId,
+                    chunk_text: chunk.text,
+                    voice_sample: voice,
+                    exaggeration: parseFloat(exaggeration),
+                    cfg_weight: parseFloat(cfgWeight),
+                    temperature: this.projectDefaults.temperature
                 })
             });
 
-            if (response.ok) {
-                const result = await response.json();
+            const data = await response.json();
 
-                // Add audio to chunk
-                if (!chunk.generated_audios) {
-                    chunk.generated_audios = [];
-                }
-
-                chunk.generated_audios.push({
-                    timestamp: Date.now(),
-                    audio_file: result.audio_file,
-                    audio_url: result.audio_url,
-                    is_best_take: chunk.generated_audios.length === 0,
-                    ...this.projectDefaults
-                });
-
-                // Re-render chunk
-                this.renderChapter();
-
-                this.showStatus('Audio generated successfully!', 'success');
-            } else {
-                const error = await response.json();
-                throw new Error(error.error || 'Failed to generate audio');
+            if (!response.ok) {
+                throw new Error(data.error || `Server error: ${response.status}`);
             }
+
+            console.log('[TTS TAB] Audio generated successfully');
+
+            // Reload chapter to get updated takes
+            await this.loadChapter(this.currentChapterIndex);
         } catch (error) {
-            console.error('Error generating audio:', error);
-            this.showStatus('Error: ' + error.message, 'error');
-        } finally {
-            if (btn) btn.disabled = false;
-            if (progress) progress.style.display = 'none';
+            console.error('Error generating chunk audio:', error);
+            alert('Failed to generate audio: ' + error.message);
+        }
+    }
+
+    async setBestTake(chunkId, audioFile) {
+        try {
+            const response = await fetch(`${SERVER_URL}/api/project/set-chunk-best-take`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-API-Key': API_KEY
+                },
+                body: JSON.stringify({
+                    text_file_id: this.currentChapter.id,
+                    chunk_id: chunkId,
+                    audio_filename: audioFile
+                })
+            });
+
+            if (!response.ok) {
+                const error = await response.json();
+                throw new Error(error.error || 'Failed to set best take');
+            }
+
+            console.log('[TTS TAB] Best take updated');
+
+            // Reload chapter to reflect changes
+            await this.loadChapter(this.currentChapterIndex);
+        } catch (error) {
+            console.error('Error setting best take:', error);
+            alert('Failed to set best take: ' + error.message);
+        }
+    }
+
+    async deleteTake(chunkId, audioFile) {
+        if (!confirm('Delete this take?')) return;
+
+        try {
+            const response = await fetch(`${SERVER_URL}/api/project/delete-audio`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-API-Key': API_KEY
+                },
+                body: JSON.stringify({
+                    text_file_id: this.currentChapter.id,
+                    chunk_id: chunkId,
+                    audio_file: audioFile
+                })
+            });
+
+            if (!response.ok) {
+                const error = await response.json();
+                throw new Error(error.error || 'Failed to delete take');
+            }
+
+            console.log('[TTS TAB] Take deleted');
+
+            // Reload chapter to reflect changes
+            await this.loadChapter(this.currentChapterIndex);
+        } catch (error) {
+            console.error('Error deleting take:', error);
+            alert('Failed to delete take: ' + error.message);
         }
     }
 
@@ -421,73 +665,15 @@ class TTSTab {
 
         const chunks = this.currentChapter.chunks || [];
 
-        for (let i = 0; i < chunks.length; i++) {
-            await this.generateChunk(i);
+        for (const chunk of chunks) {
+            await this.generateChunkAudio(chunk.id);
         }
+
+        alert('All chunks generated successfully!');
 
         this.showStatus('All chunks generated!', 'success');
     }
 
-    async setBestTake(chunkIndex, takeIndex) {
-        const chunk = this.currentChapter.chunks[chunkIndex];
-        const audios = chunk.generated_audios || [];
-
-        // Unset all best takes
-        audios.forEach(a => a.is_best_take = false);
-
-        // Set the selected one
-        audios[takeIndex].is_best_take = true;
-
-        try {
-            // Save to backend
-            await fetch(`${SERVER_URL}/api/project/set-chunk-best-take`, {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                    'X-API-Key': API_KEY
-                },
-                body: JSON.stringify({
-                    text_file_id: this.currentChapter.id,
-                    chunk_id: chunk.id,
-                    audio_file: audios[takeIndex].audio_file
-                })
-            });
-
-            this.renderChapter();
-            this.showStatus('Best take updated', 'success');
-        } catch (error) {
-            console.error('Error setting best take:', error);
-            this.showStatus('Error setting best take', 'error');
-        }
-    }
-
-    async deleteTake(chunkIndex, takeIndex) {
-        if (!confirm('Delete this take?')) return;
-
-        const chunk = this.currentChapter.chunks[chunkIndex];
-        const audios = chunk.generated_audios || [];
-        const audioToDelete = audios[takeIndex];
-
-        try {
-            await fetch(`${SERVER_URL}/api/delete-take`, {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                    'X-API-Key': API_KEY
-                },
-                body: JSON.stringify({
-                    audio_file: audioToDelete.audio_file
-                })
-            });
-
-            audios.splice(takeIndex, 1);
-            this.renderChapter();
-            this.showStatus('Take deleted', 'success');
-        } catch (error) {
-            console.error('Error deleting take:', error);
-            this.showStatus('Error deleting take', 'error');
-        }
-    }
 
     async stitchBestTakes() {
         if (!this.currentChapter) return;

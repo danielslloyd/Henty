@@ -2137,6 +2137,79 @@ def set_chunk_best_take():
         print(traceback.format_exc())
         return jsonify({'error': str(e)}), 500
 
+@app.route('/api/project/delete-audio', methods=['POST'])
+def delete_project_audio():
+    """Delete an audio file from a chunk in the project"""
+    try:
+        if converter.current_project_path is None:
+            return jsonify({'error': 'No project loaded'}), 400
+
+        data = request.json
+        text_file_id = data.get('text_file_id')
+        chunk_id = data.get('chunk_id')
+        audio_filename = data.get('audio_file') or data.get('audio_filename')
+
+        if not text_file_id or chunk_id is None or not audio_filename:
+            return jsonify({'error': 'text_file_id, chunk_id, and audio_file are required'}), 400
+
+        # Try to find in chapters first (new format), then text_files (old format)
+        chapters = converter.current_project_metadata.get('chapters', [])
+        text_files = converter.current_project_metadata.get('text_files', [])
+
+        chapter = next((ch for ch in chapters if ch['id'] == text_file_id), None)
+        text_file = next((tf for tf in text_files if tf['id'] == text_file_id), None)
+
+        container = chapter or text_file
+
+        if not container:
+            return jsonify({'error': 'Text file not found'}), 404
+
+        # Find the chunk
+        chunk = next((c for c in container['chunks'] if c['id'] == chunk_id), None)
+
+        if not chunk:
+            return jsonify({'error': 'Chunk not found'}), 404
+
+        # Find and remove the audio from generated_audios list
+        generated_audios = chunk.get('generated_audios', [])
+        audio_to_remove = next((a for a in generated_audios if a['audio_file'] == audio_filename), None)
+
+        if not audio_to_remove:
+            return jsonify({'error': 'Audio file not found in chunk'}), 404
+
+        # Remove from list
+        generated_audios.remove(audio_to_remove)
+
+        # If this was the best take and there are other audios, make the first one the best take
+        if audio_to_remove.get('is_best_take') and len(generated_audios) > 0:
+            generated_audios[0]['is_best_take'] = True
+
+        # Delete the actual audio file
+        audio_path = os.path.join(converter.audio_dir, audio_filename)
+        if os.path.exists(audio_path):
+            os.remove(audio_path)
+            print(f"Deleted audio file: {audio_path}")
+
+        # Update project metadata
+        from datetime import datetime
+        converter.current_project_metadata['last_modified'] = datetime.now().isoformat()
+
+        # Save to file
+        project_file = os.path.join(converter.current_project_path, 'project.json')
+        with open(project_file, 'w', encoding='utf-8') as f:
+            json.dump(converter.current_project_metadata, f, indent=2, ensure_ascii=False)
+
+        return jsonify({
+            'success': True,
+            'chunk': chunk
+        })
+
+    except Exception as e:
+        import traceback
+        print(f"Error deleting audio: {str(e)}")
+        print(traceback.format_exc())
+        return jsonify({'error': str(e)}), 500
+
 @app.route('/api/project/stitch-best-takes', methods=['POST'])
 def stitch_project_best_takes():
     """Stitch together the best takes from all chunks in a chapter/text file within the current project"""
