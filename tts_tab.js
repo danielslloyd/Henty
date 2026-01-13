@@ -600,7 +600,7 @@ class TTSTab {
 
     async setBestTake(chunkId, audioFile) {
         try {
-            const response = await fetch(`${SERVER_URL}/api/project/set-best-take`, {
+            const response = await fetch(`${SERVER_URL}/api/project/set-chunk-best-take`, {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
@@ -609,7 +609,7 @@ class TTSTab {
                 body: JSON.stringify({
                     text_file_id: this.currentChapter.id,
                     chunk_id: chunkId,
-                    audio_file: audioFile
+                    audio_filename: audioFile
                 })
             });
 
