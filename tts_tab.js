@@ -643,7 +643,7 @@ class TTSTab {
         console.log('[TTS TAB] Generating audio for chunk:', chunkId);
 
         try {
-            const response = await fetch(`${SERVER_URL}/api/generate-chunk`, {
+            const response = await fetch(`${SERVER_URL}/api/project/generate-chunk-audio`, {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',

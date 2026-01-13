@@ -2210,6 +2210,112 @@ def delete_project_audio():
         print(traceback.format_exc())
         return jsonify({'error': str(e)}), 500
 
+@app.route('/api/project/generate-chunk-audio', methods=['POST'])
+def generate_project_chunk_audio():
+    """Generate audio for a chunk within the current project"""
+    try:
+        if converter.current_project_path is None:
+            return jsonify({'error': 'No project loaded'}), 400
+
+        data = request.json
+        text_file_id = data.get('text_file_id')
+        chunk_id = data.get('chunk_id')
+        chunk_text = data.get('chunk_text')
+
+        if not text_file_id or chunk_id is None or not chunk_text:
+            return jsonify({'error': 'text_file_id, chunk_id, and chunk_text are required'}), 400
+
+        # Get generation parameters
+        voice_sample = data.get('voice_sample')
+        exaggeration = float(data.get('exaggeration', 0.6))
+        cfg_weight = float(data.get('cfg_weight', 0.4))
+        temperature = float(data.get('temperature', 0.8))
+        language_id = data.get('language_id', 'en')
+
+        # Construct voice sample path
+        audio_prompt_path = None
+        if voice_sample and voice_sample != 'none':
+            audio_prompt_path = os.path.join(converter.voice_samples_dir, voice_sample)
+            if not os.path.exists(audio_prompt_path):
+                print(f"Warning: Voice sample not found: {audio_prompt_path}")
+                audio_prompt_path = None
+
+        print(f"\n=== Generating audio for project chunk ===")
+        print(f"Text file ID: {text_file_id}")
+        print(f"Chunk ID: {chunk_id}")
+        print(f"Voice: {voice_sample}")
+        print(f"Exaggeration: {exaggeration}, CFG: {cfg_weight}, Temp: {temperature}")
+
+        # Generate the audio
+        result = converter.generate_audio(
+            text=chunk_text,
+            language_id=language_id,
+            exaggeration=exaggeration,
+            cfg_weight=cfg_weight,
+            temperature=temperature,
+            audio_prompt_path=audio_prompt_path
+        )
+
+        if 'error' in result:
+            return jsonify({'error': result['error']}), 500
+
+        audio_file = result['audio_file']
+        audio_url = f"/api/audio/{audio_file}"
+
+        # Update project metadata with the new audio
+        chapters = converter.current_project_metadata.get('chapters', [])
+        text_files = converter.current_project_metadata.get('text_files', [])
+
+        chapter = next((ch for ch in chapters if ch['id'] == text_file_id), None)
+        text_file = next((tf for tf in text_files if tf['id'] == text_file_id), None)
+
+        container = chapter or text_file
+
+        if container:
+            chunk = next((c for c in container['chunks'] if c['id'] == chunk_id), None)
+            if chunk:
+                if 'generated_audios' not in chunk:
+                    chunk['generated_audios'] = []
+
+                # Add the new audio
+                audio_entry = {
+                    'timestamp': int(time.time() * 1000),
+                    'audio_file': audio_file,
+                    'audio_url': audio_url,
+                    'is_best_take': len(chunk['generated_audios']) == 0,  # First take is best by default
+                    'voice_sample': voice_sample,
+                    'exaggeration': exaggeration,
+                    'cfg_weight': cfg_weight,
+                    'temperature': temperature
+                }
+                chunk['generated_audios'].append(audio_entry)
+
+                # Mark chunk as not dirty
+                chunk['dirty'] = False
+
+                # Save project metadata
+                from datetime import datetime
+                converter.current_project_metadata['last_modified'] = datetime.now().isoformat()
+
+                project_file = os.path.join(converter.current_project_path, 'project.json')
+                with open(project_file, 'w', encoding='utf-8') as f:
+                    json.dump(converter.current_project_metadata, f, indent=2, ensure_ascii=False)
+
+                return jsonify({
+                    'success': True,
+                    'audio_file': audio_file,
+                    'audio_url': audio_url,
+                    'chunk': chunk
+                })
+
+        return jsonify({'error': 'Chunk not found in project metadata'}), 404
+
+    except Exception as e:
+        import traceback
+        print(f"Error generating chunk audio: {str(e)}")
+        print(traceback.format_exc())
+        return jsonify({'error': str(e)}), 500
+
 @app.route('/api/project/stitch-best-takes', methods=['POST'])
 def stitch_project_best_takes():
     """Stitch together the best takes from all chunks in a chapter/text file within the current project"""
