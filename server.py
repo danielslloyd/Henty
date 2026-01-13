@@ -577,6 +577,15 @@ class TextToAudioConverter:
         # Sort by position
         chapter_positions.sort(key=lambda x: x['pos'])
 
+        # Deduplicate chapters at the same position (multiple patterns matching same chapter)
+        seen_positions = set()
+        deduplicated_positions = []
+        for chapter_info in chapter_positions:
+            if chapter_info['pos'] not in seen_positions:
+                deduplicated_positions.append(chapter_info)
+                seen_positions.add(chapter_info['pos'])
+        chapter_positions = deduplicated_positions
+
         # If we found chapter markers, create chapters
         if chapter_positions:
             # Preserve text before first chapter as non-voiced content
