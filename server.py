@@ -2252,7 +2252,6 @@ def generate_project_chunk_audio():
             language_id=language_id,
             exaggeration=exaggeration,
             cfg_weight=cfg_weight,
-            temperature=temperature,
             audio_prompt_path=audio_prompt_path
         )
 

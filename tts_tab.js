@@ -672,7 +672,7 @@ class TTSTab {
             await this.loadChapter(this.currentChapterIndex);
         } catch (error) {
             console.error('Error generating chunk audio:', error);
-            alert('Failed to generate audio: ' + error.message);
+            showToast('Failed to generate audio: ' + error.message, 'error');
         }
     }
 
@@ -702,13 +702,11 @@ class TTSTab {
             await this.loadChapter(this.currentChapterIndex);
         } catch (error) {
             console.error('Error setting best take:', error);
-            alert('Failed to set best take: ' + error.message);
+            showToast('Failed to set best take: ' + error.message, 'error');
         }
     }
 
     async deleteTake(chunkId, audioFile) {
-        if (!confirm('Delete this take?')) return;
-
         try {
             const response = await fetch(`${SERVER_URL}/api/project/delete-audio`, {
                 method: 'POST',
@@ -734,22 +732,18 @@ class TTSTab {
             await this.loadChapter(this.currentChapterIndex);
         } catch (error) {
             console.error('Error deleting take:', error);
-            alert('Failed to delete take: ' + error.message);
+            showToast('Failed to delete take: ' + error.message, 'error');
         }
     }
 
     async generateAllChunks() {
-        if (!confirm('Generate audio for all chunks in this chapter?')) return;
-
         const chunks = this.currentChapter.chunks || [];
 
         for (const chunk of chunks) {
             await this.generateChunkAudio(chunk.id);
         }
 
-        alert('All chunks generated successfully!');
-
-        this.showStatus('All chunks generated!', 'success');
+        showToast('All chunks generated successfully!', 'success');
     }
 
 
@@ -823,9 +817,9 @@ class TTSTab {
     }
 
     showStatus(message, type) {
-        // Simple status display (could be enhanced with a proper toast notification)
+        // Display toast notification
         console.log(`[${type.toUpperCase()}] ${message}`);
-        alert(message);
+        showToast(message, type);
     }
 
     setupProgressUpdater() {
