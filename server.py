@@ -2251,8 +2251,8 @@ def generate_project_chunk_audio():
         audio_filename = f"chunk{chunk_id}_{timestamp}.wav"
         audio_path = os.path.join(converter.audio_dir, audio_filename)
 
-        # Generate the audio
-        result = converter.generate_audio(
+        # Generate the audio (returns path on success, raises exception on error)
+        generated_path = converter.generate_audio(
             text=chunk_text,
             output_path=audio_path,
             audio_prompt_path=audio_prompt_path,
@@ -2261,10 +2261,8 @@ def generate_project_chunk_audio():
             cfg_weight=cfg_weight
         )
 
-        if 'error' in result:
-            return jsonify({'error': result['error']}), 500
-
-        audio_file = result['audio_file']
+        # Extract just the filename from the path
+        audio_file = os.path.basename(generated_path)
         audio_url = f"/api/audio/{audio_file}"
 
         # Update project metadata with the new audio
