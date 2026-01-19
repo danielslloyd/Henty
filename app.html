@@ -227,6 +227,35 @@
             background: #f9f9f9;
             color: #333;
             padding: 10px;
+            overflow-y: auto;
+            white-space: pre-wrap;
+            word-wrap: break-word;
+        }
+
+        /* XML Syntax Highlighting */
+        .xml-editor .xml-tag {
+            color: #0066cc;
+            font-weight: 600;
+        }
+
+        .xml-editor .xml-bracket {
+            color: #666;
+            font-weight: bold;
+        }
+
+        .xml-editor .xml-attribute {
+            color: #d73a49;
+        }
+
+        .xml-editor .xml-value {
+            color: #22863a;
+        }
+
+        /* Placeholder for contenteditable */
+        .xml-editor:empty:before {
+            content: attr(data-placeholder);
+            color: #999;
+            font-style: italic;
         }
 
         .xml-tips {
@@ -978,7 +1007,7 @@
                     <button class="xml-btn" onclick="gutenbergTab.insertTag('pause')">+ Pause</button>
                     <button class="xml-btn" onclick="gutenbergTab.wrapSelection('footnote')">Footnote</button>
                 </div>
-                <textarea class="xml-editor" id="pseudoXmlEditor" placeholder="Load or process text to see XML structure..."></textarea>
+                <div class="xml-editor" id="pseudoXmlEditor" contenteditable="true" spellcheck="false" data-placeholder="Load or process text to see XML structure..."></div>
             </div>
         </div>
 
