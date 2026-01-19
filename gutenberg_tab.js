@@ -105,7 +105,12 @@ class GutenbergTab {
         highlighted = highlighted.replace(
             /&lt;(\/?)([\w-]+)((?:\s+[\w-]+="[^"]*")*)\s*(\/??)&gt;/g,
             (match, slash1, tagName, attributes, slash2) => {
-                let result = '<span class="xml-bracket">&lt;</span>';
+                // Add special styling for chunk boundaries
+                const isChunkTag = tagName === 'chunk';
+                const chunkClass = isChunkTag ? ' class="xml-chunk-boundary"' : '';
+
+                let result = `<span${chunkClass}>`;
+                result += '<span class="xml-bracket">&lt;</span>';
                 result += slash1;
                 result += `<span class="xml-tag">${tagName}</span>`;
 
@@ -119,6 +124,7 @@ class GutenbergTab {
 
                 result += slash2;
                 result += '<span class="xml-bracket">&gt;</span>';
+                result += '</span>';
                 return result;
             }
         );
