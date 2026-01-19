@@ -169,6 +169,87 @@ Return only the JSON object, no other text."""
             print(f"Response was: {response_text[:200] if 'response_text' in locals() else 'N/A'}")
             return {"entities": []}
 
+    def identify_entities_batch(self, paragraphs: List[str]) -> List[Dict[str, Any]]:
+        """
+        Batch version: Identify entities in multiple paragraphs with a single LLM call
+
+        Returns a list of results, one for each paragraph (in the same order)
+        """
+        if not paragraphs:
+            return []
+
+        # Build batch prompt
+        prompt = f"""Analyze these {len(paragraphs)} historical text paragraphs and identify entities in each.
+
+For EACH paragraph, identify:
+1. PLACES: Any geographic locations (cities, regions, countries, landmarks)
+2. PEOPLE: Historical figures, notable persons
+3. TOPICS: Historical events, periods, or concepts that need explanation
+4. ARCHAIC TERMS: Old-fashioned words, phrases, or terms that modern readers might not understand
+
+For each entity, provide:
+-- The exact text as it appears in the paragraph
+-- The entity type (place/person/topic/term)
+-- A brief one-sentence summary/definition
+-- For places: estimated latitude/longitude coordinates
+-- For people: birth/death years if known
+-- For archaic terms: modern equivalent or definition
+
+Return ONLY a JSON array with one object per paragraph:
+[
+  {{
+    "paragraph_index": 0,
+    "entities": [
+      {{
+        "text": "exact text from paragraph",
+        "type": "place|person|topic|term",
+        "summary": "brief one-sentence description",
+        "lat": 12.34,
+        "lon": 56.78,
+        "born": "year",
+        "died": "year",
+        "modern_equivalent": "modern term",
+        "sources": ["Wikipedia: Article Name"]
+      }}
+    ]
+  }},
+  ...
+]
+
+Paragraphs to analyze:
+"""
+
+        for i, paragraph in enumerate(paragraphs):
+            # Truncate very long paragraphs to avoid token limits
+            para_text = paragraph[:500] if len(paragraph) > 500 else paragraph
+            prompt += f"\n\nPARAGRAPH {i}:\n{para_text}\n"
+
+        prompt += "\n\nReturn only the JSON array, no other text."
+
+        try:
+            response_text = self._call_llm(prompt, max_tokens=4000)
+
+            # Try to extract JSON if wrapped in markdown
+            json_match = re.search(r'```(?:json)?\s*(\[.*\])\s*```', response_text, re.DOTALL)
+            if json_match:
+                response_text = json_match.group(1)
+
+            results = json.loads(response_text)
+
+            # Ensure we have a result for each paragraph
+            results_by_index = {r.get("paragraph_index", i): r for i, r in enumerate(results)}
+            ordered_results = []
+            for i in range(len(paragraphs)):
+                ordered_results.append(results_by_index.get(i, {"entities": []}))
+
+            return ordered_results
+
+        except Exception as e:
+            print(f"Error in batch entity identification: {e}")
+            print(f"Response was: {response_text[:200] if 'response_text' in locals() else 'N/A'}")
+            # Return empty results for all paragraphs on error
+            return [{"entities": []} for _ in paragraphs]
+
     def enrich_entity_with_sources(self, entity: Dict[str, Any]) -> Dict[str, Any]:
         """
         Use LLM to find authoritative sources and additional details for an entity
@@ -377,37 +458,46 @@ Include only fields that are relevant for this {entity_type}. Return only the JS
                 })
                 paragraphs = paragraphs[1:]
 
-        # Process each paragraph
+        # Process paragraphs in batches for better performance
         total = len(paragraphs)
-        for i, paragraph in enumerate(paragraphs):
-            current = i + 1
-            msg = f"Processing paragraph {current}/{total}"
+        processed_count = 0
+
+        for batch_start in range(0, total, batch_size):
+            batch_end = min(batch_start + batch_size, total)
+            batch_paragraphs = paragraphs[batch_start:batch_end]
+
+            msg = f"Processing paragraphs {batch_start + 1}-{batch_end}/{total} (batch)"
             print(f"\n{msg}...")
 
             if progress_callback:
-                progress_callback(current, total, msg)
+                progress_callback(batch_end, total, msg)
 
-            # Identify entities in this paragraph
-            result = self.identify_entities(paragraph)
-            entities = result.get("entities", [])
+            # Identify entities in batch of paragraphs with single LLM call
+            batch_results = self.identify_entities_batch(batch_paragraphs)
 
-            if entities:
-                print(f"  Found {len(entities)} entities")
-                # Create segments with annotations
-                segments, para_annotations = self.segment_paragraph_with_annotations(
-                    paragraph,
-                    entities
-                )
-                annotations_index.update(para_annotations)
-            else:
-                # No annotations, just plain text
-                segments = [{"text": paragraph, "annotations": []}]
+            # Process each paragraph in the batch
+            for i, (paragraph, result) in enumerate(zip(batch_paragraphs, batch_results)):
+                entities = result.get("entities", [])
 
-            content.append({
-                "type": "paragraph",
-                "text": paragraph,
-                "segments": segments
-            })
+                if entities:
+                    print(f"  Paragraph {batch_start + i + 1}: Found {len(entities)} entities")
+                    # Create segments with annotations
+                    segments, para_annotations = self.segment_paragraph_with_annotations(
+                        paragraph,
+                        entities
+                    )
+                    annotations_index.update(para_annotations)
+                else:
+                    # No annotations, just plain text
+                    segments = [{"text": paragraph, "annotations": []}]
+
+                content.append({
+                    "type": "paragraph",
+                    "text": paragraph,
+                    "segments": segments
+                })
+
+            processed_count = batch_end
 
         # Build final document
         document = {
