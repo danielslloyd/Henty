@@ -85,6 +85,7 @@ class TTSTab {
         };
         this.activeGenerations = {};
         this.selectedChunkId = null;
+        this.selectedChunkElement = null; // Cache selected chunk DOM element
         this.audioManager = new AudioManager();
     }
 
@@ -551,11 +552,17 @@ class TTSTab {
     selectChunk(chunkId) {
         this.selectedChunkId = chunkId;
 
-        // Update text selection styling
-        const allChunks = document.querySelectorAll('.chunk-text');
-        allChunks.forEach(c => c.classList.remove('selected'));
+        // Remove 'selected' class from previously selected chunk (cached reference)
+        if (this.selectedChunkElement) {
+            this.selectedChunkElement.classList.remove('selected');
+        }
+
+        // Get and cache the new selected chunk element
         const selectedChunk = document.getElementById(`chunkText_${chunkId}`);
-        if (selectedChunk) selectedChunk.classList.add('selected');
+        if (selectedChunk) {
+            selectedChunk.classList.add('selected');
+            this.selectedChunkElement = selectedChunk; // Cache the reference
+        }
 
         // Scroll to corresponding takes
         this.scrollToTakes(chunkId);
@@ -724,7 +731,7 @@ class TTSTab {
             } catch (error) {
                 console.error('Error polling progress:', error);
             }
-        }, 200); // Poll every 200ms
+        }, 1000); // Poll every 1000ms (1 second) - reduced from 200ms for better performance
     }
 
     async setBestTake(chunkId, audioFile) {
@@ -790,11 +797,14 @@ class TTSTab {
     async generateAllChunks() {
         const chunks = this.currentChapter.chunks || [];
 
-        for (const chunk of chunks) {
-            await this.generateChunkAudio(chunk.id);
+        // Generate all chunks in parallel using Promise.all() for better performance
+        try {
+            await Promise.all(chunks.map(chunk => this.generateChunkAudio(chunk.id)));
+            showToast('All chunks generated successfully!', 'success');
+        } catch (error) {
+            console.error('Error generating chunks:', error);
+            showToast('Some chunks failed to generate. Check console for details.', 'error');
         }
-
-        showToast('All chunks generated successfully!', 'success');
     }
 
 

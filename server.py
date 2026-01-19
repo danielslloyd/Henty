@@ -69,6 +69,52 @@ class TextToAudioConverter:
         self.current_project_path = None
         self.current_project_metadata = None
 
+        # Performance optimization: cached lookup dictionaries
+        self._chapter_lookup_cache = None
+        self._text_file_lookup_cache = None
+        self._chunk_lookup_cache = None
+
+    def _invalidate_lookup_caches(self):
+        """Invalidate lookup caches when project metadata changes"""
+        self._chapter_lookup_cache = None
+        self._text_file_lookup_cache = None
+        self._chunk_lookup_cache = None
+
+    def get_chapter_and_chunk_lookups(self):
+        """
+        Build O(1) lookup dictionaries for chapters, text_files, and their chunks.
+        Returns: (chapter_map, text_file_map, chunk_maps)
+        where chunk_maps is a dict mapping container_id -> {chunk_id: chunk}
+        """
+        # Return cached lookups if available
+        if (self._chapter_lookup_cache is not None and
+            self._text_file_lookup_cache is not None and
+            self._chunk_lookup_cache is not None):
+            return self._chapter_lookup_cache, self._text_file_lookup_cache, self._chunk_lookup_cache
+
+        if not self.current_project_metadata:
+            return {}, {}, {}
+
+        chapters = self.current_project_metadata.get('chapters', [])
+        text_files = self.current_project_metadata.get('text_files', [])
+
+        # Build chapter and text_file lookups - O(n)
+        chapter_map = {ch['id']: ch for ch in chapters}
+        text_file_map = {tf['id']: tf for tf in text_files}
+
+        # Build chunk lookups for each container - O(n*m) once, then O(1) per access
+        chunk_maps = {}
+        for container_id, container in {**chapter_map, **text_file_map}.items():
+            chunks = container.get('chunks', [])
+            chunk_maps[container_id] = {c['id']: c for c in chunks}
+
+        # Cache the lookups
+        self._chapter_lookup_cache = chapter_map
+        self._text_file_lookup_cache = text_file_map
+        self._chunk_lookup_cache = chunk_maps
+
+        return chapter_map, text_file_map, chunk_maps
+
     def get_relative_path(self, absolute_path, base_path=None):
         """Convert absolute path to relative path within project"""
         if base_path is None:
@@ -1657,6 +1703,9 @@ def update_project_defaults():
         with open(project_file, 'w', encoding='utf-8') as f:
             json.dump(converter.current_project_metadata, f, indent=2, ensure_ascii=False)
 
+        # Invalidate lookup caches after modifying metadata
+        converter._invalidate_lookup_caches()
+
         return jsonify({
             'success': True,
             'default_audio_settings': converter.current_project_metadata['default_audio_settings']
@@ -1740,6 +1789,9 @@ def add_text_file_to_project():
         with open(project_file, 'w', encoding='utf-8') as f:
             json.dump(converter.current_project_metadata, f, indent=2, ensure_ascii=False)
 
+        # Invalidate lookup caches after modifying metadata
+        converter._invalidate_lookup_caches()
+
         print(f"Successfully added {len(new_chapters)} chapters to project")
 
         return jsonify({
@@ -1797,19 +1849,16 @@ def update_chunk_text():
         new_nickname = data.get('new_nickname')
 
         # Try to find in chapters first (new format), then text_files (old format)
-        chapters = converter.current_project_metadata.get('chapters', [])
-        text_files = converter.current_project_metadata.get('text_files', [])
+        # Use O(1) lookup dictionaries instead of O(n) linear search
+        chapter_map, text_file_map, chunk_maps = converter.get_chapter_and_chunk_lookups()
 
-        chapter = next((ch for ch in chapters if ch['id'] == text_file_id), None)
-        text_file = next((tf for tf in text_files if tf['id'] == text_file_id), None)
-
-        container = chapter or text_file
+        container = chapter_map.get(text_file_id) or text_file_map.get(text_file_id)
 
         if not container:
             return jsonify({'error': 'Text file not found'}), 404
 
         # Find the chunk
-        chunk = next((c for c in container['chunks'] if c['id'] == chunk_id), None)
+        chunk = chunk_maps.get(text_file_id, {}).get(chunk_id)
 
         if not chunk:
             return jsonify({'error': 'Chunk not found'}), 404
@@ -1833,6 +1882,9 @@ def update_chunk_text():
         project_file = os.path.join(converter.current_project_path, 'project.json')
         with open(project_file, 'w', encoding='utf-8') as f:
             json.dump(converter.current_project_metadata, f, indent=2, ensure_ascii=False)
+
+        # Invalidate lookup caches after modifying metadata
+        converter._invalidate_lookup_caches()
 
         return jsonify({
             'success': True,
@@ -1882,6 +1934,9 @@ def dismiss_dirty_flag():
         project_file = os.path.join(converter.current_project_path, 'project.json')
         with open(project_file, 'w', encoding='utf-8') as f:
             json.dump(converter.current_project_metadata, f, indent=2, ensure_ascii=False)
+
+        # Invalidate lookup caches after modifying metadata
+        converter._invalidate_lookup_caches()
 
         return jsonify({
             'success': True,
@@ -1997,6 +2052,9 @@ def insert_chunk():
         with open(project_file, 'w', encoding='utf-8') as f:
             json.dump(converter.current_project_metadata, f, indent=2, ensure_ascii=False)
 
+        # Invalidate lookup caches after modifying metadata
+        converter._invalidate_lookup_caches()
+
         return jsonify({
             'success': True,
             'chunks': chunks,
@@ -2028,19 +2086,16 @@ def add_audio_to_chunk():
             return jsonify({'error': 'text_file_id, chunk_id, and audio_metadata are required'}), 400
 
         # Try to find in chapters first (new format), then text_files (old format)
-        chapters = converter.current_project_metadata.get('chapters', [])
-        text_files = converter.current_project_metadata.get('text_files', [])
+        # Use O(1) lookup dictionaries instead of O(n) linear search
+        chapter_map, text_file_map, chunk_maps = converter.get_chapter_and_chunk_lookups()
 
-        chapter = next((ch for ch in chapters if ch['id'] == text_file_id), None)
-        text_file = next((tf for tf in text_files if tf['id'] == text_file_id), None)
-
-        container = chapter or text_file
+        container = chapter_map.get(text_file_id) or text_file_map.get(text_file_id)
 
         if not container:
             return jsonify({'error': 'Text file not found'}), 404
 
         # Find the chunk
-        chunk = next((c for c in container['chunks'] if c['id'] == chunk_id), None)
+        chunk = chunk_maps.get(text_file_id, {}).get(chunk_id)
 
         if not chunk:
             return jsonify({'error': 'Chunk not found'}), 404
@@ -2059,6 +2114,9 @@ def add_audio_to_chunk():
         project_file = os.path.join(converter.current_project_path, 'project.json')
         with open(project_file, 'w', encoding='utf-8') as f:
             json.dump(converter.current_project_metadata, f, indent=2, ensure_ascii=False)
+
+        # Invalidate lookup caches after modifying metadata
+        converter._invalidate_lookup_caches()
 
         return jsonify({
             'success': True,
@@ -2087,19 +2145,16 @@ def set_chunk_best_take():
             return jsonify({'error': 'text_file_id, chunk_id, and audio_filename are required'}), 400
 
         # Try to find in chapters first (new format), then text_files (old format)
-        chapters = converter.current_project_metadata.get('chapters', [])
-        text_files = converter.current_project_metadata.get('text_files', [])
+        # Use O(1) lookup dictionaries instead of O(n) linear search
+        chapter_map, text_file_map, chunk_maps = converter.get_chapter_and_chunk_lookups()
 
-        chapter = next((ch for ch in chapters if ch['id'] == text_file_id), None)
-        text_file = next((tf for tf in text_files if tf['id'] == text_file_id), None)
-
-        container = chapter or text_file
+        container = chapter_map.get(text_file_id) or text_file_map.get(text_file_id)
 
         if not container:
             return jsonify({'error': 'Text file not found'}), 404
 
         # Find the chunk
-        chunk = next((c for c in container['chunks'] if c['id'] == chunk_id), None)
+        chunk = chunk_maps.get(text_file_id, {}).get(chunk_id)
 
         if not chunk:
             return jsonify({'error': 'Chunk not found'}), 404
@@ -2125,6 +2180,9 @@ def set_chunk_best_take():
         project_file = os.path.join(converter.current_project_path, 'project.json')
         with open(project_file, 'w', encoding='utf-8') as f:
             json.dump(converter.current_project_metadata, f, indent=2, ensure_ascii=False)
+
+        # Invalidate lookup caches after modifying metadata
+        converter._invalidate_lookup_caches()
 
         return jsonify({
             'success': True,
@@ -2153,19 +2211,16 @@ def delete_project_audio():
             return jsonify({'error': 'text_file_id, chunk_id, and audio_file are required'}), 400
 
         # Try to find in chapters first (new format), then text_files (old format)
-        chapters = converter.current_project_metadata.get('chapters', [])
-        text_files = converter.current_project_metadata.get('text_files', [])
+        # Use O(1) lookup dictionaries instead of O(n) linear search
+        chapter_map, text_file_map, chunk_maps = converter.get_chapter_and_chunk_lookups()
 
-        chapter = next((ch for ch in chapters if ch['id'] == text_file_id), None)
-        text_file = next((tf for tf in text_files if tf['id'] == text_file_id), None)
-
-        container = chapter or text_file
+        container = chapter_map.get(text_file_id) or text_file_map.get(text_file_id)
 
         if not container:
             return jsonify({'error': 'Text file not found'}), 404
 
         # Find the chunk
-        chunk = next((c for c in container['chunks'] if c['id'] == chunk_id), None)
+        chunk = chunk_maps.get(text_file_id, {}).get(chunk_id)
 
         if not chunk:
             return jsonify({'error': 'Chunk not found'}), 404
@@ -2198,6 +2253,9 @@ def delete_project_audio():
         project_file = os.path.join(converter.current_project_path, 'project.json')
         with open(project_file, 'w', encoding='utf-8') as f:
             json.dump(converter.current_project_metadata, f, indent=2, ensure_ascii=False)
+
+        # Invalidate lookup caches after modifying metadata
+        converter._invalidate_lookup_caches()
 
         return jsonify({
             'success': True,
@@ -2266,16 +2324,13 @@ def generate_project_chunk_audio():
         audio_url = f"/api/audio/{audio_file}"
 
         # Update project metadata with the new audio
-        chapters = converter.current_project_metadata.get('chapters', [])
-        text_files = converter.current_project_metadata.get('text_files', [])
+        # Use O(1) lookup dictionaries instead of O(n) linear search
+        chapter_map, text_file_map, chunk_maps = converter.get_chapter_and_chunk_lookups()
 
-        chapter = next((ch for ch in chapters if ch['id'] == text_file_id), None)
-        text_file = next((tf for tf in text_files if tf['id'] == text_file_id), None)
-
-        container = chapter or text_file
+        container = chapter_map.get(text_file_id) or text_file_map.get(text_file_id)
 
         if container:
-            chunk = next((c for c in container['chunks'] if c['id'] == chunk_id), None)
+            chunk = chunk_maps.get(text_file_id, {}).get(chunk_id)
             if chunk:
                 if 'generated_audios' not in chunk:
                     chunk['generated_audios'] = []
@@ -2303,6 +2358,9 @@ def generate_project_chunk_audio():
                 project_file = os.path.join(converter.current_project_path, 'project.json')
                 with open(project_file, 'w', encoding='utf-8') as f:
                     json.dump(converter.current_project_metadata, f, indent=2, ensure_ascii=False)
+
+                # Invalidate lookup caches after modifying metadata
+                converter._invalidate_lookup_caches()
 
                 return jsonify({
                     'success': True,
@@ -2336,15 +2394,15 @@ def stitch_project_best_takes():
             return jsonify({'error': 'chapter_id (or text_file_id) is required'}), 400
 
         # Find the chapter (try new structure first, then fall back to old)
-        chapters = converter.current_project_metadata.get('chapters', [])
-        text_files = converter.current_project_metadata.get('text_files', [])
+        # Use O(1) lookup dictionaries instead of O(n) linear search
+        chapter_map, text_file_map, chunk_maps = converter.get_chapter_and_chunk_lookups()
 
-        chapter = next((ch for ch in chapters if ch['id'] == chapter_id), None)
+        chapter = chapter_map.get(chapter_id)
         is_new_structure = chapter is not None
 
         if not chapter:
             # Fall back to old text_files structure
-            chapter = next((tf for tf in text_files if tf['id'] == chapter_id), None)
+            chapter = text_file_map.get(chapter_id)
 
         if not chapter:
             return jsonify({'error': 'Chapter/text file not found in project'}), 404
@@ -3642,6 +3700,9 @@ def save_xml_content():
         project_file = os.path.join(converter.current_project_path, 'project.json')
         with open(project_file, 'w', encoding='utf-8') as f:
             json.dump(converter.current_project_metadata, f, indent=2, ensure_ascii=False)
+
+        # Invalidate lookup caches after modifying metadata
+        converter._invalidate_lookup_caches()
 
         return jsonify({
             'success': True,
