@@ -391,12 +391,33 @@ class TTSTab {
                                         title="${isBest ? 'Best take' : 'Set as best take'}">
                                     <span class="material-symbols-outlined">${isBest ? 'check_circle' : 'radio_button_unchecked'}</span>
                                 </button>
+                                <button class="take-icon settings" data-settings-for="${takeId}" onclick="event.stopPropagation(); ttsTab.toggleTakeSettings('${takeId}')" title="View settings">
+                                    <span class="material-symbols-outlined">settings</span>
+                                </button>
                                 <button class="take-icon play" onclick="event.stopPropagation(); ttsTab.playTakeAudio('${firstTake.audio_url}', event)" title="Play">
                                     <span class="material-symbols-outlined">play_arrow</span>
                                 </button>
                                 <button class="take-icon delete" onclick='event.stopPropagation(); ttsTab.deleteTake(${chunk.id}, "${firstTake.audio_file}")' title="Delete">
                                     <span class="material-symbols-outlined">delete</span>
                                 </button>
+                            </div>
+                        </div>
+                        <div class="take-settings" id="${takeId}">
+                            <div class="setting-row">
+                                <span class="setting-label">Voice</span>
+                                <span class="setting-value">${firstTake.voice_sample || 'Default'}</span>
+                            </div>
+                            <div class="setting-row">
+                                <span class="setting-label">Exaggeration</span>
+                                <span class="setting-value">${firstTake.exaggeration}</span>
+                            </div>
+                            <div class="setting-row">
+                                <span class="setting-label">CFG Weight</span>
+                                <span class="setting-value">${firstTake.cfg_weight}</span>
+                            </div>
+                            <div class="setting-row">
+                                <span class="setting-label">Temperature</span>
+                                <span class="setting-value">${firstTake.temperature || this.projectDefaults.temperature}</span>
                             </div>
                         </div>
                         <div class="take-settings" id="${chunkPreviewId}_settings">
@@ -448,6 +469,9 @@ class TTSTab {
                                             title="${isBest ? 'Best take' : 'Set as best take'}">
                                         <span class="material-symbols-outlined">${isBest ? 'check_circle' : 'radio_button_unchecked'}</span>
                                     </button>
+                                    <button class="take-icon settings" data-settings-for="${takeId}" onclick="event.stopPropagation(); ttsTab.toggleTakeSettings('${takeId}')" title="View settings">
+                                        <span class="material-symbols-outlined">settings</span>
+                                    </button>
                                     <button class="take-icon play" onclick="event.stopPropagation(); ttsTab.playTakeAudio('${take.audio_url}', event)" title="Play">
                                         <span class="material-symbols-outlined">play_arrow</span>
                                     </button>
@@ -456,7 +480,7 @@ class TTSTab {
                                     </button>
                                 </div>
                             </div>
-                            <div class="take-settings" id="settings_${takeId}">
+                            <div class="take-settings" id="${takeId}">
                                 <div class="setting-row">
                                     <span class="setting-label">Voice</span>
                                     <span class="setting-value">${take.voice_sample || 'Default'}</span>
@@ -468,6 +492,10 @@ class TTSTab {
                                 <div class="setting-row">
                                     <span class="setting-label">CFG Weight</span>
                                     <span class="setting-value">${take.cfg_weight}</span>
+                                </div>
+                                <div class="setting-row">
+                                    <span class="setting-label">Temperature</span>
+                                    <span class="setting-value">${take.temperature || this.projectDefaults.temperature}</span>
                                 </div>
                             </div>
                         </div>
