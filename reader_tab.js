@@ -79,7 +79,7 @@ class ReaderTab {
                               data-chapter="${chapterIndex}"
                               data-chunk="${chunkIndex}"
                               data-chunk-id="${chunk.id}">${displayText}</span>`;
-            }).join(' ');
+            }).join('<br>');
 
             return `
                 <div class="chapter-section" style="margin-bottom: 40px;">
