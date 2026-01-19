@@ -113,10 +113,17 @@ class TTSTab {
                 if (matchingVoice) {
                     this.projectDefaults.voice_sample = matchingVoice.name;
                     console.log('[TTS TAB] Default voice set to:', matchingVoice.name);
+                } else {
+                    // NEVER use default voice - throw error if voice sample not found
+                    const errorMsg = `Voice sample "${defaultVoice}" not found in voice_samples directory`;
+                    console.error('[TTS TAB]', errorMsg);
+                    showToast(errorMsg, 'error');
+                    throw new Error(errorMsg);
                 }
             }
         } catch (error) {
             console.error('Error loading default voice:', error);
+            throw error;
         }
     }
 
@@ -384,7 +391,7 @@ class TTSTab {
                                         title="${isBest ? 'Best take' : 'Set as best take'}">
                                     <span class="material-symbols-outlined">${isBest ? 'check_circle' : 'radio_button_unchecked'}</span>
                                 </button>
-                                <button class="take-icon settings" data-settings-for="${takeId}" onclick="event.stopPropagation(); ttsTab.toggleTakeSettings('${takeId}')" title="Settings">
+                                <button class="take-icon settings" data-settings-for="${takeId}" onclick="event.stopPropagation(); ttsTab.toggleTakeSettings('${takeId}')" title="View settings">
                                     <span class="material-symbols-outlined">settings</span>
                                 </button>
                                 <button class="take-icon play" onclick="event.stopPropagation(); ttsTab.playTakeAudio('${firstTake.audio_url}', event)" title="Play">
@@ -393,6 +400,24 @@ class TTSTab {
                                 <button class="take-icon delete" onclick='event.stopPropagation(); ttsTab.deleteTake(${chunk.id}, "${firstTake.audio_file}")' title="Delete">
                                     <span class="material-symbols-outlined">delete</span>
                                 </button>
+                            </div>
+                        </div>
+                        <div class="take-settings" id="${takeId}">
+                            <div class="setting-row">
+                                <span class="setting-label">Voice</span>
+                                <span class="setting-value">${firstTake.voice_sample || 'Default'}</span>
+                            </div>
+                            <div class="setting-row">
+                                <span class="setting-label">Exaggeration</span>
+                                <span class="setting-value">${firstTake.exaggeration}</span>
+                            </div>
+                            <div class="setting-row">
+                                <span class="setting-label">CFG Weight</span>
+                                <span class="setting-value">${firstTake.cfg_weight}</span>
+                            </div>
+                            <div class="setting-row">
+                                <span class="setting-label">Temperature</span>
+                                <span class="setting-value">${firstTake.temperature || this.projectDefaults.temperature}</span>
                             </div>
                         </div>
                         <div class="take-settings" id="${chunkPreviewId}_settings">
@@ -421,20 +446,6 @@ class TTSTab {
                                 </div>
                             </div>
                         </div>
-                        <div class="take-settings" id="settings_${takeId}">
-                            <div class="setting-row">
-                                <span class="setting-label">Voice</span>
-                                <span class="setting-value">${firstTake.voice_sample || 'Default'}</span>
-                            </div>
-                            <div class="setting-row">
-                                <span class="setting-label">Exaggeration</span>
-                                <span class="setting-value">${firstTake.exaggeration}</span>
-                            </div>
-                            <div class="setting-row">
-                                <span class="setting-label">CFG Weight</span>
-                                <span class="setting-value">${firstTake.cfg_weight}</span>
-                            </div>
-                        </div>
                     </div>
                 `;
 
@@ -458,7 +469,7 @@ class TTSTab {
                                             title="${isBest ? 'Best take' : 'Set as best take'}">
                                         <span class="material-symbols-outlined">${isBest ? 'check_circle' : 'radio_button_unchecked'}</span>
                                     </button>
-                                    <button class="take-icon settings" data-settings-for="${takeId}" onclick="event.stopPropagation(); ttsTab.toggleTakeSettings('${takeId}')" title="Settings">
+                                    <button class="take-icon settings" data-settings-for="${takeId}" onclick="event.stopPropagation(); ttsTab.toggleTakeSettings('${takeId}')" title="View settings">
                                         <span class="material-symbols-outlined">settings</span>
                                     </button>
                                     <button class="take-icon play" onclick="event.stopPropagation(); ttsTab.playTakeAudio('${take.audio_url}', event)" title="Play">
@@ -469,7 +480,7 @@ class TTSTab {
                                     </button>
                                 </div>
                             </div>
-                            <div class="take-settings" id="settings_${takeId}">
+                            <div class="take-settings" id="${takeId}">
                                 <div class="setting-row">
                                     <span class="setting-label">Voice</span>
                                     <span class="setting-value">${take.voice_sample || 'Default'}</span>
@@ -481,6 +492,10 @@ class TTSTab {
                                 <div class="setting-row">
                                     <span class="setting-label">CFG Weight</span>
                                     <span class="setting-value">${take.cfg_weight}</span>
+                                </div>
+                                <div class="setting-row">
+                                    <span class="setting-label">Temperature</span>
+                                    <span class="setting-value">${take.temperature || this.projectDefaults.temperature}</span>
                                 </div>
                             </div>
                         </div>
@@ -647,6 +662,28 @@ class TTSTab {
         const exaggeration = document.getElementById(`exaggeration_chunk_${chunkId}`)?.value || this.projectDefaults.exaggeration;
         const cfgWeight = document.getElementById(`cfg_weight_chunk_${chunkId}`)?.value || this.projectDefaults.cfg_weight;
 
+        // NEVER allow generation with missing voice sample
+        if (!voice) {
+            const errorMsg = 'No voice sample specified';
+            showToast(errorMsg, 'error');
+            this.showErrorPlaceholder(chunkId, errorMsg);
+            return;
+        }
+
+        // Validate voice sample exists
+        const voiceExists = this.voiceSamples.some(v => {
+            const voiceName = v.name.replace(/\.[^/.]+$/, ''); // Remove extension
+            const checkVoice = voice.replace(/\.[^/.]+$/, '');
+            return voiceName === checkVoice || v.name === voice;
+        });
+
+        if (!voiceExists) {
+            const errorMsg = `Voice sample "${voice}" not found`;
+            showToast(errorMsg, 'error');
+            this.showErrorPlaceholder(chunkId, errorMsg);
+            return;
+        }
+
         console.log('[TTS TAB] Generating audio for chunk:', chunkId);
 
         // Show progress bar
@@ -689,8 +726,34 @@ class TTSTab {
             console.error('Error generating chunk audio:', error);
             clearInterval(progressInterval);
             this.hideProgressBar(chunkId);
-            showToast('Failed to generate audio: ' + error.message, 'error');
+            const errorMsg = error.message || 'Unknown error';
+            showToast('Failed to generate audio: ' + errorMsg, 'error');
+            this.showErrorPlaceholder(chunkId, errorMsg);
         }
+    }
+
+    showErrorPlaceholder(chunkId, errorMessage) {
+        const rows = document.querySelectorAll(`[data-chunk-id="${chunkId}"]`);
+        rows.forEach(row => {
+            // Remove any existing error placeholders
+            const existingError = row.querySelector('.chunk-error-placeholder');
+            if (existingError) existingError.remove();
+
+            // Create error placeholder
+            const errorPlaceholder = document.createElement('div');
+            errorPlaceholder.className = 'chunk-error-placeholder';
+            errorPlaceholder.innerHTML = `
+                <span class="material-symbols-outlined error-icon">close</span>
+                <span class="error-text">${this.escapeHtml(errorMessage)}</span>
+            `;
+            row.appendChild(errorPlaceholder);
+        });
+    }
+
+    escapeHtml(text) {
+        const div = document.createElement('div');
+        div.textContent = text;
+        return div.innerHTML;
     }
 
     showProgressBar(chunkId) {
