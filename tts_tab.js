@@ -686,6 +686,16 @@ class TTSTab {
 
         console.log('[TTS TAB] Generating audio for chunk:', chunkId);
 
+        // Immediately hide settings and show generating state
+        const settingsEl = document.querySelector(`[data-chunk-id="${chunkId}"] .take-settings.expanded`);
+        if (settingsEl) {
+            settingsEl.classList.remove('expanded');
+        }
+
+        // Add generating class to row
+        const rows = document.querySelectorAll(`[data-chunk-id="${chunkId}"]`);
+        rows.forEach(row => row.classList.add('generating'));
+
         // Show progress bar
         this.showProgressBar(chunkId);
         const progressInterval = this.startProgressPolling(chunkId);
@@ -720,8 +730,44 @@ class TTSTab {
             clearInterval(progressInterval);
             this.hideProgressBar(chunkId);
 
+            // Preserve audio player state before reload
+            const wasPlaying = this.audioPlayer.currentAudio && !this.audioPlayer.currentAudio.paused;
+            const playingUrl = wasPlaying ? this.audioPlayer.currentAudio.src : null;
+            const playbackTime = wasPlaying ? this.audioPlayer.currentAudio.currentTime : 0;
+
             // Reload chapter to get updated takes
             await this.loadChapter(this.currentChapterIndex);
+
+            // Remove generating class
+            const rows = document.querySelectorAll(`[data-chunk-id="${chunkId}"]`);
+            rows.forEach(row => row.classList.remove('generating'));
+
+            // Restore audio playback if it was playing
+            if (wasPlaying && playingUrl) {
+                const audioUrl = playingUrl.replace(SERVER_URL, '');
+                const buttonElement = document.querySelector(`[onclick*="${audioUrl}"]`);
+                if (buttonElement) {
+                    // Create new audio and restore playback
+                    const audio = new Audio(playingUrl);
+                    this.audioPlayer.currentAudio = audio;
+                    this.audioPlayer.currentButton = buttonElement;
+                    audio.currentTime = playbackTime;
+                    audio.play().catch(err => console.error('Error restoring audio:', err));
+                    this.audioPlayer.updateButtonIcon(buttonElement, true);
+
+                    audio.addEventListener('ended', () => {
+                        this.audioPlayer.updateButtonIcon(buttonElement, false);
+                        this.audioPlayer.currentAudio = null;
+                        this.audioPlayer.currentButton = null;
+                    });
+
+                    audio.addEventListener('error', () => {
+                        this.audioPlayer.updateButtonIcon(buttonElement, false);
+                        this.audioPlayer.currentAudio = null;
+                        this.audioPlayer.currentButton = null;
+                    });
+                }
+            }
         } catch (error) {
             console.error('Error generating chunk audio:', error);
             clearInterval(progressInterval);
