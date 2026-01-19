@@ -731,9 +731,9 @@ class TTSTab {
             this.hideProgressBar(chunkId);
 
             // Preserve audio player state before reload
-            const wasPlaying = this.audioPlayer.currentAudio && !this.audioPlayer.currentAudio.paused;
-            const playingUrl = wasPlaying ? this.audioPlayer.currentAudio.src : null;
-            const playbackTime = wasPlaying ? this.audioPlayer.currentAudio.currentTime : 0;
+            const wasPlaying = this.audioManager.currentAudio && !this.audioManager.currentAudio.paused;
+            const playingUrl = wasPlaying ? this.audioManager.currentAudio.src : null;
+            const playbackTime = wasPlaying ? this.audioManager.currentAudio.currentTime : 0;
 
             // Reload chapter to get updated takes
             await this.loadChapter(this.currentChapterIndex);
@@ -749,22 +749,22 @@ class TTSTab {
                 if (buttonElement) {
                     // Create new audio and restore playback
                     const audio = new Audio(playingUrl);
-                    this.audioPlayer.currentAudio = audio;
-                    this.audioPlayer.currentButton = buttonElement;
+                    this.audioManager.currentAudio = audio;
+                    this.audioManager.currentButton = buttonElement;
                     audio.currentTime = playbackTime;
                     audio.play().catch(err => console.error('Error restoring audio:', err));
-                    this.audioPlayer.updateButtonIcon(buttonElement, true);
+                    this.audioManager.updateButtonIcon(buttonElement, true);
 
                     audio.addEventListener('ended', () => {
-                        this.audioPlayer.updateButtonIcon(buttonElement, false);
-                        this.audioPlayer.currentAudio = null;
-                        this.audioPlayer.currentButton = null;
+                        this.audioManager.updateButtonIcon(buttonElement, false);
+                        this.audioManager.currentAudio = null;
+                        this.audioManager.currentButton = null;
                     });
 
                     audio.addEventListener('error', () => {
-                        this.audioPlayer.updateButtonIcon(buttonElement, false);
-                        this.audioPlayer.currentAudio = null;
-                        this.audioPlayer.currentButton = null;
+                        this.audioManager.updateButtonIcon(buttonElement, false);
+                        this.audioManager.currentAudio = null;
+                        this.audioManager.currentButton = null;
                     });
                 }
             }
