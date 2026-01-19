@@ -89,6 +89,43 @@ class GutenbergTab {
         }
     }
 
+    /**
+     * Apply syntax highlighting to XML text
+     */
+    highlightXML(xmlText) {
+        if (!xmlText) return '';
+
+        // Escape HTML entities
+        let highlighted = xmlText
+            .replace(/&/g, '&amp;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;');
+
+        // Highlight XML tags with attributes
+        highlighted = highlighted.replace(
+            /&lt;(\/?)([\w-]+)((?:\s+[\w-]+="[^"]*")*)\s*(\/??)&gt;/g,
+            (match, slash1, tagName, attributes, slash2) => {
+                let result = '<span class="xml-bracket">&lt;</span>';
+                result += slash1;
+                result += `<span class="xml-tag">${tagName}</span>`;
+
+                // Highlight attributes
+                if (attributes) {
+                    result += attributes.replace(
+                        /([\w-]+)="([^"]*)"/g,
+                        '<span class="xml-attribute">$1</span>=<span class="xml-value">"$2"</span>'
+                    );
+                }
+
+                result += slash2;
+                result += '<span class="xml-bracket">&gt;</span>';
+                return result;
+            }
+        );
+
+        return highlighted;
+    }
+
     displayXML() {
         const editor = document.getElementById('pseudoXmlEditor');
 
@@ -96,12 +133,17 @@ class GutenbergTab {
         console.log('[DISPLAY XML] XML length:', this.xmlContent.length);
 
         if (!this.xmlContent) {
-            editor.value = '';
-            editor.placeholder = 'Load or process text to see XML structure...';
+            editor.innerHTML = '';
             return;
         }
 
-        editor.value = this.xmlContent;
+        // Filter out <p> and </p> tags for cleaner display
+        const filteredXML = this.xmlContent
+            .replace(/<p>/gi, '')
+            .replace(/<\/p>/gi, '');
+
+        // Apply syntax highlighting
+        editor.innerHTML = this.highlightXML(filteredXML);
     }
 
     chaptersToXML(chapters) {
@@ -163,7 +205,7 @@ class GutenbergTab {
     async saveXML() {
         try {
             const editor = document.getElementById('pseudoXmlEditor');
-            const xmlContent = editor.value;
+            const xmlContent = editor.textContent || editor.innerText;
 
             // TODO: Parse XML and convert to chapters format
             // For now, just save the XML content
@@ -194,9 +236,6 @@ class GutenbergTab {
 
     insertTag(tagType) {
         const editor = document.getElementById('pseudoXmlEditor');
-        const cursorPos = editor.selectionStart;
-        const textBefore = editor.value.substring(0, cursorPos);
-        const textAfter = editor.value.substring(cursorPos);
 
         let insertText = '';
         if (tagType === 'chapter') {
@@ -207,34 +246,28 @@ class GutenbergTab {
             insertText = '\n    <pause duration="1.0"/>\n';
         }
 
-        editor.value = textBefore + insertText + textAfter;
-        editor.selectionStart = editor.selectionEnd = cursorPos + insertText.length;
+        // Insert at cursor position in contenteditable div
+        document.execCommand('insertText', false, insertText);
         editor.focus();
     }
 
     wrapSelection(tagType) {
-        const editor = document.getElementById('pseudoXmlEditor');
-        const start = editor.selectionStart;
-        const end = editor.selectionEnd;
+        const selection = window.getSelection();
 
-        if (start === end) {
+        if (selection.rangeCount === 0 || selection.toString().length === 0) {
             alert('Please select some text first');
             return;
         }
 
-        const selectedText = editor.value.substring(start, end);
-        const textBefore = editor.value.substring(0, start);
-        const textAfter = editor.value.substring(end);
+        const selectedText = selection.toString();
 
         let wrappedText = '';
         if (tagType === 'footnote') {
             wrappedText = `<footnote>${selectedText}</footnote>`;
         }
 
-        editor.value = textBefore + wrappedText + textAfter;
-        editor.selectionStart = start;
-        editor.selectionEnd = start + wrappedText.length;
-        editor.focus();
+        // Replace selected text with wrapped version
+        document.execCommand('insertText', false, wrappedText);
     }
 
     async validateChunks() {

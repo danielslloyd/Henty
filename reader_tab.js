@@ -12,6 +12,24 @@ class ReaderTab {
         this.currentChunkIndex = 0;
     }
 
+    /**
+     * Process chunk text for display: strip <p> tags and convert to newlines
+     */
+    processChunkText(text) {
+        if (!text) return '';
+
+        // Replace </p> tags with double newline for paragraph breaks
+        let processed = text.replace(/<\/p>/gi, '\n\n');
+
+        // Remove opening <p> tags
+        processed = processed.replace(/<p>/gi, '');
+
+        // Convert newlines to <br> tags for HTML rendering
+        processed = processed.replace(/\n/g, '<br>');
+
+        return processed;
+    }
+
     async init() {
         await this.loadChapters();
         this.renderContent();
@@ -53,11 +71,14 @@ class ReaderTab {
                 const classes = ['chunk-text'];
                 if (hasBestTake) classes.push('has-audio');
 
+                // Process chunk text to strip <p> tags and convert to newlines
+                const displayText = this.processChunkText(chunk.text);
+
                 return `<span class="${classes.join(' ')}"
                               id="readerChunk_${chapterIndex}_${chunkIndex}"
                               data-chapter="${chapterIndex}"
                               data-chunk="${chunkIndex}"
-                              data-chunk-id="${chunk.id}">${chunk.text}</span>`;
+                              data-chunk-id="${chunk.id}">${displayText}</span>`;
             }).join(' ');
 
             return `

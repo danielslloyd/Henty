@@ -543,6 +543,9 @@
                     contentDiv.appendChild(element);
                 }
             });
+
+            // Set up event delegation for annotations (prevents memory leaks)
+            setupAnnotationEventDelegation(contentDiv, doc.annotations_index);
         }
 
         // Render Content Block
@@ -567,18 +570,8 @@
                             const annotation = segment.annotations[0];
                             const annotationId = annotation.id;
 
-                            // Add data attribute
+                            // Add data attribute (event listeners will be added via delegation)
                             span.setAttribute('data-annotation-id', annotationId);
-
-                            // Add hover events
-                            span.addEventListener('mouseenter', function() {
-                                showAnnotation(annotationId, annotationsIndex);
-                                this.classList.add('active');
-                            });
-
-                            span.addEventListener('mouseleave', function() {
-                                this.classList.remove('active');
-                            });
 
                             p.appendChild(span);
                         } else {
@@ -610,6 +603,32 @@
             }
 
             return null;
+        }
+
+        // Set up event delegation for annotation hover (prevents memory leaks)
+        function setupAnnotationEventDelegation(container, annotationsIndex) {
+            // Remove any existing listeners to prevent duplicates
+            const oldContainer = container.cloneNode(true);
+            container.parentNode.replaceChild(oldContainer, container);
+
+            // Add single delegated listener for all annotated elements
+            oldContainer.addEventListener('mouseover', function(event) {
+                const target = event.target;
+                if (target.classList.contains('annotated')) {
+                    const annotationId = target.getAttribute('data-annotation-id');
+                    if (annotationId) {
+                        showAnnotation(annotationId, annotationsIndex);
+                        target.classList.add('active');
+                    }
+                }
+            });
+
+            oldContainer.addEventListener('mouseout', function(event) {
+                const target = event.target;
+                if (target.classList.contains('annotated')) {
+                    target.classList.remove('active');
+                }
+            });
         }
 
         // Show Annotation in Sidebar
