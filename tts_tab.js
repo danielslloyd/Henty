@@ -785,11 +785,22 @@ class TTSTab {
             await this.loadChapter(this.currentChapterIndex);
 
             // Restore generating state for other chunks that are still generating
+            console.log(`[TTS TAB] Restoring ${otherGeneratingChunks.length} other generating chunks`);
             for (const otherChunkId of otherGeneratingChunks) {
+                const genInfo = this.activeGenerations[otherChunkId];
+
+                // Skip if this chunk has already finished (race condition)
+                if (!genInfo) {
+                    console.log(`[TTS TAB] Skipping chunk ${otherChunkId} - already finished`);
+                    continue;
+                }
+
+                console.log(`[TTS TAB] Restoring chunk ${otherChunkId} with genInfo:`, genInfo);
+
                 const rows = document.querySelectorAll(`[data-chunk-id="${otherChunkId}"]`);
+                console.log(`[TTS TAB] Found ${rows.length} rows for chunk ${otherChunkId}`);
                 rows.forEach(row => row.classList.add('generating'));
 
-                const genInfo = this.activeGenerations[otherChunkId];
                 if (genInfo.hasExistingTakes) {
                     this.showGeneratingPlaceholder(otherChunkId);
                 }
@@ -867,9 +878,14 @@ class TTSTab {
 
     showProgressBar(chunkId) {
         const rows = document.querySelectorAll(`[data-chunk-id="${chunkId}"]`);
+        console.log(`[TTS TAB] showProgressBar for chunk ${chunkId}: found ${rows.length} rows`);
+
         rows.forEach(row => {
             // Check if progress bar already exists
-            if (row.querySelector('.chunk-progress-bar')) return;
+            if (row.querySelector('.chunk-progress-bar')) {
+                console.log(`[TTS TAB] Progress bar already exists for chunk ${chunkId}`);
+                return;
+            }
 
             const progressBar = document.createElement('div');
             progressBar.className = 'chunk-progress-bar';
@@ -877,6 +893,7 @@ class TTSTab {
                 <div class="chunk-progress-fill" data-chunk-id="${chunkId}"></div>
             `;
             row.appendChild(progressBar);
+            console.log(`[TTS TAB] Created progress bar for chunk ${chunkId}`);
         });
     }
 

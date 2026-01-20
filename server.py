@@ -2524,7 +2524,7 @@ def stitch_project_best_takes():
             'timestamp': timestamp,
             'is_stitched': True,
             'chunk_count': len(chunks),
-            'text_file_id': text_file_id
+            'text_file_id': chapter_id
         }
 
         # Optionally save metadata to a JSON file
