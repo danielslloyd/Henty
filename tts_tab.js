@@ -719,8 +719,8 @@ class TTSTab {
             settingsEl.classList.remove('expanded');
         }
 
-        // Add generating class to row
-        const rows = document.querySelectorAll(`[data-chunk-id="${chunkId}"]`);
+        // Add generating class to take rows only
+        const rows = document.querySelectorAll(`.chunk-take-row[data-chunk-id="${chunkId}"]`);
         rows.forEach(row => row.classList.add('generating'));
 
         // Track this generation
@@ -797,8 +797,8 @@ class TTSTab {
 
                 console.log(`[TTS TAB] Restoring chunk ${otherChunkId} with genInfo:`, genInfo);
 
-                const rows = document.querySelectorAll(`[data-chunk-id="${otherChunkId}"]`);
-                console.log(`[TTS TAB] Found ${rows.length} rows for chunk ${otherChunkId}`);
+                const rows = document.querySelectorAll(`.chunk-take-row[data-chunk-id="${otherChunkId}"]`);
+                console.log(`[TTS TAB] Found ${rows.length} take rows for chunk ${otherChunkId}`);
                 rows.forEach(row => row.classList.add('generating'));
 
                 if (genInfo.hasExistingTakes) {
@@ -842,8 +842,8 @@ class TTSTab {
             // Remove this chunk from active generations
             delete this.activeGenerations[chunkId];
 
-            // Remove generating class
-            const rows = document.querySelectorAll(`[data-chunk-id="${chunkId}"]`);
+            // Remove generating class from take rows
+            const rows = document.querySelectorAll(`.chunk-take-row[data-chunk-id="${chunkId}"]`);
             rows.forEach(row => row.classList.remove('generating'));
 
             const errorMsg = error.message || 'Unknown error';
@@ -853,7 +853,7 @@ class TTSTab {
     }
 
     showErrorPlaceholder(chunkId, errorMessage) {
-        const rows = document.querySelectorAll(`[data-chunk-id="${chunkId}"]`);
+        const rows = document.querySelectorAll(`.chunk-take-row[data-chunk-id="${chunkId}"]`);
         rows.forEach(row => {
             // Remove any existing error placeholders
             const existingError = row.querySelector('.chunk-error-placeholder');
@@ -877,8 +877,9 @@ class TTSTab {
     }
 
     showProgressBar(chunkId) {
-        const rows = document.querySelectorAll(`[data-chunk-id="${chunkId}"]`);
-        console.log(`[TTS TAB] showProgressBar for chunk ${chunkId}: found ${rows.length} rows`);
+        // Only select take rows, not text preview spans
+        const rows = document.querySelectorAll(`.chunk-take-row[data-chunk-id="${chunkId}"]`);
+        console.log(`[TTS TAB] showProgressBar for chunk ${chunkId}: found ${rows.length} take rows`);
 
         rows.forEach(row => {
             // Check if progress bar already exists
@@ -898,13 +899,13 @@ class TTSTab {
     }
 
     hideProgressBar(chunkId) {
-        const progressBars = document.querySelectorAll(`[data-chunk-id="${chunkId}"] .chunk-progress-bar`);
+        const progressBars = document.querySelectorAll(`.chunk-take-row[data-chunk-id="${chunkId}"] .chunk-progress-bar`);
         progressBars.forEach(bar => bar.remove());
     }
 
     showGeneratingPlaceholder(chunkId) {
         // Find the last take row for this chunk
-        const rows = document.querySelectorAll(`[data-chunk-id="${chunkId}"]`);
+        const rows = document.querySelectorAll(`.chunk-take-row[data-chunk-id="${chunkId}"]`);
         if (rows.length === 0) return;
 
         const lastRow = rows[rows.length - 1];
