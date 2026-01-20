@@ -4,6 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Henty - Audiobook Creator</title>
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🎤</text></svg>">
     <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght@300;400;500" rel="stylesheet">
     <style>
         .material-symbols-outlined {
@@ -493,6 +494,19 @@
             50% { opacity: 0.7; }
         }
 
+        .chunk-take-row.generating-placeholder {
+            background: rgba(139, 92, 246, 0.05);
+            border-left-color: #8b5cf6;
+            opacity: 0.8;
+        }
+
+        .generating-text {
+            font-size: 12px;
+            color: #8b5cf6;
+            font-style: italic;
+            font-weight: 500;
+        }
+
         /* Progress bar for chunk generation */
         .chunk-progress-bar {
             position: absolute;
@@ -695,6 +709,28 @@
 
         .setting-row:last-child {
             margin-bottom: 0;
+        }
+
+        .warning-row {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            padding: 8px;
+            background: #fef3c7;
+            border-radius: 4px;
+            border: 1px solid #fbbf24;
+            margin-top: 8px;
+        }
+
+        .warning-icon {
+            color: #f59e0b;
+            font-size: 16px;
+        }
+
+        .warning-text {
+            font-size: 11px;
+            color: #92400e;
+            font-weight: 500;
         }
 
         .setting-label {
