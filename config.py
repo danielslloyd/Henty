@@ -42,6 +42,9 @@ class ServerConfig:
         # Default Voice Sample (file extension agnostic)
         self.DEFAULT_VOICE = os.getenv('DEFAULT_VOICE', 'Stoker Extended')
 
+        # Text chunking settings
+        self.MAX_CHUNK_SIZE = int(os.getenv('MAX_CHUNK_SIZE', '500'))
+
         # Initialize API key if needed
         if self.REQUIRE_AUTH and not self.API_KEY:
             self._generate_api_key()

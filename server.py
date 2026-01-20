@@ -263,11 +263,13 @@ class TextToAudioConverter:
         except Exception as e:
             return f"Error reading file: {str(e)}"
 
-    def smart_chunk_text(self, text, max_chunk_size=500):
+    def smart_chunk_text(self, text, max_chunk_size=None):
         """
         Smart text chunking that respects paragraph breaks, quotations, and sentence boundaries.
         Returns a list of dicts with chunk metadata.
         """
+        if max_chunk_size is None:
+            max_chunk_size = config.MAX_CHUNK_SIZE
         if len(text) <= max_chunk_size:
             # Text is short enough, return as single chunk
             return [{
@@ -1464,7 +1466,7 @@ def create_project():
                         # Create chapters with chunks
                         new_chapters = []
                         for detected_chapter in detected_chapters:
-                            chunks = converter.smart_chunk_text(detected_chapter['text'], max_chunk_size=500)
+                            chunks = converter.smart_chunk_text(detected_chapter['text'])
 
                             # Add chunk structure
                             for chunk in chunks:
@@ -1758,7 +1760,7 @@ def add_text_file_to_project():
         new_chapters = []
         for detected_chapter in detected_chapters:
             # Chunk the chapter text
-            chunks = converter.smart_chunk_text(detected_chapter['text'], max_chunk_size=500)
+            chunks = converter.smart_chunk_text(detected_chapter['text'])
 
             # Add chunk structure with dirty flag and generated_audios
             for chunk in chunks:
@@ -2344,7 +2346,8 @@ def generate_project_chunk_audio():
                     'voice_sample': voice_sample,
                     'exaggeration': exaggeration,
                     'cfg_weight': cfg_weight,
-                    'temperature': temperature
+                    'temperature': temperature,
+                    'at_chunk_limit': len(chunk_text) == config.MAX_CHUNK_SIZE  # Flag if chunk is at max size
                 }
                 chunk['generated_audios'].append(audio_entry)
 
@@ -2704,7 +2707,7 @@ def chunk_text():
     try:
         data = request.json
         text = data.get('text', '')
-        max_chunk_size = data.get('max_chunk_size', 500)
+        max_chunk_size = data.get('max_chunk_size', config.MAX_CHUNK_SIZE)
 
         if not text:
             return jsonify({'error': 'Text is required'}), 400
@@ -3113,7 +3116,7 @@ def add_gutenberg_url_to_project():
         new_chapters = []
         for detected_chapter in detected_chapters:
             # Chunk the chapter text
-            chunks = converter.smart_chunk_text(detected_chapter['text'], max_chunk_size=500)
+            chunks = converter.smart_chunk_text(detected_chapter['text'])
 
             # Add chunk structure with dirty flag and generated_audios
             for chunk in chunks:
@@ -3419,7 +3422,7 @@ def validate_project_chunks():
             return jsonify({'error': 'No project loaded'}), 400
 
         data = request.json
-        max_chunk_size = data.get('max_chunk_size', 500)
+        max_chunk_size = data.get('max_chunk_size', config.MAX_CHUNK_SIZE)
 
         project_file = os.path.join(converter.current_project_path, 'project.json')
         with open(project_file, 'r') as f:
@@ -3462,7 +3465,7 @@ def auto_rechunk_oversized():
             return jsonify({'error': 'No project loaded'}), 400
 
         data = request.json
-        max_chunk_size = data.get('max_chunk_size', 500)
+        max_chunk_size = data.get('max_chunk_size', config.MAX_CHUNK_SIZE)
         chapter_id = data.get('chapter_id')  # Optional: rechunk specific chapter
 
         project_file = os.path.join(converter.current_project_path, 'project.json')

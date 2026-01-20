@@ -419,6 +419,12 @@ class TTSTab {
                                 <span class="setting-label">Temperature</span>
                                 <span class="setting-value">${firstTake.temperature || this.projectDefaults.temperature}</span>
                             </div>
+                            ${firstTake.at_chunk_limit ? `
+                            <div class="setting-row warning-row">
+                                <span class="material-symbols-outlined warning-icon">warning</span>
+                                <span class="warning-text">Chunk at max size limit</span>
+                            </div>
+                            ` : ''}
                         </div>
                         <div class="take-settings" id="${chunkPreviewId}_settings">
                             <div class="setting-row">
@@ -497,6 +503,12 @@ class TTSTab {
                                     <span class="setting-label">Temperature</span>
                                     <span class="setting-value">${take.temperature || this.projectDefaults.temperature}</span>
                                 </div>
+                                ${take.at_chunk_limit ? `
+                                <div class="setting-row warning-row">
+                                    <span class="material-symbols-outlined warning-icon">warning</span>
+                                    <span class="warning-text">Chunk at max size limit</span>
+                                </div>
+                                ` : ''}
                             </div>
                         </div>
                     `;
@@ -686,6 +698,9 @@ class TTSTab {
 
         console.log('[TTS TAB] Generating audio for chunk:', chunkId);
 
+        // Check if chunk already has takes
+        const hasExistingTakes = chunk.generated_audios && chunk.generated_audios.length > 0;
+
         // Immediately hide settings and show generating state
         const settingsEl = document.querySelector(`[data-chunk-id="${chunkId}"] .take-settings.expanded`);
         if (settingsEl) {
@@ -696,9 +711,21 @@ class TTSTab {
         const rows = document.querySelectorAll(`[data-chunk-id="${chunkId}"]`);
         rows.forEach(row => row.classList.add('generating'));
 
+        // Track this generation
+        this.activeGenerations[chunkId] = {
+            hasExistingTakes: hasExistingTakes,
+            progressInterval: null
+        };
+
+        // If chunk already has takes, create a placeholder for the new take
+        if (hasExistingTakes) {
+            this.showGeneratingPlaceholder(chunkId);
+        }
+
         // Show progress bar
         this.showProgressBar(chunkId);
         const progressInterval = this.startProgressPolling(chunkId);
+        this.activeGenerations[chunkId].progressInterval = progressInterval;
 
         try {
             const response = await fetch(`${SERVER_URL}/api/project/generate-chunk-audio`, {
@@ -726,21 +753,36 @@ class TTSTab {
 
             console.log('[TTS TAB] Audio generated successfully');
 
-            // Clear progress polling
+            // Clear progress polling for this chunk
             clearInterval(progressInterval);
             this.hideProgressBar(chunkId);
+            this.hideGeneratingPlaceholder(chunkId);
+
+            // Remove this chunk from active generations
+            delete this.activeGenerations[chunkId];
 
             // Preserve audio player state before reload
             const wasPlaying = this.audioManager.currentAudio && !this.audioManager.currentAudio.paused;
             const playingUrl = wasPlaying ? this.audioManager.currentAudio.src : null;
             const playbackTime = wasPlaying ? this.audioManager.currentAudio.currentTime : 0;
 
+            // Preserve other generating chunks' state
+            const otherGeneratingChunks = Object.keys(this.activeGenerations).map(id => parseInt(id));
+
             // Reload chapter to get updated takes
             await this.loadChapter(this.currentChapterIndex);
 
-            // Remove generating class
-            const rows = document.querySelectorAll(`[data-chunk-id="${chunkId}"]`);
-            rows.forEach(row => row.classList.remove('generating'));
+            // Restore generating state for other chunks that are still generating
+            for (const otherChunkId of otherGeneratingChunks) {
+                const rows = document.querySelectorAll(`[data-chunk-id="${otherChunkId}"]`);
+                rows.forEach(row => row.classList.add('generating'));
+
+                const genInfo = this.activeGenerations[otherChunkId];
+                if (genInfo.hasExistingTakes) {
+                    this.showGeneratingPlaceholder(otherChunkId);
+                }
+                this.showProgressBar(otherChunkId);
+            }
 
             // Restore audio playback if it was playing
             if (wasPlaying && playingUrl) {
@@ -772,6 +814,15 @@ class TTSTab {
             console.error('Error generating chunk audio:', error);
             clearInterval(progressInterval);
             this.hideProgressBar(chunkId);
+            this.hideGeneratingPlaceholder(chunkId);
+
+            // Remove this chunk from active generations
+            delete this.activeGenerations[chunkId];
+
+            // Remove generating class
+            const rows = document.querySelectorAll(`[data-chunk-id="${chunkId}"]`);
+            rows.forEach(row => row.classList.remove('generating'));
+
             const errorMsg = error.message || 'Unknown error';
             showToast('Failed to generate audio: ' + errorMsg, 'error');
             this.showErrorPlaceholder(chunkId, errorMsg);
@@ -820,6 +871,38 @@ class TTSTab {
     hideProgressBar(chunkId) {
         const progressBars = document.querySelectorAll(`[data-chunk-id="${chunkId}"] .chunk-progress-bar`);
         progressBars.forEach(bar => bar.remove());
+    }
+
+    showGeneratingPlaceholder(chunkId) {
+        // Find the last take row for this chunk
+        const rows = document.querySelectorAll(`[data-chunk-id="${chunkId}"]`);
+        if (rows.length === 0) return;
+
+        const lastRow = rows[rows.length - 1];
+
+        // Remove any existing placeholder
+        this.hideGeneratingPlaceholder(chunkId);
+
+        // Create a placeholder row for the generating take
+        const placeholder = document.createElement('div');
+        placeholder.className = 'chunk-take-row additional-take generating-placeholder';
+        placeholder.setAttribute('data-chunk-id', chunkId);
+        placeholder.innerHTML = `
+            <div class="chunk-take-header">
+                <div class="chunk-left"></div>
+                <div class="take-icons">
+                    <span class="generating-text">Generating take...</span>
+                </div>
+            </div>
+        `;
+
+        // Insert after the last take row
+        lastRow.parentNode.insertBefore(placeholder, lastRow.nextSibling);
+    }
+
+    hideGeneratingPlaceholder(chunkId) {
+        const placeholders = document.querySelectorAll(`[data-chunk-id="${chunkId}"].generating-placeholder`);
+        placeholders.forEach(p => p.remove());
     }
 
     startProgressPolling(chunkId) {
