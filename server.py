@@ -844,7 +844,10 @@ class TextToAudioConverter:
             with self.generation_lock:
                 self.current_generation = None
 
-            return output_path
+            return {
+                'path': output_path,
+                'duration_seconds': audio_duration_sec
+            }
         except Exception as e:
             # Emit error via WebSocket
             if config.ENABLE_WEBSOCKET:
@@ -875,7 +878,8 @@ class TextToAudioConverter:
             if len(text) > 1000:
                 text = text[:1000] + "..."
 
-            audio_path = self.generate_audio(text, audio_path)
+            result = self.generate_audio(text, audio_path)
+            audio_path = result['path']
 
         return audio_path
 
@@ -1017,7 +1021,7 @@ def generate_from_upload():
         if not os.path.exists(audio_path):
             print(f"Generating audio for: {filename}...")
             print(f"Text preview: {text[:100]}...")
-            converter.generate_audio(
+            result = converter.generate_audio(
                 text,
                 audio_path,
                 audio_prompt_path=audio_prompt_path,
@@ -1025,7 +1029,7 @@ def generate_from_upload():
                 exaggeration=exaggeration,
                 cfg_weight=cfg_weight
             )
-            print(f"Audio generated successfully!")
+            print(f"Audio generated successfully! Duration: {result['duration_seconds']:.2f}s")
 
             # Save metadata
             with open(metadata_path, 'w') as f:
@@ -2311,8 +2315,8 @@ def generate_project_chunk_audio():
         audio_filename = f"chunk{chunk_id}_{timestamp}.wav"
         audio_path = os.path.join(converter.audio_dir, audio_filename)
 
-        # Generate the audio (returns path on success, raises exception on error)
-        generated_path = converter.generate_audio(
+        # Generate the audio (returns dict with path and duration)
+        generation_result = converter.generate_audio(
             text=chunk_text,
             output_path=audio_path,
             audio_prompt_path=audio_prompt_path,
@@ -2321,9 +2325,18 @@ def generate_project_chunk_audio():
             cfg_weight=cfg_weight
         )
 
+        # Extract path and duration from result
+        generated_path = generation_result['path']
+        audio_duration = generation_result['duration_seconds']
+
         # Extract just the filename from the path
         audio_file = os.path.basename(generated_path)
         audio_url = f"/api/audio/{audio_file}"
+
+        # Check if audio is at or near the Chatterbox TTS 40-second limit
+        # Flag if duration >= 39.5 seconds (might be truncated)
+        CHATTERBOX_MAX_DURATION = 40.0
+        possibly_truncated = audio_duration >= (CHATTERBOX_MAX_DURATION - 0.5)
 
         # Update project metadata with the new audio
         # Use O(1) lookup dictionaries instead of O(n) linear search
@@ -2347,7 +2360,8 @@ def generate_project_chunk_audio():
                     'exaggeration': exaggeration,
                     'cfg_weight': cfg_weight,
                     'temperature': temperature,
-                    'at_chunk_limit': len(chunk_text) == config.MAX_CHUNK_SIZE  # Flag if chunk is at max size
+                    'audio_duration_seconds': round(audio_duration, 2),
+                    'possibly_truncated': possibly_truncated
                 }
                 chunk['generated_audios'].append(audio_entry)
 
@@ -2784,7 +2798,7 @@ def generate_chunk():
 
         # Generate audio using clean text (no XML tags)
         print(f"Generating audio for chunk {chunk_id}...")
-        converter.generate_audio(
+        result = converter.generate_audio(
             clean_text,
             audio_path,
             audio_prompt_path=audio_prompt_path,
@@ -3240,7 +3254,7 @@ def generate_all_chapter_chunks():
                 print(f"Generating audio for chunk {chunk['id']}... ({len(clean_text)} chars)")
 
                 # Generate audio
-                converter.generate_audio(
+                result = converter.generate_audio(
                     clean_text,
                     audio_path,
                     audio_prompt_path=audio_prompt_path,

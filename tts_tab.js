@@ -419,10 +419,16 @@ class TTSTab {
                                 <span class="setting-label">Temperature</span>
                                 <span class="setting-value">${firstTake.temperature || this.projectDefaults.temperature}</span>
                             </div>
-                            ${firstTake.at_chunk_limit ? `
+                            ${firstTake.audio_duration_seconds ? `
+                            <div class="setting-row">
+                                <span class="setting-label">Duration</span>
+                                <span class="setting-value">${firstTake.audio_duration_seconds}s</span>
+                            </div>
+                            ` : ''}
+                            ${firstTake.possibly_truncated ? `
                             <div class="setting-row warning-row">
                                 <span class="material-symbols-outlined warning-icon">warning</span>
-                                <span class="warning-text">Chunk at max size limit</span>
+                                <span class="warning-text">May be truncated (at 40s TTS limit)</span>
                             </div>
                             ` : ''}
                         </div>
@@ -503,10 +509,16 @@ class TTSTab {
                                     <span class="setting-label">Temperature</span>
                                     <span class="setting-value">${take.temperature || this.projectDefaults.temperature}</span>
                                 </div>
-                                ${take.at_chunk_limit ? `
+                                ${take.audio_duration_seconds ? `
+                                <div class="setting-row">
+                                    <span class="setting-label">Duration</span>
+                                    <span class="setting-value">${take.audio_duration_seconds}s</span>
+                                </div>
+                                ` : ''}
+                                ${take.possibly_truncated ? `
                                 <div class="setting-row warning-row">
                                     <span class="material-symbols-outlined warning-icon">warning</span>
-                                    <span class="warning-text">Chunk at max size limit</span>
+                                    <span class="warning-text">May be truncated (at 40s TTS limit)</span>
                                 </div>
                                 ` : ''}
                             </div>
