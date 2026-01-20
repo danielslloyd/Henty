@@ -943,12 +943,19 @@ class TTSTab {
                 });
                 const data = await response.json();
 
+                console.log(`[TTS TAB] Progress poll for chunk ${chunkId}:`, data);
+
                 if (data.in_progress) {
                     const progress = data.progress_percent || 0;
+                    console.log(`[TTS TAB] Updating progress to ${progress}% for chunk ${chunkId}`);
                     const fills = document.querySelectorAll(`.chunk-progress-fill[data-chunk-id="${chunkId}"]`);
+                    console.log(`[TTS TAB] Found ${fills.length} progress fill elements`);
                     fills.forEach(fill => {
                         fill.style.width = `${Math.min(progress, 95)}%`;
+                        console.log(`[TTS TAB] Set width to ${Math.min(progress, 95)}%`);
                     });
+                } else {
+                    console.log(`[TTS TAB] No generation in progress for chunk ${chunkId}`);
                 }
             } catch (error) {
                 console.error('Error polling progress:', error);
