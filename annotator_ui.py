@@ -434,7 +434,7 @@ def main():
 
     demo.launch(
         share=False,
-        server_name="0.0.0.0",
+        server_name="127.0.0.1",  # Localhost only for security
         server_port=7860,
         show_error=True
     )

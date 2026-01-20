@@ -1,6 +1,6 @@
 # Henty Project Dependencies
-# Updated: 2026-01-20 - Security patch release
-# CRITICAL: Updated gradio (6 CVEs) and flask-cors (4 CVEs)
+# Updated: 2026-01-20
+# See DEPENDENCY_AUDIT.md for details on changes
 
 # Core Web Framework
 flask>=3.1.2
@@ -20,7 +20,7 @@ scipy>=1.17.0
 # Audio Processing
 pydub>=0.25.1
 
-# UI Framework (CRITICAL SECURITY UPDATE)
+# UI Framework
 gradio>=4.31.3
 
 # HTTP Client
