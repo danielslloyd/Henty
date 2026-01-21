@@ -52,7 +52,13 @@ class TextToAudioConverter:
         print("\n" + "="*80)
         print("GPU/CUDA INITIALIZATION")
         print("="*80)
+
+        # Show which Python is running
+        import sys
+        print(f"Python executable: {sys.executable}")
+        print(f"Python version: {sys.version.split()[0]}")
         print(f"PyTorch version: {torch.__version__}")
+        print(f"PyTorch location: {torch.__file__}")
         print(f"CUDA available: {torch.cuda.is_available()}")
 
         if torch.cuda.is_available():
@@ -62,14 +68,15 @@ class TextToAudioConverter:
             print(f"GPU Name: {torch.cuda.get_device_name(0)}")
             print(f"GPU Memory: {torch.cuda.get_device_properties(0).total_memory / 1e9:.2f} GB")
         else:
+            import sys
             print("WARNING: CUDA is not available!")
-            print("Possible causes:")
-            print("  1. PyTorch was installed without CUDA support")
-            print("  2. NVIDIA GPU drivers are not installed")
-            print("  3. CUDA toolkit is not installed or incompatible")
-            print("\nTo fix:")
-            print("  - Check: nvidia-smi (should show your GPU)")
-            print("  - Reinstall PyTorch with CUDA: https://pytorch.org/get-started/locally/")
+            print("\nThis Python has PyTorch WITHOUT CUDA support.")
+            print("The CPU version of PyTorch is installed at:")
+            print(f"  {torch.__file__}")
+            print("\nTo fix, run these commands:")
+            print(f"\n  {sys.executable} -m pip uninstall torch torchvision torchaudio -y")
+            print(f"  {sys.executable} -m pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu130")
+            print("\nThen restart the server.")
 
         self.device = "cuda" if torch.cuda.is_available() else "cpu"
         print(f"\nUsing device: {self.device}")
