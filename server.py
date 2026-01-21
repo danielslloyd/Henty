@@ -47,7 +47,34 @@ auth_manager = AuthManager(api_key=config.API_KEY, require_auth=config.REQUIRE_A
 class TextToAudioConverter:
     def __init__(self):
         self.model = None
+
+        # Detailed CUDA diagnostics
+        print("\n" + "="*80)
+        print("GPU/CUDA INITIALIZATION")
+        print("="*80)
+        print(f"PyTorch version: {torch.__version__}")
+        print(f"CUDA available: {torch.cuda.is_available()}")
+
+        if torch.cuda.is_available():
+            print(f"CUDA version: {torch.version.cuda}")
+            print(f"Number of GPUs: {torch.cuda.device_count()}")
+            print(f"Current GPU: {torch.cuda.current_device()}")
+            print(f"GPU Name: {torch.cuda.get_device_name(0)}")
+            print(f"GPU Memory: {torch.cuda.get_device_properties(0).total_memory / 1e9:.2f} GB")
+        else:
+            print("WARNING: CUDA is not available!")
+            print("Possible causes:")
+            print("  1. PyTorch was installed without CUDA support")
+            print("  2. NVIDIA GPU drivers are not installed")
+            print("  3. CUDA toolkit is not installed or incompatible")
+            print("\nTo fix:")
+            print("  - Check: nvidia-smi (should show your GPU)")
+            print("  - Reinstall PyTorch with CUDA: https://pytorch.org/get-started/locally/")
+
         self.device = "cuda" if torch.cuda.is_available() else "cpu"
+        print(f"\nUsing device: {self.device}")
+        print("="*80 + "\n")
+
         self.audio_dir = "generated_audio"
         self.voice_samples_dir = "voice_samples"
         self.common_files_dir = config.COMMON_FILES_DIR
