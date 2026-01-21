@@ -773,38 +773,27 @@ class TTSTab {
             // Remove this chunk from active generations
             delete this.activeGenerations[chunkId];
 
+            // Check if other chunks are still generating
+            const otherGeneratingChunks = Object.keys(this.activeGenerations);
+            const hasOthersGenerating = otherGeneratingChunks.length > 0;
+
+            console.log(`[TTS TAB] Other chunks still generating: ${otherGeneratingChunks.join(', ')}`);
+
             // Preserve audio player state before reload
             const wasPlaying = this.audioManager.currentAudio && !this.audioManager.currentAudio.paused;
             const playingUrl = wasPlaying ? this.audioManager.currentAudio.src : null;
             const playbackTime = wasPlaying ? this.audioManager.currentAudio.currentTime : 0;
 
-            // Preserve other generating chunks' state
-            const otherGeneratingChunks = Object.keys(this.activeGenerations).map(id => parseInt(id));
-
-            // Reload chapter to get updated takes
-            await this.loadChapter(this.currentChapterIndex);
-
-            // Restore generating state for other chunks that are still generating
-            console.log(`[TTS TAB] Restoring ${otherGeneratingChunks.length} other generating chunks`);
-            for (const otherChunkId of otherGeneratingChunks) {
-                const genInfo = this.activeGenerations[otherChunkId];
-
-                // Skip if this chunk has already finished (race condition)
-                if (!genInfo) {
-                    console.log(`[TTS TAB] Skipping chunk ${otherChunkId} - already finished`);
-                    continue;
-                }
-
-                console.log(`[TTS TAB] Restoring chunk ${otherChunkId} with genInfo:`, genInfo);
-
-                const rows = document.querySelectorAll(`.chunk-take-row[data-chunk-id="${otherChunkId}"]`);
-                console.log(`[TTS TAB] Found ${rows.length} take rows for chunk ${otherChunkId}`);
-                rows.forEach(row => row.classList.add('generating'));
-
-                if (genInfo.hasExistingTakes) {
-                    this.showGeneratingPlaceholder(otherChunkId);
-                }
-                this.showProgressBar(otherChunkId);
+            // Only reload chapter if no other chunks are generating
+            // This prevents progress bars from being destroyed while other generations are active
+            if (!hasOthersGenerating) {
+                console.log('[TTS TAB] No other generations active, reloading chapter');
+                await this.loadChapter(this.currentChapterIndex);
+            } else {
+                console.log('[TTS TAB] Other generations still active, skipping chapter reload');
+                // Just remove generating class from this chunk's rows
+                const rows = document.querySelectorAll(`.chunk-take-row[data-chunk-id="${chunkId}"]`);
+                rows.forEach(row => row.classList.remove('generating'));
             }
 
             // Restore audio playback if it was playing
@@ -879,12 +868,10 @@ class TTSTab {
     showProgressBar(chunkId) {
         // Only select take rows, not text preview spans
         const rows = document.querySelectorAll(`.chunk-take-row[data-chunk-id="${chunkId}"]`);
-        console.log(`[TTS TAB] showProgressBar for chunk ${chunkId}: found ${rows.length} take rows`);
 
         rows.forEach(row => {
             // Check if progress bar already exists
             if (row.querySelector('.chunk-progress-bar')) {
-                console.log(`[TTS TAB] Progress bar already exists for chunk ${chunkId}`);
                 return;
             }
 
@@ -894,7 +881,6 @@ class TTSTab {
                 <div class="chunk-progress-fill" data-chunk-id="${chunkId}"></div>
             `;
             row.appendChild(progressBar);
-            console.log(`[TTS TAB] Created progress bar for chunk ${chunkId}`);
         });
     }
 
@@ -943,19 +929,12 @@ class TTSTab {
                 });
                 const data = await response.json();
 
-                console.log(`[TTS TAB] Progress poll for chunk ${chunkId}:`, data);
-
                 if (data.in_progress) {
                     const progress = data.progress_percent || 0;
-                    console.log(`[TTS TAB] Updating progress to ${progress}% for chunk ${chunkId}`);
                     const fills = document.querySelectorAll(`.chunk-progress-fill[data-chunk-id="${chunkId}"]`);
-                    console.log(`[TTS TAB] Found ${fills.length} progress fill elements`);
                     fills.forEach(fill => {
                         fill.style.width = `${Math.min(progress, 95)}%`;
-                        console.log(`[TTS TAB] Set width to ${Math.min(progress, 95)}%`);
                     });
-                } else {
-                    console.log(`[TTS TAB] No generation in progress for chunk ${chunkId}`);
                 }
             } catch (error) {
                 console.error('Error polling progress:', error);
