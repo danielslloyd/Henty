@@ -128,9 +128,27 @@ class TextToAudioConverter:
     def load_model(self):
         """Load the Chatterbox TTS model"""
         if self.model is None:
-            print(f"Loading Chatterbox TTS model on {self.device}...")
+            print(f"\n{'='*80}")
+            print(f"Loading Chatterbox TTS model...")
+            print(f"Device: {self.device}")
+            print(f"CUDA Available: {torch.cuda.is_available()}")
+            if torch.cuda.is_available():
+                print(f"CUDA Device: {torch.cuda.get_device_name(0)}")
+                print(f"CUDA Version: {torch.version.cuda}")
+            print(f"{'='*80}\n")
+
             self.model = ChatterboxTTS.from_pretrained(device=self.device)
-            print("Model loaded successfully!")
+
+            # Verify model is on correct device
+            model_device = next(self.model.parameters()).device
+            print(f"\n{'='*80}")
+            print(f"Model loaded successfully!")
+            print(f"Model device: {model_device}")
+            if str(model_device) != self.device and not (self.device == "cuda" and "cuda" in str(model_device)):
+                print(f"WARNING: Model device ({model_device}) does not match expected device ({self.device})")
+            else:
+                print(f"✓ Model confirmed on {model_device}")
+            print(f"{'='*80}\n")
         return self.model
 
     def load_stats(self):
@@ -776,8 +794,13 @@ class TextToAudioConverter:
             if language_id != "en":
                 gen_params["language_id"] = language_id
 
+            # Get actual model device
+            model_device = next(model.parameters()).device
+            device_name = "GPU" if "cuda" in str(model_device) else "CPU"
+
             print(f"Generating with parameters: {gen_params}")
             print(f"Text length: {char_count} characters")
+            print(f"Device: {device_name} ({model_device})")
 
             wav = model.generate(text, **gen_params)
             print(f"Generated wav type: {type(wav)}, shape: {wav.shape if hasattr(wav, 'shape') else 'N/A'}")
@@ -2304,9 +2327,18 @@ def generate_project_chunk_audio():
                 print(f"Warning: Voice sample not found: {audio_prompt_path}")
                 audio_prompt_path = None
 
-        print(f"\n=== Generating audio for project chunk ===")
+        # Check device before generation
+        model_device = "CPU"
+        if converter.model is not None:
+            device = next(converter.model.parameters()).device
+            model_device = "GPU" if "cuda" in str(device) else "CPU"
+        elif torch.cuda.is_available():
+            model_device = "GPU (will load)"
+        else:
+            model_device = "CPU"
+
+        print(f"\n=== Generating audio for chunk {chunk_id} on {model_device} ===")
         print(f"Text file ID: {text_file_id}")
-        print(f"Chunk ID: {chunk_id}")
         print(f"Voice: {voice_sample}")
         print(f"Exaggeration: {exaggeration}, CFG: {cfg_weight}, Temp: {temperature}")
 
@@ -3251,7 +3283,15 @@ def generate_all_chapter_chunks():
                 audio_filename = f"{chapter_title_safe}_chunk{chunk['id']}_{timestamp}.wav"
                 audio_path = os.path.join(audio_dir, audio_filename)
 
-                print(f"Generating audio for chunk {chunk['id']}... ({len(clean_text)} chars)")
+                # Check device
+                model_device = "CPU"
+                if converter.model is not None:
+                    device = next(converter.model.parameters()).device
+                    model_device = "GPU" if "cuda" in str(device) else "CPU"
+                elif torch.cuda.is_available():
+                    model_device = "GPU (will load)"
+
+                print(f"Generating audio for chunk {chunk['id']} on {model_device}... ({len(clean_text)} chars)")
 
                 # Generate audio
                 result = converter.generate_audio(
