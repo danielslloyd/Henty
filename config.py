@@ -45,6 +45,10 @@ class ServerConfig:
         # Text chunking settings
         self.MAX_CHUNK_SIZE = int(os.getenv('MAX_CHUNK_SIZE', '500'))
 
+        # Generation settings
+        self.MAX_PARALLEL_GENERATIONS = int(os.getenv('MAX_PARALLEL_GENERATIONS', '3'))
+        self.DEVICE_PREFERENCE = os.getenv('DEVICE_PREFERENCE', 'auto')  # auto, cuda, cpu
+
         # Initialize API key if needed
         if self.REQUIRE_AUTH and not self.API_KEY:
             self._generate_api_key()
