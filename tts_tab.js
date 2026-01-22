@@ -89,6 +89,14 @@ class TTSTab {
         this.selectedChunkId = null;
         this.selectedChunkElement = null; // Cache selected chunk DOM element
         this.audioManager = new AudioManager();
+        this.generationStatusToast = null; // Track the single generation status toast
+
+        // Sequential playback state
+        this.sequentialPlayback = {
+            isPlaying: false,
+            currentChunkIndex: 0,
+            audio: null
+        };
     }
 
     async init() {
@@ -367,10 +375,8 @@ class TTSTab {
         const chunkPreviewId = `chunk_preview_${chunk.id}`;
 
         if (audioList.length > 0) {
-                // Sort takes: best take first, then by timestamp
+                // Sort takes by timestamp only (keep generation order)
                 const sortedAudio = [...audioList].sort((a, b) => {
-                    if (a.is_best_take && !b.is_best_take) return -1;
-                    if (!a.is_best_take && b.is_best_take) return 1;
                     return (a.timestamp || 0) - (b.timestamp || 0);
                 });
 
@@ -830,7 +836,7 @@ class TTSTab {
                 exaggeration,
                 cfgWeight
             });
-            showToast(`Queued (${this.generationQueue.length} waiting)`, 'info');
+            this.updateGenerationStatusToast();
             return;
         }
 
@@ -855,13 +861,16 @@ class TTSTab {
             progressInterval: null
         };
 
+        // Update generation status toast
+        this.updateGenerationStatusToast();
+
         // If chunk already has takes, create a placeholder for the new take
         if (hasExistingTakes) {
             this.showGeneratingPlaceholder(chunkId);
         }
 
-        // Show progress bar
-        this.showProgressBar(chunkId);
+        // Show progress bar (only on placeholder if regenerating)
+        this.showProgressBar(chunkId, hasExistingTakes);
         const progressInterval = this.startProgressPolling(chunkId);
         this.activeGenerations[chunkId].progressInterval = progressInterval;
 
@@ -901,6 +910,9 @@ class TTSTab {
 
             // Process next item in queue if any
             this.processNextInQueue();
+
+            // Update generation status toast
+            this.updateGenerationStatusToast();
 
             // Check if other chunks are still generating
             const otherGeneratingChunks = Object.keys(this.activeGenerations);
@@ -962,6 +974,9 @@ class TTSTab {
             // Process next item in queue if any
             this.processNextInQueue();
 
+            // Update generation status toast
+            this.updateGenerationStatusToast();
+
             // Remove generating class from take rows
             const rows = document.querySelectorAll(`.chunk-take-row[data-chunk-id="${chunkId}"]`);
             rows.forEach(row => row.classList.remove('generating'));
@@ -978,7 +993,6 @@ class TTSTab {
             if (activeCount < this.maxParallelGenerations) {
                 const nextGen = this.generationQueue.shift();
                 console.log(`[TTS TAB] Processing next in queue: chunk ${nextGen.chunkId}`);
-                showToast(`Starting queued generation (${this.generationQueue.length} remaining)`, 'info');
 
                 // Restore the parameters and call generateChunkAudio
                 // We need to set the UI values before calling generateChunkAudio
@@ -1020,9 +1034,15 @@ class TTSTab {
         return div.innerHTML;
     }
 
-    showProgressBar(chunkId) {
-        // Only select take rows, not text preview spans
-        const rows = document.querySelectorAll(`.chunk-take-row[data-chunk-id="${chunkId}"]`);
+    showProgressBar(chunkId, onlyPlaceholder = false) {
+        // If regenerating, only add progress bar to placeholder
+        // Otherwise, add to all rows with this chunk-id
+        let selector = `.chunk-take-row[data-chunk-id="${chunkId}"]`;
+        if (onlyPlaceholder) {
+            selector += '.generating-placeholder';
+        }
+
+        const rows = document.querySelectorAll(selector);
 
         rows.forEach(row => {
             // Check if progress bar already exists
@@ -1248,6 +1268,165 @@ class TTSTab {
 
     updateDefaultVoice(voiceSample) {
         this.projectDefaults.voice_sample = voiceSample;
+    }
+
+    updateGenerationStatusToast() {
+        const activeCount = Object.keys(this.activeGenerations).length;
+        const queuedCount = this.generationQueue.length;
+
+        if (activeCount === 0 && queuedCount === 0) {
+            // No generations - remove toast if it exists
+            if (this.generationStatusToast) {
+                this.generationStatusToast.classList.add('fade-out');
+                setTimeout(() => {
+                    if (this.generationStatusToast && this.generationStatusToast.parentNode) {
+                        this.generationStatusToast.remove();
+                    }
+                    this.generationStatusToast = null;
+                }, 300);
+            }
+            return;
+        }
+
+        // Build status message
+        let message = `Generating: ${activeCount} active`;
+        if (queuedCount > 0) {
+            message += `, ${queuedCount} queued`;
+        }
+
+        if (!this.generationStatusToast || !this.generationStatusToast.parentNode) {
+            // Create new toast
+            const container = document.getElementById('toastContainer') || this.createToastContainer();
+
+            const toast = document.createElement('div');
+            toast.className = 'toast info generation-status-toast';
+            toast.innerHTML = `
+                <span class="toast-icon material-symbols-outlined">sync</span>
+                <div class="toast-content">
+                    <div class="toast-message">${message}</div>
+                </div>
+            `;
+
+            container.appendChild(toast);
+            this.generationStatusToast = toast;
+        } else {
+            // Update existing toast
+            const messageEl = this.generationStatusToast.querySelector('.toast-message');
+            if (messageEl) {
+                messageEl.textContent = message;
+            }
+        }
+    }
+
+    createToastContainer() {
+        const container = document.createElement('div');
+        container.id = 'toastContainer';
+        document.body.appendChild(container);
+        return container;
+    }
+
+    togglePlayAllBestTakes() {
+        if (this.sequentialPlayback.isPlaying) {
+            // Pause playback
+            this.pauseSequentialPlayback();
+        } else {
+            // Start or resume playback
+            this.startSequentialPlayback();
+        }
+    }
+
+    startSequentialPlayback() {
+        if (!this.currentChapter || !this.currentChapter.chunks) {
+            showToast('No chapter loaded', 'error');
+            return;
+        }
+
+        this.sequentialPlayback.isPlaying = true;
+        this.updatePlayAllButton();
+
+        // If no chunk index set, start from beginning
+        if (this.sequentialPlayback.currentChunkIndex === undefined ||
+            this.sequentialPlayback.currentChunkIndex >= this.currentChapter.chunks.length) {
+            this.sequentialPlayback.currentChunkIndex = 0;
+        }
+
+        this.playNextBestTake();
+    }
+
+    pauseSequentialPlayback() {
+        this.sequentialPlayback.isPlaying = false;
+
+        if (this.sequentialPlayback.audio) {
+            this.sequentialPlayback.audio.pause();
+        }
+
+        this.updatePlayAllButton();
+    }
+
+    playNextBestTake() {
+        if (!this.sequentialPlayback.isPlaying) {
+            return;
+        }
+
+        const chunks = this.currentChapter.chunks || [];
+
+        // Find next chunk with a best take
+        while (this.sequentialPlayback.currentChunkIndex < chunks.length) {
+            const chunk = chunks[this.sequentialPlayback.currentChunkIndex];
+            const bestTake = (chunk.generated_audios || []).find(audio => audio.is_best_take);
+
+            if (bestTake) {
+                // Found a best take, play it
+                console.log(`[TTS TAB] Playing best take for chunk ${this.sequentialPlayback.currentChunkIndex}`);
+
+                const audio = new Audio(SERVER_URL + bestTake.audio_url);
+                this.sequentialPlayback.audio = audio;
+
+                audio.addEventListener('ended', () => {
+                    this.sequentialPlayback.currentChunkIndex++;
+                    this.playNextBestTake();
+                });
+
+                audio.addEventListener('error', (e) => {
+                    console.error('[TTS TAB] Error playing audio:', e);
+                    showToast('Error playing audio, skipping to next', 'error');
+                    this.sequentialPlayback.currentChunkIndex++;
+                    this.playNextBestTake();
+                });
+
+                audio.play().catch(err => {
+                    console.error('[TTS TAB] Error starting playback:', err);
+                    showToast('Error starting playback', 'error');
+                    this.pauseSequentialPlayback();
+                });
+
+                return;
+            }
+
+            // No best take for this chunk, move to next
+            this.sequentialPlayback.currentChunkIndex++;
+        }
+
+        // Reached end of chapter
+        console.log('[TTS TAB] Sequential playback complete');
+        this.sequentialPlayback.currentChunkIndex = 0;
+        this.sequentialPlayback.isPlaying = false;
+        this.updatePlayAllButton();
+        showToast('Playback complete', 'success');
+    }
+
+    updatePlayAllButton() {
+        const btn = document.getElementById('playAllBestTakesBtn');
+        if (!btn) return;
+
+        const icon = btn.querySelector('.material-symbols-outlined');
+        if (this.sequentialPlayback.isPlaying) {
+            icon.textContent = 'pause';
+            btn.innerHTML = icon.outerHTML + ' Pause';
+        } else {
+            icon.textContent = 'play_arrow';
+            btn.innerHTML = icon.outerHTML + ' Play All';
+        }
     }
 
     showStatus(message, type) {
