@@ -358,23 +358,15 @@ class TTSTab {
         return html;
     }
 
-    renderChunkDetails() {
-        if (!this.currentChapter) return '';
+    renderSingleChunk(chunk, takeCounter = 0) {
+        // Renders a single chunk's take rows
+        let html = '';
 
-        const chunks = this.currentChapter.chunks || [];
-        if (chunks.length === 0) {
-            return '<div style="padding: 40px 20px; text-align: center; color: #94a3b8;">No chunks available</div>';
-        }
+        const audioList = chunk.generated_audios || [];
+        const chunkPreview = chunk.text.substring(0, 48) + (chunk.text.length > 48 ? '...' : '');
+        const chunkPreviewId = `chunk_preview_${chunk.id}`;
 
-        let allTakesHtml = '';
-        let takeCounter = 0;
-
-        chunks.forEach((chunk) => {
-            const audioList = chunk.generated_audios || [];
-            const chunkPreview = chunk.text.substring(0, 48) + (chunk.text.length > 48 ? '...' : '');
-            const chunkPreviewId = `chunk_preview_${chunk.id}`;
-
-            if (audioList.length > 0) {
+        if (audioList.length > 0) {
                 // Sort takes: best take first, then by timestamp
                 const sortedAudio = [...audioList].sort((a, b) => {
                     if (a.is_best_take && !b.is_best_take) return -1;
@@ -387,7 +379,7 @@ class TTSTab {
                 const isBest = firstTake.is_best_take;
                 const takeId = `take_${chunk.id}_${takeCounter++}`;
 
-                allTakesHtml += `
+                html += `
                     <div class="chunk-take-row ${isBest ? 'best-take' : 'non-best-take'}"
                          data-chunk-id="${chunk.id}">
                         <div class="chunk-take-header"
@@ -555,9 +547,9 @@ class TTSTab {
                         </div>
                     `;
                 }
-            } else {
-                // No takes: just chunk preview with tune/add icons
-                allTakesHtml += `
+        } else {
+            // No takes: just chunk preview with tune/add icons
+            html += `
                     <div class="chunk-take-row no-takes"
                          data-chunk-id="${chunk.id}">
                         <div class="chunk-take-header"
@@ -603,10 +595,100 @@ class TTSTab {
                         </div>
                     </div>
                 `;
-            }
+        }
+
+        return html;
+    }
+
+    renderChunkDetails() {
+        if (!this.currentChapter) return '';
+
+        const chunks = this.currentChapter.chunks || [];
+        if (chunks.length === 0) {
+            return '<div style="padding: 40px 20px; text-align: center; color: #94a3b8;">No chunks available</div>';
+        }
+
+        let allTakesHtml = '';
+        let takeCounter = 0;
+
+        chunks.forEach((chunk) => {
+            allTakesHtml += this.renderSingleChunk(chunk, takeCounter);
+            takeCounter += (chunk.generated_audios || []).length;
         });
 
         return allTakesHtml || '<div style="padding: 40px 20px; text-align: center; color: #94a3b8;">No takes available</div>';
+    }
+
+    async reloadSingleChunk(chunkId) {
+        // Reloads just one chunk's UI after generation completes
+        // This preserves progress bars of other generating chunks
+        try {
+            console.log(`[TTS TAB] Reloading UI for chunk ${chunkId}`);
+
+            // Fetch updated chapter data
+            const response = await fetch(`${SERVER_URL}/api/project/info`, {
+                headers: {
+                    'X-API-Key': API_KEY
+                }
+            });
+
+            if (!response.ok) {
+                console.error('[TTS TAB] Failed to fetch project info');
+                return;
+            }
+
+            const projectInfo = await response.json();
+            const chapters = projectInfo.metadata?.chapters || projectInfo.chapters || [];
+            const updatedChapter = chapters[this.currentChapterIndex];
+
+            if (!updatedChapter) {
+                console.error('[TTS TAB] Updated chapter not found');
+                return;
+            }
+
+            // Update the current chapter data
+            this.currentChapter = updatedChapter;
+
+            // Find the updated chunk
+            const updatedChunk = updatedChapter.chunks.find(c => c.id === chunkId);
+            if (!updatedChunk) {
+                console.error(`[TTS TAB] Chunk ${chunkId} not found in updated data`);
+                return;
+            }
+
+            // Render the updated chunk HTML
+            const newChunkHtml = this.renderSingleChunk(updatedChunk, 0);
+
+            // Find and replace the old chunk rows in the DOM
+            const oldRows = document.querySelectorAll(`.chunk-take-row[data-chunk-id="${chunkId}"]`);
+
+            if (oldRows.length === 0) {
+                console.warn(`[TTS TAB] No existing rows found for chunk ${chunkId}`);
+                return;
+            }
+
+            // Create a temporary container to parse the new HTML
+            const tempContainer = document.createElement('div');
+            tempContainer.innerHTML = newChunkHtml;
+            const newRows = tempContainer.querySelectorAll(`.chunk-take-row[data-chunk-id="${chunkId}"]`);
+
+            // Replace old rows with new ones
+            const firstOldRow = oldRows[0];
+            const parent = firstOldRow.parentNode;
+
+            // Insert new rows before the first old row
+            newRows.forEach(newRow => {
+                parent.insertBefore(newRow, firstOldRow);
+            });
+
+            // Remove all old rows
+            oldRows.forEach(row => row.remove());
+
+            console.log(`[TTS TAB] Successfully reloaded UI for chunk ${chunkId}`);
+
+        } catch (error) {
+            console.error(`[TTS TAB] Error reloading chunk ${chunkId}:`, error);
+        }
     }
 
     renderVoiceSampleOptions() {
@@ -837,10 +919,9 @@ class TTSTab {
                 console.log('[TTS TAB] No other generations active, reloading chapter');
                 await this.loadChapter(this.currentChapterIndex);
             } else {
-                console.log('[TTS TAB] Other generations still active, skipping chapter reload');
-                // Just remove generating class from this chunk's rows
-                const rows = document.querySelectorAll(`.chunk-take-row[data-chunk-id="${chunkId}"]`);
-                rows.forEach(row => row.classList.remove('generating'));
+                console.log('[TTS TAB] Other generations still active, reloading just this chunk');
+                // Reload just this chunk's UI to show the new take
+                await this.reloadSingleChunk(chunkId);
             }
 
             // Restore audio playback if it was playing
