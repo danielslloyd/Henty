@@ -1122,6 +1122,10 @@
             <div class="pane-header">
                 <h2>TTS Generation</h2>
                 <div class="pane-actions">
+                    <button class="pane-btn" id="playAllBestTakesBtn" onclick="ttsTab.togglePlayAllBestTakes()">
+                        <span class="material-symbols-outlined" style="font-size: 16px; vertical-align: middle;">play_arrow</span>
+                        Play All
+                    </button>
                     <button class="pane-btn" onclick="ttsTab.generateAllChunks()">Generate All</button>
                     <button class="pane-btn" onclick="ttsTab.stitchBestTakes()">Stitch Best Takes</button>
                     <button class="pane-btn" onclick="ttsTab.refreshChapters()">Refresh</button>
