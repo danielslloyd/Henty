@@ -1206,7 +1206,10 @@ class TTSTab {
         modal.style.cssText = 'position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.7); z-index: 2000; display: flex; align-items: center; justify-content: center;';
         modal.innerHTML = `
             <div style="background: white; padding: 30px; border-radius: 15px; max-width: 500px; box-shadow: 0 20px 60px rgba(0,0,0,0.5);">
-                <h3 style="margin-bottom: 15px; color: #667eea;">✅ Stitched Audio Ready!</h3>
+                <h3 style="margin-bottom: 15px; color: #1e293b;">
+                    <span class="material-symbols-outlined" style="vertical-align: middle; color: #10b981;">check_circle</span>
+                    Stitched Audio Ready!
+                </h3>
                 <p style="margin-bottom: 15px; color: #666;">
                     Successfully combined ${result.metadata?.chunk_count || 'all'} chunks into one audio file.
                 </p>
@@ -1217,17 +1220,24 @@ class TTSTab {
                    class="pane-btn" style="width: 100%; display: block; text-align: center; text-decoration: none; margin-bottom: 10px;">
                     Download
                 </a>
-                <button class="pane-btn secondary" onclick="this.closest('div[style*=\"position: fixed\"]').remove()"
-                        style="width: 100%;">
+                <button class="pane-btn secondary" id="closeStitchModal"
+                        style="width: 100%; background: #64748b;">
                     Close
                 </button>
             </div>
         `;
+
+        // Attach close button handler via JavaScript instead of inline onclick
+        const closeBtn = modal.querySelector('#closeStitchModal');
+        closeBtn.onclick = () => modal.remove();
+
+        // Click outside to close
         modal.onclick = (e) => {
             if (e.target === modal) {
                 modal.remove();
             }
         };
+
         document.body.appendChild(modal);
     }
 
