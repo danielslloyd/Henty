@@ -483,7 +483,7 @@ class TTSTab {
                     const isBest = take.is_best_take;
                     const takeId = `take_${chunk.id}_${takeCounter++}`;
 
-                    allTakesHtml += `
+                    html += `
                         <div class="chunk-take-row additional-take ${isBest ? 'best-take' : 'non-best-take'}"
                              data-chunk-id="${chunk.id}">
                             <div class="chunk-take-header"
