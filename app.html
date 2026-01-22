@@ -22,56 +22,62 @@
 
         body {
             font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            min-height: 100vh;
+            background: #f5f7fa;
+            height: 100vh;
             display: flex;
             flex-direction: column;
+            overflow: hidden;
         }
 
         /* Header */
         .app-header {
             background: white;
-            padding: 20px;
-            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+            padding: 10px 20px;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.06);
             display: flex;
             justify-content: space-between;
             align-items: center;
+            flex-shrink: 0;
         }
 
         .app-header h1 {
-            font-size: 1.8em;
-            color: #667eea;
+            font-size: 1.2em;
+            color: #1e293b;
+            display: flex;
+            align-items: center;
+            gap: 8px;
         }
 
         .project-name {
-            font-size: 0.9em;
-            color: #888;
-            margin-top: 5px;
+            font-size: 0.75em;
+            color: #64748b;
+            margin-top: 2px;
         }
 
         .header-btn {
-            padding: 10px 20px;
-            background: #667eea;
+            padding: 8px 16px;
+            background: #475569;
             border: none;
             border-radius: 6px;
             color: white;
-            font-size: 14px;
+            font-size: 13px;
             cursor: pointer;
             transition: background 0.2s;
         }
 
         .header-btn:hover {
-            background: #5568d3;
+            background: #334155;
         }
 
         /* Pane Toggles */
         .pane-toggles {
             background: white;
-            padding: 15px 20px;
+            padding: 10px 20px;
             display: flex;
             gap: 20px;
             align-items: center;
-            box-shadow: 0 2px 5px rgba(0,0,0,0.05);
+            box-shadow: 0 1px 2px rgba(0,0,0,0.04);
+            flex-shrink: 0;
         }
 
         .toggle-group {
@@ -98,20 +104,31 @@
             font-size: 14px;
             font-weight: 500;
             color: #333;
+            display: flex;
+            align-items: center;
+            gap: 4px;
         }
 
         .sync-toggle {
             margin-left: auto;
             padding: 8px 15px;
-            background: #f0f0f0;
+            background: #f1f5f9;
             border-radius: 6px;
             display: flex;
             align-items: center;
             gap: 8px;
+            cursor: pointer;
+        }
+
+        .sync-toggle label {
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            gap: 4px;
         }
 
         .sync-toggle.active {
-            background: #667eea;
+            background: #3b82f6;
             color: white;
         }
 
@@ -122,6 +139,7 @@
             gap: 10px;
             padding: 10px;
             overflow: hidden;
+            min-height: 0;
         }
 
         /* Dynamic grid based on visible panes */
@@ -166,7 +184,7 @@
 
         .pane-btn {
             padding: 6px 12px;
-            background: #667eea;
+            background: #3b82f6;
             border: none;
             border-radius: 4px;
             color: white;
@@ -176,12 +194,12 @@
         }
 
         .pane-btn:hover {
-            background: #5568d3;
+            background: #2563eb;
         }
 
         .xml-btn {
             padding: 4px 10px;
-            background: #764ba2;
+            background: #64748b;
             border: none;
             border-radius: 4px;
             color: white;
@@ -192,7 +210,7 @@
         }
 
         .xml-btn:hover {
-            background: #5e3a82;
+            background: #475569;
         }
 
         .pane-content {
@@ -323,7 +341,7 @@
 
         .chunk-btn {
             padding: 6px 12px;
-            background: #667eea;
+            background: #3b82f6;
             border: none;
             border-radius: 4px;
             color: white;
@@ -332,7 +350,7 @@
         }
 
         .chunk-btn:hover {
-            background: #5568d3;
+            background: #2563eb;
         }
 
         /* Reader Pane */
@@ -345,17 +363,20 @@
 
         .play-btn {
             padding: 12px 24px;
-            background: #667eea;
+            background: #3b82f6;
             border: none;
             border-radius: 6px;
             color: white;
             font-size: 14px;
             cursor: pointer;
             font-weight: 500;
+            display: flex;
+            align-items: center;
+            gap: 6px;
         }
 
         .play-btn:hover {
-            background: #5568d3;
+            background: #2563eb;
         }
 
         .reader-content {
@@ -373,7 +394,7 @@
             font-size: 1.3em;
             font-weight: bold;
             margin-bottom: 15px;
-            color: #667eea;
+            color: #1e293b;
         }
 
         .reader-chunk {
@@ -520,7 +541,7 @@
 
         .chunk-progress-fill {
             height: 100%;
-            background: linear-gradient(90deg, #3b82f6, #8b5cf6);
+            background: linear-gradient(90deg, #3b82f6, #06b6d4);
             transition: width 0.3s ease;
             width: 0%;
             position: relative;
@@ -911,7 +932,7 @@
             max-width: 400px;
             pointer-events: auto;
             animation: slideIn 0.3s ease-out;
-            border-left: 4px solid #667eea;
+            border-left: 4px solid #3b82f6;
         }
 
         .toast.success {
@@ -1016,11 +1037,11 @@
     <!-- Header -->
     <div class="app-header">
         <div>
-            <h1>🎤 Henty</h1>
+            <h1><span class="material-symbols-outlined">mic</span> Henty</h1>
             <div class="project-name" id="projectName">Loading project...</div>
         </div>
         <div>
-            <button class="header-btn" onclick="window.location.href='landing.html'">← Back to Projects</button>
+            <button class="header-btn" onclick="window.location.href='landing.html'"><span class="material-symbols-outlined" style="font-size: 16px; vertical-align: middle;">arrow_back</span> Back to Projects</button>
         </div>
     </div>
 
@@ -1029,29 +1050,29 @@
         <div class="toggle-group">
             <div class="toggle-item">
                 <input type="checkbox" id="toggle-raw" onchange="updatePaneVisibility()">
-                <label for="toggle-raw">📄 Raw Text</label>
+                <label for="toggle-raw"><span class="material-symbols-outlined">description</span> Raw Text</label>
             </div>
             <div class="toggle-item">
                 <input type="checkbox" id="toggle-xml" checked onchange="updatePaneVisibility()">
-                <label for="toggle-xml">📝 XML Editor</label>
+                <label for="toggle-xml"><span class="material-symbols-outlined">edit_note</span> XML Editor</label>
             </div>
             <div class="toggle-item">
                 <input type="checkbox" id="toggle-tts" checked onchange="updatePaneVisibility()">
-                <label for="toggle-tts">🎤 TTS Generation</label>
+                <label for="toggle-tts"><span class="material-symbols-outlined">graphic_eq</span> TTS Generation</label>
             </div>
             <div class="toggle-item">
                 <input type="checkbox" id="toggle-reader" onchange="updatePaneVisibility()">
-                <label for="toggle-reader">📚 Reader</label>
+                <label for="toggle-reader"><span class="material-symbols-outlined">menu_book</span> Reader</label>
             </div>
         </div>
         <div class="toggle-group">
             <div class="sync-toggle" id="syncToggle" onclick="toggleSyncScroll()">
                 <input type="checkbox" id="sync-scroll-checkbox">
-                <label>🔗 Sync Scroll</label>
+                <label><span class="material-symbols-outlined">link</span> Sync Scroll</label>
             </div>
             <div class="sync-toggle" id="deviceToggle" onclick="toggleDevice()">
                 <input type="checkbox" id="device-toggle-checkbox">
-                <label id="device-toggle-label">⚡ GPU</label>
+                <label id="device-toggle-label"><span class="material-symbols-outlined">bolt</span> GPU</label>
             </div>
         </div>
     </div>
@@ -1170,8 +1191,10 @@
             const checkbox = document.getElementById('device-toggle-checkbox');
             const label = document.getElementById('device-toggle-label');
 
-            // Determine new device based on current state
-            const newDevice = checkbox.checked ? 'cpu' : 'cuda';
+            // The checkbox is already toggled by the time this runs, so invert the logic
+            // If checkbox is now checked, user wants GPU (cuda)
+            // If checkbox is now unchecked, user wants CPU
+            const newDevice = checkbox.checked ? 'cuda' : 'cpu';
 
             try {
                 const response = await fetch(`${SERVER_URL}/api/device`, {
@@ -1209,11 +1232,11 @@
             if (device === 'cuda') {
                 toggle.classList.add('active');
                 checkbox.checked = true;
-                label.textContent = '⚡ GPU';
+                label.innerHTML = '<span class="material-symbols-outlined">bolt</span> GPU';
             } else {
                 toggle.classList.remove('active');
                 checkbox.checked = false;
-                label.textContent = '🖥️ CPU';
+                label.innerHTML = '<span class="material-symbols-outlined">computer</span> CPU';
             }
         }
 
@@ -1334,16 +1357,16 @@
             const container = document.getElementById('toastContainer') || createToastContainer();
 
             const iconMap = {
-                success: '✓',
-                error: '✕',
-                warning: '⚠',
-                info: 'ℹ'
+                success: 'check_circle',
+                error: 'error',
+                warning: 'warning',
+                info: 'info'
             };
 
             const toast = document.createElement('div');
             toast.className = `toast ${type}`;
             toast.innerHTML = `
-                <span class="toast-icon">${iconMap[type] || iconMap.info}</span>
+                <span class="toast-icon material-symbols-outlined">${iconMap[type] || iconMap.info}</span>
                 <div class="toast-content">
                     <div class="toast-message">${message}</div>
                 </div>
