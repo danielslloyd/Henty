@@ -1044,9 +1044,15 @@
                 <label for="toggle-reader">📚 Reader</label>
             </div>
         </div>
-        <div class="sync-toggle" id="syncToggle" onclick="toggleSyncScroll()">
-            <input type="checkbox" id="sync-scroll-checkbox">
-            <label>🔗 Sync Scroll</label>
+        <div class="toggle-group">
+            <div class="sync-toggle" id="syncToggle" onclick="toggleSyncScroll()">
+                <input type="checkbox" id="sync-scroll-checkbox">
+                <label>🔗 Sync Scroll</label>
+            </div>
+            <div class="sync-toggle" id="deviceToggle" onclick="toggleDevice()">
+                <input type="checkbox" id="device-toggle-checkbox">
+                <label id="device-toggle-label">⚡ GPU</label>
+            </div>
         </div>
     </div>
 
@@ -1159,6 +1165,75 @@
             }
         }
 
+        async function toggleDevice() {
+            const toggle = document.getElementById('deviceToggle');
+            const checkbox = document.getElementById('device-toggle-checkbox');
+            const label = document.getElementById('device-toggle-label');
+
+            // Determine new device based on current state
+            const newDevice = checkbox.checked ? 'cpu' : 'cuda';
+
+            try {
+                const response = await fetch(`${SERVER_URL}/api/device`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'X-API-Key': API_KEY
+                    },
+                    body: JSON.stringify({ device: newDevice })
+                });
+
+                if (response.ok) {
+                    const result = await response.json();
+                    updateDeviceUI(result.device);
+                    showToast(`Switched to ${result.device.toUpperCase()}`, 'success');
+                } else {
+                    const error = await response.json();
+                    showToast(`Failed to switch device: ${error.error}`, 'error');
+                    // Revert checkbox
+                    checkbox.checked = !checkbox.checked;
+                }
+            } catch (error) {
+                console.error('Error switching device:', error);
+                showToast('Error switching device', 'error');
+                // Revert checkbox
+                checkbox.checked = !checkbox.checked;
+            }
+        }
+
+        function updateDeviceUI(device) {
+            const toggle = document.getElementById('deviceToggle');
+            const checkbox = document.getElementById('device-toggle-checkbox');
+            const label = document.getElementById('device-toggle-label');
+
+            if (device === 'cuda') {
+                toggle.classList.add('active');
+                checkbox.checked = true;
+                label.textContent = '⚡ GPU';
+            } else {
+                toggle.classList.remove('active');
+                checkbox.checked = false;
+                label.textContent = '🖥️ CPU';
+            }
+        }
+
+        async function loadDeviceStatus() {
+            try {
+                const response = await fetch(`${SERVER_URL}/api/device-status`, {
+                    headers: {
+                        'X-API-Key': API_KEY
+                    }
+                });
+
+                if (response.ok) {
+                    const status = await response.json();
+                    updateDeviceUI(status.current_device);
+                }
+            } catch (error) {
+                console.error('Error loading device status:', error);
+            }
+        }
+
         function updatePaneVisibility() {
             const rawVisible = document.getElementById('toggle-raw').checked;
             const xmlVisible = document.getElementById('toggle-xml').checked;
@@ -1244,6 +1319,9 @@
             }
 
             await loadProjectData(projectPath);
+
+            // Load device status
+            await loadDeviceStatus();
 
             console.log('━━━ [APP INIT] END ━━━');
         }

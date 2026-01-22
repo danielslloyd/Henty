@@ -78,8 +78,17 @@ class TextToAudioConverter:
             print(f"  {sys.executable} -m pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu130")
             print("\nThen restart the server.")
 
-        self.device = "cuda" if torch.cuda.is_available() else "cpu"
-        print(f"\nUsing device: {self.device}")
+        # Set device based on preference and availability
+        self.cuda_available = torch.cuda.is_available()
+        if config.DEVICE_PREFERENCE == 'cpu':
+            self.device = 'cpu'
+        elif config.DEVICE_PREFERENCE == 'cuda':
+            self.device = 'cuda' if self.cuda_available else 'cpu'
+        else:  # auto
+            self.device = 'cuda' if self.cuda_available else 'cpu'
+
+        print(f"\nDevice preference: {config.DEVICE_PREFERENCE}")
+        print(f"Using device: {self.device}")
         print("="*80 + "\n")
 
         self.audio_dir = "generated_audio"
@@ -194,6 +203,29 @@ class TextToAudioConverter:
 
             print(f"{'='*80}\n")
         return self.model
+
+    def switch_device(self, new_device):
+        """Switch between GPU and CPU, reloading the model if necessary"""
+        if new_device not in ['cuda', 'cpu']:
+            raise ValueError(f"Invalid device: {new_device}")
+
+        # Check if CUDA is available when requesting it
+        if new_device == 'cuda' and not self.cuda_available:
+            raise RuntimeError("CUDA is not available on this system")
+
+        # If device is already set and model is loaded, need to reload
+        if self.device != new_device:
+            old_device = self.device
+            self.device = new_device
+
+            # Clear the model to force reload on next use
+            if self.model is not None:
+                print(f"Switching device from {old_device} to {new_device}")
+                print("Model will be reloaded on next generation...")
+                self.model = None
+
+            return True
+        return False
 
     def load_stats(self):
         """Load generation statistics from file"""
@@ -912,7 +944,8 @@ class TextToAudioConverter:
 
             return {
                 'path': output_path,
-                'duration_seconds': audio_duration_sec
+                'duration_seconds': audio_duration_sec,
+                'generation_time_ms': generation_time_ms
             }
         except Exception as e:
             # Emit error via WebSocket
@@ -1187,6 +1220,45 @@ def status():
 def get_config():
     """Get client configuration (public endpoint)"""
     return jsonify(config.get_client_config())
+
+@app.route('/api/device-status', methods=['GET'])
+@auth_manager.require_api_key
+def get_device_status():
+    """Get current device status"""
+    return jsonify({
+        'current_device': converter.device,
+        'cuda_available': converter.cuda_available,
+        'model_loaded': converter.model is not None,
+        'max_parallel_generations': config.MAX_PARALLEL_GENERATIONS
+    })
+
+@app.route('/api/device', methods=['POST'])
+@auth_manager.require_api_key
+def switch_device():
+    """Switch between GPU and CPU"""
+    try:
+        data = request.json
+        new_device = data.get('device')
+
+        if not new_device:
+            return jsonify({'error': 'device parameter is required'}), 400
+
+        # Try to switch device
+        changed = converter.switch_device(new_device)
+
+        return jsonify({
+            'success': True,
+            'device': converter.device,
+            'changed': changed,
+            'message': f"Switched to {new_device}" if changed else f"Already using {new_device}"
+        })
+
+    except ValueError as e:
+        return jsonify({'error': str(e)}), 400
+    except RuntimeError as e:
+        return jsonify({'error': str(e)}), 400
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
 
 @app.route('/api/voice-samples', methods=['GET'])
 @auth_manager.require_api_key
@@ -2398,9 +2470,10 @@ def generate_project_chunk_audio():
             cfg_weight=cfg_weight
         )
 
-        # Extract path and duration from result
+        # Extract path, duration, and generation time from result
         generated_path = generation_result['path']
         audio_duration = generation_result['duration_seconds']
+        generation_time_ms = generation_result['generation_time_ms']
 
         # Extract just the filename from the path
         audio_file = os.path.basename(generated_path)
@@ -2434,7 +2507,8 @@ def generate_project_chunk_audio():
                     'cfg_weight': cfg_weight,
                     'temperature': temperature,
                     'audio_duration_seconds': round(audio_duration, 2),
-                    'possibly_truncated': possibly_truncated
+                    'possibly_truncated': possibly_truncated,
+                    'generation_time_ms': generation_time_ms
                 }
                 chunk['generated_audios'].append(audio_entry)
 

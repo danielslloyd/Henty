@@ -84,6 +84,8 @@ class TTSTab {
             temperature: 0.8
         };
         this.activeGenerations = {};
+        this.generationQueue = [];
+        this.maxParallelGenerations = 3; // Will be loaded from server
         this.selectedChunkId = null;
         this.selectedChunkElement = null; // Cache selected chunk DOM element
         this.audioManager = new AudioManager();
@@ -93,8 +95,24 @@ class TTSTab {
         await this.loadVoiceSamples();
         await this.loadDefaultVoice();
         await this.loadProjectDefaults();
+        await this.loadDeviceStatus();
         await this.refreshChapters();
         this.setupProgressUpdater();
+    }
+
+    async loadDeviceStatus() {
+        try {
+            const response = await fetch(`${SERVER_URL}/api/device-status`, {
+                headers: { 'X-API-Key': API_KEY }
+            });
+            if (response.ok) {
+                const status = await response.json();
+                this.maxParallelGenerations = status.max_parallel_generations || 3;
+                console.log(`[TTS TAB] Max parallel generations: ${this.maxParallelGenerations}`);
+            }
+        } catch (error) {
+            console.error('Error loading device status:', error);
+        }
     }
 
     async loadDefaultVoice() {
@@ -425,6 +443,12 @@ class TTSTab {
                                 <span class="setting-value">${firstTake.audio_duration_seconds}s</span>
                             </div>
                             ` : ''}
+                            ${firstTake.generation_time_ms ? `
+                            <div class="setting-row">
+                                <span class="setting-label">Gen Time</span>
+                                <span class="setting-value">${(firstTake.generation_time_ms / 1000).toFixed(1)}s</span>
+                            </div>
+                            ` : ''}
                             ${firstTake.possibly_truncated ? `
                             <div class="setting-row warning-row">
                                 <span class="material-symbols-outlined warning-icon">warning</span>
@@ -513,6 +537,12 @@ class TTSTab {
                                 <div class="setting-row">
                                     <span class="setting-label">Duration</span>
                                     <span class="setting-value">${take.audio_duration_seconds}s</span>
+                                </div>
+                                ` : ''}
+                                ${take.generation_time_ms ? `
+                                <div class="setting-row">
+                                    <span class="setting-label">Gen Time</span>
+                                    <span class="setting-value">${(take.generation_time_ms / 1000).toFixed(1)}s</span>
                                 </div>
                                 ` : ''}
                                 ${take.possibly_truncated ? `
@@ -708,6 +738,20 @@ class TTSTab {
             return;
         }
 
+        // Check if we're at max parallel generations
+        const activeCount = Object.keys(this.activeGenerations).length;
+        if (activeCount >= this.maxParallelGenerations) {
+            console.log(`[TTS TAB] Max parallel generations (${this.maxParallelGenerations}) reached, queueing chunk ${chunkId}`);
+            this.generationQueue.push({
+                chunkId,
+                voice,
+                exaggeration,
+                cfgWeight
+            });
+            showToast(`Queued (${this.generationQueue.length} waiting)`, 'info');
+            return;
+        }
+
         console.log('[TTS TAB] Generating audio for chunk:', chunkId);
 
         // Check if chunk already has takes
@@ -773,6 +817,9 @@ class TTSTab {
             // Remove this chunk from active generations
             delete this.activeGenerations[chunkId];
 
+            // Process next item in queue if any
+            this.processNextInQueue();
+
             // Check if other chunks are still generating
             const otherGeneratingChunks = Object.keys(this.activeGenerations);
             const hasOthersGenerating = otherGeneratingChunks.length > 0;
@@ -831,6 +878,9 @@ class TTSTab {
             // Remove this chunk from active generations
             delete this.activeGenerations[chunkId];
 
+            // Process next item in queue if any
+            this.processNextInQueue();
+
             // Remove generating class from take rows
             const rows = document.querySelectorAll(`.chunk-take-row[data-chunk-id="${chunkId}"]`);
             rows.forEach(row => row.classList.remove('generating'));
@@ -838,6 +888,30 @@ class TTSTab {
             const errorMsg = error.message || 'Unknown error';
             showToast('Failed to generate audio: ' + errorMsg, 'error');
             this.showErrorPlaceholder(chunkId, errorMsg);
+        }
+    }
+
+    processNextInQueue() {
+        if (this.generationQueue.length > 0) {
+            const activeCount = Object.keys(this.activeGenerations).length;
+            if (activeCount < this.maxParallelGenerations) {
+                const nextGen = this.generationQueue.shift();
+                console.log(`[TTS TAB] Processing next in queue: chunk ${nextGen.chunkId}`);
+                showToast(`Starting queued generation (${this.generationQueue.length} remaining)`, 'info');
+
+                // Restore the parameters and call generateChunkAudio
+                // We need to set the UI values before calling generateChunkAudio
+                const voiceSelect = document.getElementById(`voice_chunk_${nextGen.chunkId}`);
+                const exagSlider = document.getElementById(`exaggeration_chunk_${nextGen.chunkId}`);
+                const cfgSlider = document.getElementById(`cfg_weight_chunk_${nextGen.chunkId}`);
+
+                if (voiceSelect) voiceSelect.value = nextGen.voice;
+                if (exagSlider) exagSlider.value = nextGen.exaggeration;
+                if (cfgSlider) cfgSlider.value = nextGen.cfgWeight;
+
+                // Call generateChunkAudio again
+                this.generateChunkAudio(nextGen.chunkId);
+            }
         }
     }
 
