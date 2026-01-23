@@ -1682,60 +1682,84 @@
         async function createNewProject(event) {
             event.preventDefault();
 
-            const projectName = document.getElementById('newProjectName').value;
+            const name = document.getElementById('newProjectName').value.trim();
             const sourceType = document.querySelector('input[name="textSourceType"]:checked').value;
             const errorDiv = document.getElementById('newProjectError');
 
+            console.log('━━━ [CREATE PROJECT] START ━━━');
+            console.log('[CREATE PROJECT] Name:', name);
+            console.log('[CREATE PROJECT] Source Type:', sourceType);
+
             errorDiv.textContent = '';
 
-            try {
-                const requestData = {
-                    project_name: projectName
+            if (!name) {
+                errorDiv.textContent = 'Please enter a project name';
+                return;
+            }
+
+            // Build request body
+            const requestBody = { name };
+
+            // Handle text source
+            if (sourceType === 'url') {
+                const url = document.getElementById('gutenbergUrl').value.trim();
+                if (!url) {
+                    errorDiv.textContent = 'Please enter a Gutenberg URL';
+                    return;
+                }
+                requestBody.text_source = {
+                    type: 'url',
+                    url: url
                 };
+                console.log('[CREATE PROJECT] Text Source URL:', url);
+            } else {
+                const fileInput = document.getElementById('textFile');
+                if (!fileInput.files || fileInput.files.length === 0) {
+                    errorDiv.textContent = 'Please select a text file';
+                    return;
+                }
+                const file = fileInput.files[0];
+                console.log('[CREATE PROJECT] Reading file:', file.name, 'Size:', file.size);
 
-                if (sourceType === 'url') {
-                    const gutenbergUrl = document.getElementById('gutenbergUrl').value;
-                    if (!gutenbergUrl) {
-                        errorDiv.textContent = 'Please enter a Gutenberg URL';
-                        return;
-                    }
-                    requestData.text_source = {
-                        type: 'url',
-                        url: gutenbergUrl
-                    };
-                } else {
-                    const textFile = document.getElementById('textFile').files[0];
-                    if (!textFile) {
-                        errorDiv.textContent = 'Please select a text file';
-                        return;
-                    }
-
-                    // Read file content as text
-                    const fileContent = await new Promise((resolve, reject) => {
-                        const reader = new FileReader();
-                        reader.onload = (e) => resolve(e.target.result);
-                        reader.onerror = reject;
-                        reader.readAsText(textFile);
-                    });
-
-                    requestData.text_source = {
+                try {
+                    const fileContent = await file.text();
+                    requestBody.text_source = {
                         type: 'file',
                         content: fileContent,
-                        filename: textFile.name
+                        filename: file.name
                     };
+                    console.log('[CREATE PROJECT] File content length:', fileContent.length);
+                } catch (err) {
+                    console.error('[CREATE PROJECT] File read error:', err);
+                    errorDiv.textContent = 'Failed to read file: ' + err.message;
+                    return;
                 }
+            }
 
-                const response = await fetch(`${SERVER_URL}/api/project/create`, {
+            console.log('[CREATE PROJECT] Request body keys:', Object.keys(requestBody));
+
+            try {
+                const url = `${SERVER_URL}/api/project/create`;
+                console.log('[CREATE PROJECT] Sending POST to:', url);
+
+                const response = await fetch(url, {
                     method: 'POST',
                     headers: {
                         'Content-Type': 'application/json',
                         'X-API-Key': API_KEY
                     },
-                    body: JSON.stringify(requestData)
+                    body: JSON.stringify(requestBody)
                 });
+
+                console.log('[CREATE PROJECT] Response status:', response.status);
+                console.log('[CREATE PROJECT] Response ok:', response.ok);
 
                 if (response.ok) {
                     const result = await response.json();
+                    console.log('[CREATE PROJECT] ✓ Success! Result:', result);
+                    console.log('[CREATE PROJECT] Project path:', result.project_path);
+                    console.log('━━━ [CREATE PROJECT] END ━━━');
+
                     closeNewProjectModal();
 
                     // Reload projects dropdown
@@ -1748,11 +1772,21 @@
 
                     showToast('Project created successfully!', 'success');
                 } else {
-                    const error = await response.json();
+                    const errorText = await response.text();
+                    console.error('[CREATE PROJECT] ✗ Error response text:', errorText);
+                    let error;
+                    try {
+                        error = JSON.parse(errorText);
+                    } catch (e) {
+                        error = { error: errorText };
+                    }
+                    console.error('[CREATE PROJECT] ✗ Error:', error);
+                    console.log('━━━ [CREATE PROJECT] END (ERROR) ━━━');
                     errorDiv.textContent = error.error || 'Failed to create project';
                 }
             } catch (error) {
-                console.error('Error creating project:', error);
+                console.error('[CREATE PROJECT] ✗ Exception:', error);
+                console.log('━━━ [CREATE PROJECT] END (EXCEPTION) ━━━');
                 errorDiv.textContent = 'Error creating project: ' + error.message;
             }
         }
