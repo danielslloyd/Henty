@@ -49,9 +49,10 @@
         }
 
         .project-name {
-            font-size: 0.75em;
+            font-size: 0.875em;
             color: #64748b;
-            margin-top: 2px;
+            font-weight: 500;
+            white-space: nowrap;
         }
 
         .header-btn {
@@ -73,7 +74,7 @@
         .project-selector-container {
             display: flex;
             align-items: center;
-            gap: 12px;
+            gap: 16px;
         }
 
         .project-dropdown {
@@ -1207,9 +1208,9 @@
     <div class="app-header">
         <div>
             <h1><span class="material-symbols-outlined">mic</span> Henty</h1>
-            <div class="project-name" id="projectName">Select a project to begin</div>
         </div>
         <div class="project-selector-container">
+            <div class="project-name" id="projectName">Select a project to begin</div>
             <select class="project-dropdown" id="projectDropdown" onchange="handleProjectChange()">
                 <option value="">Select a project...</option>
                 <option value="__new__">+ New Project</option>

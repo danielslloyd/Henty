@@ -3481,7 +3481,7 @@ def generate_all_chapter_chunks():
 @app.route('/api/project/recent', methods=['GET'])
 @auth_manager.require_api_key
 def get_recent_projects():
-    """Get list of recent projects"""
+    """Get list of all project directories"""
     try:
         import os
         from datetime import datetime
@@ -3493,12 +3493,18 @@ def get_recent_projects():
 
         recent_projects = []
 
-        # Scan for project.json files
+        # Scan for all subdirectories
         for item in os.listdir(projects_dir):
             project_path = os.path.join(projects_dir, item)
+
+            # Only include directories
+            if not os.path.isdir(project_path):
+                continue
+
             project_file = os.path.join(project_path, 'project.json')
 
-            if os.path.isdir(project_path) and os.path.exists(project_file):
+            # Try to read project.json if it exists
+            if os.path.exists(project_file):
                 try:
                     with open(project_file, 'r') as f:
                         project_data = json.load(f)
@@ -3511,10 +3517,24 @@ def get_recent_projects():
                     })
                 except Exception as e:
                     print(f"Error reading project {project_path}: {e}")
-                    continue
+                    # Still include the directory even if project.json is invalid
+                    recent_projects.append({
+                        'name': item,
+                        'path': os.path.abspath(project_path),
+                        'last_modified': '',
+                        'created_at': ''
+                    })
+            else:
+                # Include directory even without project.json
+                recent_projects.append({
+                    'name': item,
+                    'path': os.path.abspath(project_path),
+                    'last_modified': '',
+                    'created_at': ''
+                })
 
-        # Sort by last_modified (most recent first)
-        recent_projects.sort(key=lambda x: x.get('last_modified', ''), reverse=True)
+        # Sort by last_modified (most recent first), then by name
+        recent_projects.sort(key=lambda x: (x.get('last_modified', ''), x.get('name', '')), reverse=True)
 
         return jsonify(recent_projects)
 
