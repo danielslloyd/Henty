@@ -48,13 +48,6 @@
             gap: 8px;
         }
 
-        .project-name {
-            font-size: 0.875em;
-            color: #64748b;
-            font-weight: 500;
-            white-space: nowrap;
-        }
-
         .header-btn {
             padding: 8px 16px;
             background: #475569;
@@ -70,13 +63,20 @@
             background: #334155;
         }
 
-        /* Project Dropdown */
-        .project-selector-container {
+        /* Header Layout */
+        .header-left {
             display: flex;
             align-items: center;
             gap: 16px;
         }
 
+        .header-right {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+
+        /* Project Dropdown */
         .project-dropdown {
             padding: 8px 16px;
             background: white;
@@ -84,9 +84,10 @@
             border-radius: 6px;
             color: #1e293b;
             font-size: 14px;
+            font-weight: 500;
             cursor: pointer;
             transition: all 0.2s;
-            min-width: 200px;
+            min-width: 250px;
         }
 
         .project-dropdown:hover {
@@ -1206,15 +1207,14 @@
 <body>
     <!-- Header -->
     <div class="app-header">
-        <div>
+        <div class="header-left">
             <h1><span class="material-symbols-outlined">mic</span> Henty</h1>
-        </div>
-        <div class="project-selector-container">
-            <div class="project-name" id="projectName">Select a project to begin</div>
             <select class="project-dropdown" id="projectDropdown" onchange="handleProjectChange()">
                 <option value="">Select a project...</option>
                 <option value="__new__">+ New Project</option>
             </select>
+        </div>
+        <div class="header-right">
         </div>
     </div>
 
@@ -1519,12 +1519,6 @@
                     console.log('[APP LOAD PROJECT] Project loaded successfully');
                     console.log('[APP LOAD PROJECT] Project metadata:', result.metadata);
 
-                    // Update project name display
-                    const projectNameDisplay = document.getElementById('projectName');
-                    if (projectNameDisplay) {
-                        projectNameDisplay.textContent = result.metadata.name || 'Unnamed Project';
-                    }
-
                     // Initialize all tabs
                     console.log('[APP LOAD PROJECT] Initializing Gutenberg tab...');
                     await gutenbergTab.init();
@@ -1565,8 +1559,23 @@
                     allProjects = await response.json();
                     const dropdown = document.getElementById('projectDropdown');
 
-                    // Clear existing options except the first two
-                    dropdown.innerHTML = '<option value="">Select a project...</option><option value="__new__">+ New Project</option>';
+                    // Remember current selection
+                    const currentValue = dropdown.value;
+
+                    // Clear all options
+                    dropdown.innerHTML = '';
+
+                    // Add "Select a project..." option
+                    const selectOption = document.createElement('option');
+                    selectOption.value = '';
+                    selectOption.textContent = 'Select a project...';
+                    dropdown.appendChild(selectOption);
+
+                    // Add "+ New Project" option
+                    const newOption = document.createElement('option');
+                    newOption.value = '__new__';
+                    newOption.textContent = '+ New Project';
+                    dropdown.appendChild(newOption);
 
                     // Add all projects
                     allProjects.forEach(project => {
@@ -1575,6 +1584,11 @@
                         option.textContent = project.name;
                         dropdown.appendChild(option);
                     });
+
+                    // Restore previous selection if it still exists
+                    if (currentValue && currentValue !== '__new__') {
+                        dropdown.value = currentValue;
+                    }
                 }
             } catch (error) {
                 console.error('Error loading projects:', error);
@@ -1603,14 +1617,15 @@
         // Switch to a different project
         async function switchToProject(projectPath) {
             try {
-                // Show loading state
-                document.getElementById('projectName').textContent = 'Loading...';
-
                 // Load the project
                 await loadProjectData(projectPath);
 
                 // Update current project
                 currentProjectPath = projectPath;
+
+                // Update dropdown to show selected project
+                const dropdown = document.getElementById('projectDropdown');
+                dropdown.value = projectPath;
 
                 // Show main content
                 showMainContent();
@@ -1624,6 +1639,9 @@
                 console.error('Error switching project:', error);
                 showToast('Failed to load project: ' + error.message, 'error');
                 hideMainContent();
+                // Reset dropdown to empty
+                const dropdown = document.getElementById('projectDropdown');
+                dropdown.value = '';
             }
         }
 
@@ -1636,7 +1654,8 @@
         function hideMainContent() {
             document.getElementById('projectPrompt').style.display = 'flex';
             document.getElementById('mainContent').classList.add('hidden');
-            document.getElementById('projectName').textContent = 'Select a project to begin';
+            const dropdown = document.getElementById('projectDropdown');
+            dropdown.value = '';
         }
 
         // Modal functions
