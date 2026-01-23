@@ -1566,75 +1566,166 @@ def create_project():
                         # Use GutenbergProcessor for special Gutenberg handling
                         processor = GutenbergProcessor(output_dir=project_path)
 
-                        # Download text
-                        print(f'[CREATE PROJECT API] Downloading text from Gutenberg...')
-                        text = processor.download_text(url)
+                        # Download content (supports both .txt and .html)
+                        print(f'[CREATE PROJECT API] Downloading content from Gutenberg...')
+                        content = processor.download_text(url)
 
-                        # Extract title
-                        title = processor.extract_title(text)
-                        if not title:
-                            title = processor.extract_book_name(url)
-                        print(f'[CREATE PROJECT API] Extracted title: {title}')
+                        # Check if content is HTML
+                        is_html = processor.is_html(content)
+                        print(f'[CREATE PROJECT API] Content type: {"HTML" if is_html else "Plain text"}')
 
-                        # Strip Gutenberg metadata
-                        text = processor.strip_gutenberg_metadata(text, title)
+                        if is_html:
+                            # Process HTML content
+                            print(f'[CREATE PROJECT API] Processing HTML content...')
 
-                        # Process carriage returns
-                        text = processor.process_carriage_returns(text)
+                            # Extract title from HTML
+                            try:
+                                from bs4 import BeautifulSoup
+                                soup = BeautifulSoup(content, 'html.parser')
+                                title_tag = soup.find('title')
+                                if title_tag:
+                                    # Clean up title
+                                    title = title_tag.get_text(strip=True)
+                                    title = re.sub(r'The Project Gutenberg eBook of\s+', '', title, flags=re.IGNORECASE)
+                                    title = re.sub(r'\s+by\s+.+$', '', title)
+                                    title = re.sub(r'[^\w\s-]', '', title)
+                                    title = re.sub(r'\s+', '_', title)
+                                    title = title[:50]
+                                else:
+                                    title = processor.extract_book_name(url)
+                            except:
+                                title = processor.extract_book_name(url)
 
-                        # Replace SECTION_BREAK markers
-                        text = text.replace('<<<SECTION_BREAK>>>', '\n\n')
+                            print(f'[CREATE PROJECT API] Extracted title: {title}')
 
-                        print(f'[CREATE PROJECT API] Processed text length: {len(text)} characters')
+                            # Extract chapters from HTML
+                            chapters_data = processor.extract_html_chapters(content, title)
+                            print(f'[CREATE PROJECT API] Extracted {len(chapters_data)} chapters from HTML')
 
-                        # Save raw text to raw_text.txt
-                        raw_text_file = os.path.join(project_path, 'raw_text.txt')
-                        with open(raw_text_file, 'w', encoding='utf-8') as f:
-                            f.write(text)
-                        print(f'[CREATE PROJECT API] Saved raw text to {raw_text_file}')
+                            # Save raw HTML
+                            raw_html_file = os.path.join(project_path, 'raw_text.html')
+                            with open(raw_html_file, 'w', encoding='utf-8') as f:
+                                f.write(content)
+                            print(f'[CREATE PROJECT API] Saved raw HTML to {raw_html_file}')
 
-                        # Also save to texts directory
-                        text_file_path = os.path.join(texts_dir, f'{title}.txt')
-                        with open(text_file_path, 'w', encoding='utf-8') as f:
-                            f.write(text)
+                            # Create chapters with chunks
+                            new_chapters = []
+                            for i, (chapter_title, chapter_text) in enumerate(chapters_data):
+                                # Chunk the chapter text
+                                chunks = converter.smart_chunk_text(chapter_text)
 
-                        # Detect chapters
-                        detected_chapters = converter.detect_chapters(text)
-                        print(f'[CREATE PROJECT API] Detected {len(detected_chapters)} chapter(s)')
+                                # Add chunk structure
+                                for chunk in chunks:
+                                    chunk['dirty'] = False
+                                    chunk['generated_audios'] = []
 
-                        # Generate XML content
-                        xml_content = converter.text_to_xml_content(text, detected_chapters)
+                                chapter_entry = {
+                                    'id': f'chapter_{i}',
+                                    'title': chapter_title,
+                                    'order': i,
+                                    'chunks': chunks,
+                                    'audio_output': None,
+                                    'added_at': datetime.now().isoformat(),
+                                    'source': 'gutenberg_html',
+                                    'source_url': url
+                                }
 
-                        # Create chapters with chunks
-                        new_chapters = []
-                        for detected_chapter in detected_chapters:
-                            chunks = converter.smart_chunk_text(detected_chapter['text'])
+                                new_chapters.append(chapter_entry)
 
-                            # Add chunk structure
-                            for chunk in chunks:
-                                chunk['dirty'] = False
-                                chunk['generated_audios'] = []
+                            # Save chapter texts to texts directory
+                            for i, (chapter_title, chapter_text) in enumerate(chapters_data):
+                                sanitized = re.sub(r'[^\w\s-]', '', chapter_title)
+                                sanitized = re.sub(r'\s+', '_', sanitized)
+                                sanitized = sanitized.strip('_')[:50]
+                                if not sanitized:
+                                    sanitized = f"chapter_{i}"
 
-                            chapter_entry = {
-                                'id': detected_chapter['id'],
-                                'title': detected_chapter['title'],
-                                'order': detected_chapter['order'],
-                                'chunks': chunks,
-                                'audio_output': None,
-                                'added_at': datetime.now().isoformat(),
-                                'source': 'gutenberg',
-                                'source_url': url
-                            }
+                                text_file_path = os.path.join(texts_dir, f'{sanitized}.txt')
+                                with open(text_file_path, 'w', encoding='utf-8') as f:
+                                    f.write(f"{chapter_title}\n\n{chapter_text}")
 
-                            new_chapters.append(chapter_entry)
+                            # Generate XML content from all chapter texts
+                            all_text = '\n\n'.join([chapter_text for _, chapter_text in chapters_data])
+                            detected_chapters_for_xml = converter.detect_chapters(all_text)
+                            xml_content = converter.text_to_xml_content(all_text, detected_chapters_for_xml)
 
-                        # Update metadata with chapters and XML
-                        project_metadata['chapters'] = new_chapters
-                        project_metadata['content_xml'] = xml_content
-                        project_metadata['original_filename'] = f"{title}.txt"
-                        project_metadata['version'] = '3.0'
+                            # Update metadata with chapters and XML
+                            project_metadata['chapters'] = new_chapters
+                            project_metadata['content_xml'] = xml_content
+                            project_metadata['original_filename'] = f"{title}.html"
+                            project_metadata['version'] = '3.0'
 
-                        print(f'[CREATE PROJECT API] Created {len(new_chapters)} chapters with Gutenberg processing')
+                            print(f'[CREATE PROJECT API] Created {len(new_chapters)} chapters with HTML processing')
+
+                        else:
+                            # Process plain text content (original logic)
+                            print(f'[CREATE PROJECT API] Processing plain text content...')
+
+                            # Extract title
+                            title = processor.extract_title(content)
+                            if not title:
+                                title = processor.extract_book_name(url)
+                            print(f'[CREATE PROJECT API] Extracted title: {title}')
+
+                            # Strip Gutenberg metadata
+                            text = processor.strip_gutenberg_metadata(content, title)
+
+                            # Process carriage returns
+                            text = processor.process_carriage_returns(text)
+
+                            # Replace SECTION_BREAK markers
+                            text = text.replace('<<<SECTION_BREAK>>>', '\n\n')
+
+                            print(f'[CREATE PROJECT API] Processed text length: {len(text)} characters')
+
+                            # Save raw text to raw_text.txt
+                            raw_text_file = os.path.join(project_path, 'raw_text.txt')
+                            with open(raw_text_file, 'w', encoding='utf-8') as f:
+                                f.write(text)
+                            print(f'[CREATE PROJECT API] Saved raw text to {raw_text_file}')
+
+                            # Also save to texts directory
+                            text_file_path = os.path.join(texts_dir, f'{title}.txt')
+                            with open(text_file_path, 'w', encoding='utf-8') as f:
+                                f.write(text)
+
+                            # Detect chapters
+                            detected_chapters = converter.detect_chapters(text)
+                            print(f'[CREATE PROJECT API] Detected {len(detected_chapters)} chapter(s)')
+
+                            # Generate XML content
+                            xml_content = converter.text_to_xml_content(text, detected_chapters)
+
+                            # Create chapters with chunks
+                            new_chapters = []
+                            for detected_chapter in detected_chapters:
+                                chunks = converter.smart_chunk_text(detected_chapter['text'])
+
+                                # Add chunk structure
+                                for chunk in chunks:
+                                    chunk['dirty'] = False
+                                    chunk['generated_audios'] = []
+
+                                chapter_entry = {
+                                    'id': detected_chapter['id'],
+                                    'title': detected_chapter['title'],
+                                    'order': detected_chapter['order'],
+                                    'chunks': chunks,
+                                    'audio_output': None,
+                                    'added_at': datetime.now().isoformat(),
+                                    'source': 'gutenberg',
+                                    'source_url': url
+                                }
+
+                                new_chapters.append(chapter_entry)
+
+                            # Update metadata with chapters and XML
+                            project_metadata['chapters'] = new_chapters
+                            project_metadata['content_xml'] = xml_content
+                            project_metadata['original_filename'] = f"{title}.txt"
+                            project_metadata['version'] = '3.0'
+
+                            print(f'[CREATE PROJECT API] Created {len(new_chapters)} chapters with Gutenberg processing')
 
                     except Exception as e:
                         print(f'[CREATE PROJECT API] ✗ ERROR in Gutenberg processing: {str(e)}')
