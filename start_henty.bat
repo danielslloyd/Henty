@@ -37,14 +37,14 @@ timeout /t 3 /nobreak >nul
 
 REM Open browser
 echo [INFO] Opening browser...
-start http://localhost:5000/landing.html
+start http://localhost:5000/app.html
 
 echo.
 echo ================================================
 echo   Henty is ready!
 echo ================================================
 echo.
-echo Landing Page: http://localhost:5000/index.html
+echo App URL:      http://localhost:5000/app.html
 echo Server URL:   http://localhost:5000
 echo.
 echo The server is running in a separate window.

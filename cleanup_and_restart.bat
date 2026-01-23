@@ -16,7 +16,7 @@ echo.
 echo Step 2: Starting server...
 echo.
 echo IMPORTANT: After the server starts:
-echo   1. Open index.html in your browser
+echo   1. Open http://localhost:5000/app.html in your browser
 echo   2. Re-upload or re-record your voice sample
 echo   3. Try generating audio with voice cloning
 echo.
