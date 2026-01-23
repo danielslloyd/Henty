@@ -1375,7 +1375,7 @@
                         <input type="url" id="gutenbergUrl" placeholder="Enter Gutenberg URL" value="">
                     </div>
                     <div id="fileSourceInput" style="display: none;">
-                        <input type="file" id="textFile" accept=".txt" style="padding: 8px;">
+                        <input type="file" id="textFile" accept=".txt,.html,.htm" style="padding: 8px;">
                     </div>
                 </div>
                 <div class="error-message" id="newProjectError"></div>
@@ -1689,13 +1689,27 @@
 
         async function loadDefaultGutenbergUrl() {
             try {
+                console.log('[LOAD DEFAULT URL] Fetching config from:', `${SERVER_URL}/api/config`);
                 const response = await fetch(`${SERVER_URL}/api/config`);
+                console.log('[LOAD DEFAULT URL] Response status:', response.status);
+
                 if (response.ok) {
                     const config = await response.json();
-                    document.getElementById('gutenbergUrl').value = config.default_gutenberg_url || '';
+                    console.log('[LOAD DEFAULT URL] Config received:', config);
+                    console.log('[LOAD DEFAULT URL] Default Gutenberg URL:', config.default_gutenberg_url);
+
+                    const urlInput = document.getElementById('gutenbergUrl');
+                    if (urlInput) {
+                        urlInput.value = config.default_gutenberg_url || '';
+                        console.log('[LOAD DEFAULT URL] Set input value to:', urlInput.value);
+                    } else {
+                        console.error('[LOAD DEFAULT URL] Input element not found!');
+                    }
+                } else {
+                    console.error('[LOAD DEFAULT URL] Response not OK:', response.status);
                 }
             } catch (error) {
-                console.error('Error loading default Gutenberg URL:', error);
+                console.error('[LOAD DEFAULT URL] Error:', error);
             }
         }
 
