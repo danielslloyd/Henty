@@ -1785,9 +1785,7 @@
                     // Reload projects dropdown
                     await loadProjectsDropdown();
 
-                    // Switch to the new project
-                    const dropdown = document.getElementById('projectDropdown');
-                    dropdown.value = result.project_path;
+                    // Switch to the new project (this will set the dropdown value)
                     await switchToProject(result.project_path);
 
                     showToast('Project created successfully!', 'success');
