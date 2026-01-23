@@ -69,6 +69,175 @@
             background: #334155;
         }
 
+        /* Project Dropdown */
+        .project-selector-container {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+
+        .project-dropdown {
+            padding: 8px 16px;
+            background: white;
+            border: 1px solid #cbd5e1;
+            border-radius: 6px;
+            color: #1e293b;
+            font-size: 14px;
+            cursor: pointer;
+            transition: all 0.2s;
+            min-width: 200px;
+        }
+
+        .project-dropdown:hover {
+            border-color: #94a3b8;
+        }
+
+        .project-dropdown:focus {
+            outline: none;
+            border-color: #3b82f6;
+            box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
+        }
+
+        /* Main Content Wrapper */
+        .main-content {
+            display: flex;
+            flex-direction: column;
+            flex: 1;
+            overflow: hidden;
+        }
+
+        .main-content.hidden {
+            display: none;
+        }
+
+        /* Project Selection Prompt */
+        .project-prompt {
+            flex: 1;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            flex-direction: column;
+            gap: 16px;
+            color: #64748b;
+        }
+
+        .project-prompt .icon {
+            font-size: 64px;
+            opacity: 0.5;
+        }
+
+        .project-prompt h2 {
+            font-size: 1.5em;
+            color: #475569;
+        }
+
+        .project-prompt p {
+            font-size: 1em;
+            max-width: 400px;
+            text-align: center;
+            line-height: 1.6;
+        }
+
+        /* Modal styles */
+        .modal {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0,0,0,0.6);
+            align-items: center;
+            justify-content: center;
+            z-index: 1000;
+        }
+
+        .modal.active {
+            display: flex;
+        }
+
+        .modal-content {
+            background: white;
+            border-radius: 20px;
+            padding: 40px;
+            max-width: 500px;
+            width: 90%;
+            box-shadow: 0 20px 60px rgba(0,0,0,0.5);
+        }
+
+        .modal-content h2 {
+            margin-bottom: 20px;
+            color: #333;
+        }
+
+        .form-group {
+            margin-bottom: 20px;
+        }
+
+        .form-group label {
+            display: block;
+            margin-bottom: 8px;
+            color: #333;
+            font-weight: 600;
+        }
+
+        .form-group input,
+        .form-group select {
+            width: 100%;
+            padding: 12px;
+            border: 2px solid #e0e0e0;
+            border-radius: 8px;
+            font-size: 14px;
+            transition: border-color 0.3s;
+        }
+
+        .form-group input:focus {
+            outline: none;
+            border-color: #667eea;
+        }
+
+        .btn-container {
+            display: flex;
+            gap: 10px;
+            margin-top: 30px;
+        }
+
+        .btn {
+            flex: 1;
+            padding: 12px 24px;
+            border: none;
+            border-radius: 8px;
+            font-size: 16px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s;
+        }
+
+        .btn-primary {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+        }
+
+        .btn-primary:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 5px 15px rgba(102, 126, 234, 0.4);
+        }
+
+        .btn-secondary {
+            background: #f0f0f0;
+            color: #666;
+        }
+
+        .btn-secondary:hover {
+            background: #e0e0e0;
+        }
+
+        .error-message {
+            color: #e74c3c;
+            margin-top: 10px;
+            font-size: 14px;
+        }
+
         /* Pane Toggles */
         .pane-toggles {
             background: white;
@@ -1038,15 +1207,27 @@
     <div class="app-header">
         <div>
             <h1><span class="material-symbols-outlined">mic</span> Henty</h1>
-            <div class="project-name" id="projectName">Loading project...</div>
+            <div class="project-name" id="projectName">Select a project to begin</div>
         </div>
-        <div>
-            <button class="header-btn" onclick="window.location.href='landing.html'"><span class="material-symbols-outlined" style="font-size: 16px; vertical-align: middle;">arrow_back</span> Back to Projects</button>
+        <div class="project-selector-container">
+            <select class="project-dropdown" id="projectDropdown" onchange="handleProjectChange()">
+                <option value="">Select a project...</option>
+                <option value="__new__">+ New Project</option>
+            </select>
         </div>
     </div>
 
-    <!-- Pane Toggles -->
-    <div class="pane-toggles">
+    <!-- Project Selection Prompt (shown when no project is selected) -->
+    <div class="project-prompt" id="projectPrompt">
+        <div class="icon">📁</div>
+        <h2>Welcome to Henty</h2>
+        <p>Select a project from the dropdown above to start working, or create a new project to begin.</p>
+    </div>
+
+    <!-- Main Content (hidden until project is selected) -->
+    <div class="main-content hidden" id="mainContent">
+        <!-- Pane Toggles -->
+        <div class="pane-toggles">
         <div class="toggle-group">
             <div class="toggle-item">
                 <input type="checkbox" id="toggle-raw" onchange="updatePaneVisibility()">
@@ -1164,6 +1345,44 @@
                     </div>
                 </div>
             </div>
+        </div>
+    </div>
+    </div> <!-- End of main-content -->
+
+    <!-- New Project Modal -->
+    <div class="modal" id="newProjectModal">
+        <div class="modal-content">
+            <h2>Create New Project</h2>
+            <form id="newProjectForm" onsubmit="createNewProject(event)">
+                <div class="form-group">
+                    <label for="newProjectName">Project Name</label>
+                    <input type="text" id="newProjectName" required placeholder="Enter project name">
+                </div>
+                <div class="form-group">
+                    <label>Text Source</label>
+                    <div style="margin-bottom: 15px;">
+                        <label style="display: inline-flex; align-items: center; margin-right: 20px; font-weight: normal; cursor: pointer;">
+                            <input type="radio" name="textSourceType" value="url" checked onchange="toggleTextSourceInput()" style="margin-right: 8px; width: auto;">
+                            Gutenberg URL
+                        </label>
+                        <label style="display: inline-flex; align-items: center; font-weight: normal; cursor: pointer;">
+                            <input type="radio" name="textSourceType" value="file" onchange="toggleTextSourceInput()" style="margin-right: 8px; width: auto;">
+                            Upload Text File
+                        </label>
+                    </div>
+                    <div id="urlSourceInput">
+                        <input type="url" id="gutenbergUrl" placeholder="Enter Gutenberg URL" value="">
+                    </div>
+                    <div id="fileSourceInput" style="display: none;">
+                        <input type="file" id="textFile" accept=".txt" style="padding: 8px;">
+                    </div>
+                </div>
+                <div class="error-message" id="newProjectError"></div>
+                <div class="btn-container">
+                    <button type="button" class="btn btn-secondary" onclick="closeNewProjectModal()">Cancel</button>
+                    <button type="submit" class="btn btn-primary">Create Project</button>
+                </div>
+            </form>
         </div>
     </div>
 
@@ -1328,24 +1547,220 @@
             console.log('━━━ [APP LOAD PROJECT] END ━━━');
         }
 
+        // Global state
+        let currentProjectPath = null;
+        let allProjects = [];
+
+        // Load all projects into dropdown
+        async function loadProjectsDropdown() {
+            try {
+                const response = await fetch(`${SERVER_URL}/api/project/recent`, {
+                    headers: {
+                        'X-API-Key': API_KEY
+                    }
+                });
+
+                if (response.ok) {
+                    allProjects = await response.json();
+                    const dropdown = document.getElementById('projectDropdown');
+
+                    // Clear existing options except the first two
+                    dropdown.innerHTML = '<option value="">Select a project...</option><option value="__new__">+ New Project</option>';
+
+                    // Add all projects
+                    allProjects.forEach(project => {
+                        const option = document.createElement('option');
+                        option.value = project.path;
+                        option.textContent = project.name;
+                        dropdown.appendChild(option);
+                    });
+                }
+            } catch (error) {
+                console.error('Error loading projects:', error);
+            }
+        }
+
+        // Handle project selection change
+        async function handleProjectChange() {
+            const dropdown = document.getElementById('projectDropdown');
+            const selectedValue = dropdown.value;
+
+            if (selectedValue === '__new__') {
+                // Show new project modal
+                showNewProjectModal();
+                // Reset dropdown to previous selection or empty
+                dropdown.value = currentProjectPath || '';
+            } else if (selectedValue) {
+                // Load the selected project
+                await switchToProject(selectedValue);
+            } else {
+                // No project selected, hide main content
+                hideMainContent();
+            }
+        }
+
+        // Switch to a different project
+        async function switchToProject(projectPath) {
+            try {
+                // Show loading state
+                document.getElementById('projectName').textContent = 'Loading...';
+
+                // Load the project
+                await loadProjectData(projectPath);
+
+                // Update current project
+                currentProjectPath = projectPath;
+
+                // Show main content
+                showMainContent();
+
+                // Update URL without reloading page
+                const url = new URL(window.location);
+                url.searchParams.set('project', projectPath);
+                window.history.pushState({}, '', url);
+
+            } catch (error) {
+                console.error('Error switching project:', error);
+                showToast('Failed to load project: ' + error.message, 'error');
+                hideMainContent();
+            }
+        }
+
+        // Show/hide main content
+        function showMainContent() {
+            document.getElementById('projectPrompt').style.display = 'none';
+            document.getElementById('mainContent').classList.remove('hidden');
+        }
+
+        function hideMainContent() {
+            document.getElementById('projectPrompt').style.display = 'flex';
+            document.getElementById('mainContent').classList.add('hidden');
+            document.getElementById('projectName').textContent = 'Select a project to begin';
+        }
+
+        // Modal functions
+        function showNewProjectModal() {
+            const modal = document.getElementById('newProjectModal');
+            modal.classList.add('active');
+            // Load default Gutenberg URL
+            loadDefaultGutenbergUrl();
+        }
+
+        function closeNewProjectModal() {
+            const modal = document.getElementById('newProjectModal');
+            modal.classList.remove('active');
+            document.getElementById('newProjectForm').reset();
+            document.getElementById('newProjectError').textContent = '';
+        }
+
+        function toggleTextSourceInput() {
+            const sourceType = document.querySelector('input[name="textSourceType"]:checked').value;
+            const urlInput = document.getElementById('urlSourceInput');
+            const fileInput = document.getElementById('fileSourceInput');
+
+            if (sourceType === 'url') {
+                urlInput.style.display = 'block';
+                fileInput.style.display = 'none';
+            } else {
+                urlInput.style.display = 'none';
+                fileInput.style.display = 'block';
+            }
+        }
+
+        async function loadDefaultGutenbergUrl() {
+            try {
+                const response = await fetch(`${SERVER_URL}/api/config`);
+                if (response.ok) {
+                    const config = await response.json();
+                    document.getElementById('gutenbergUrl').value = config.default_gutenberg_url || '';
+                }
+            } catch (error) {
+                console.error('Error loading default Gutenberg URL:', error);
+            }
+        }
+
+        async function createNewProject(event) {
+            event.preventDefault();
+
+            const projectName = document.getElementById('newProjectName').value;
+            const sourceType = document.querySelector('input[name="textSourceType"]:checked').value;
+            const errorDiv = document.getElementById('newProjectError');
+
+            errorDiv.textContent = '';
+
+            try {
+                const formData = new FormData();
+                formData.append('project_name', projectName);
+
+                if (sourceType === 'url') {
+                    const gutenbergUrl = document.getElementById('gutenbergUrl').value;
+                    if (!gutenbergUrl) {
+                        errorDiv.textContent = 'Please enter a Gutenberg URL';
+                        return;
+                    }
+                    formData.append('gutenberg_url', gutenbergUrl);
+                } else {
+                    const textFile = document.getElementById('textFile').files[0];
+                    if (!textFile) {
+                        errorDiv.textContent = 'Please select a text file';
+                        return;
+                    }
+                    formData.append('text_file', textFile);
+                }
+
+                const response = await fetch(`${SERVER_URL}/api/project/create`, {
+                    method: 'POST',
+                    headers: {
+                        'X-API-Key': API_KEY
+                    },
+                    body: formData
+                });
+
+                if (response.ok) {
+                    const result = await response.json();
+                    closeNewProjectModal();
+
+                    // Reload projects dropdown
+                    await loadProjectsDropdown();
+
+                    // Switch to the new project
+                    const dropdown = document.getElementById('projectDropdown');
+                    dropdown.value = result.project_path;
+                    await switchToProject(result.project_path);
+
+                    showToast('Project created successfully!', 'success');
+                } else {
+                    const error = await response.json();
+                    errorDiv.textContent = error.error || 'Failed to create project';
+                }
+            } catch (error) {
+                console.error('Error creating project:', error);
+                errorDiv.textContent = 'Error creating project: ' + error.message;
+            }
+        }
+
         // Initialize on page load
         async function initApp() {
             console.log('━━━ [APP INIT] START ━━━');
 
-            // Get project path from URL parameter
+            // Load all projects into dropdown
+            await loadProjectsDropdown();
+
+            // Get project path from URL parameter (if any)
             const urlParams = new URLSearchParams(window.location.search);
             const projectPath = urlParams.get('project');
 
             console.log('[APP INIT] Project path from URL:', projectPath);
 
-            if (!projectPath) {
-                console.error('[APP INIT] No project path in URL');
-                alert('No project specified. Please select a project from the landing page.');
-                window.location.href = 'landing.html';
-                return;
+            if (projectPath) {
+                // Auto-select the project from URL
+                const dropdown = document.getElementById('projectDropdown');
+                dropdown.value = projectPath;
+                await switchToProject(projectPath);
+            } else {
+                // No project selected, show prompt
+                hideMainContent();
             }
-
-            await loadProjectData(projectPath);
 
             // Load device status
             await loadDeviceStatus();

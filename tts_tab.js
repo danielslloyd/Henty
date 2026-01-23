@@ -834,7 +834,12 @@ class TTSTab {
                 chunkId,
                 voice,
                 exaggeration,
-                cfgWeight
+                cfgWeight,
+                // Store full context for multi-project queuing
+                chapterId: this.currentChapter.id,
+                chunkText: chunk.text,
+                temperature: this.projectDefaults.temperature,
+                projectPath: currentProjectPath // From global state in app.html
             });
             this.updateGenerationStatusToast();
             return;
@@ -987,26 +992,136 @@ class TTSTab {
         }
     }
 
-    processNextInQueue() {
-        if (this.generationQueue.length > 0) {
-            const activeCount = Object.keys(this.activeGenerations).length;
-            if (activeCount < this.maxParallelGenerations) {
-                const nextGen = this.generationQueue.shift();
-                console.log(`[TTS TAB] Processing next in queue: chunk ${nextGen.chunkId}`);
+    async processNextInQueue() {
+        if (this.generationQueue.length === 0) {
+            return;
+        }
 
-                // Restore the parameters and call generateChunkAudio
-                // We need to set the UI values before calling generateChunkAudio
-                const voiceSelect = document.getElementById(`voice_chunk_${nextGen.chunkId}`);
-                const exagSlider = document.getElementById(`exaggeration_chunk_${nextGen.chunkId}`);
-                const cfgSlider = document.getElementById(`cfg_weight_chunk_${nextGen.chunkId}`);
+        const activeCount = Object.keys(this.activeGenerations).length;
+        if (activeCount >= this.maxParallelGenerations) {
+            return;
+        }
 
-                if (voiceSelect) voiceSelect.value = nextGen.voice;
-                if (exagSlider) exagSlider.value = nextGen.exaggeration;
-                if (cfgSlider) cfgSlider.value = nextGen.cfgWeight;
+        // Find the next item for the current project
+        const currentProject = window.currentProjectPath || null;
+        const nextIndex = this.generationQueue.findIndex(item =>
+            !item.projectPath || item.projectPath === currentProject
+        );
 
-                // Call generateChunkAudio again
+        if (nextIndex === -1) {
+            // No items for current project in queue
+            console.log(`[TTS TAB] No queued items for current project. Queue has ${this.generationQueue.length} items from other projects.`);
+            return;
+        }
+
+        // Remove the item from the queue
+        const nextGen = this.generationQueue.splice(nextIndex, 1)[0];
+        console.log(`[TTS TAB] Processing next in queue: chunk ${nextGen.chunkId} from project ${nextGen.projectPath || 'current'}`);
+
+        // If the queued item has stored context (multi-project queue), use it directly
+        if (nextGen.chapterId && nextGen.chunkText) {
+            // Check if this chunk is still in the current chapter (user might have switched chapters)
+            const isCurrentChapter = this.currentChapter && this.currentChapter.id === nextGen.chapterId;
+
+            if (isCurrentChapter) {
+                // UI is showing this chapter, can use normal path
                 this.generateChunkAudio(nextGen.chunkId);
+            } else {
+                // Chapter not visible, use direct generation
+                await this.generateChunkDirect(nextGen);
             }
+        } else {
+            // Legacy path: restore UI values and call generateChunkAudio
+            const voiceSelect = document.getElementById(`voice_chunk_${nextGen.chunkId}`);
+            const exagSlider = document.getElementById(`exaggeration_chunk_${nextGen.chunkId}`);
+            const cfgSlider = document.getElementById(`cfg_weight_chunk_${nextGen.chunkId}`);
+
+            if (voiceSelect) voiceSelect.value = nextGen.voice;
+            if (exagSlider) exagSlider.value = nextGen.exaggeration;
+            if (cfgSlider) cfgSlider.value = nextGen.cfgWeight;
+
+            this.generateChunkAudio(nextGen.chunkId);
+        }
+    }
+
+    async generateChunkDirect(genContext) {
+        const { chunkId, voice, exaggeration, cfgWeight, chapterId, chunkText, temperature, projectPath } = genContext;
+
+        console.log('[TTS TAB] Generating audio directly for chunk:', chunkId, 'from queued project');
+
+        // Track this generation
+        this.activeGenerations[chunkId] = {
+            hasExistingTakes: false,
+            progressInterval: null,
+            projectPath: projectPath,
+            chapterId: chapterId
+        };
+
+        // Update generation status toast
+        this.updateGenerationStatusToast();
+
+        // Start progress polling
+        const progressInterval = this.startProgressPolling(chunkId);
+        this.activeGenerations[chunkId].progressInterval = progressInterval;
+
+        try {
+            const response = await fetch(`${SERVER_URL}/api/project/generate-chunk-audio`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-API-Key': API_KEY
+                },
+                body: JSON.stringify({
+                    text_file_id: chapterId,
+                    chunk_id: chunkId,
+                    chunk_text: chunkText,
+                    voice_sample: voice,
+                    exaggeration: parseFloat(exaggeration),
+                    cfg_weight: parseFloat(cfgWeight),
+                    temperature: temperature
+                })
+            });
+
+            const data = await response.json();
+
+            if (!response.ok) {
+                throw new Error(data.error || `Server error: ${response.status}`);
+            }
+
+            console.log('[TTS TAB] Audio generated successfully (direct)');
+
+            // Clear progress polling
+            clearInterval(progressInterval);
+
+            // Remove this chunk from active generations
+            delete this.activeGenerations[chunkId];
+
+            // Process next item in queue if any
+            this.processNextInQueue();
+
+            // Update generation status toast
+            this.updateGenerationStatusToast();
+
+            // Show success toast
+            const projectName = projectPath ? projectPath.split('/').pop() : 'current';
+            showToast(`Audio generated for queued chunk from "${projectName}"`, 'success');
+
+        } catch (error) {
+            console.error('[TTS TAB] Error generating audio:', error);
+
+            // Clear progress polling
+            clearInterval(progressInterval);
+
+            // Remove from active generations
+            delete this.activeGenerations[chunkId];
+
+            // Process next item in queue
+            this.processNextInQueue();
+
+            // Update generation status toast
+            this.updateGenerationStatusToast();
+
+            showToast('Generation failed: ' + error.message, 'error');
         }
     }
 
@@ -1291,7 +1406,16 @@ class TTSTab {
         // Build status message
         let message = `Generating: ${activeCount} active`;
         if (queuedCount > 0) {
+            // Count items from other projects
+            const currentProject = window.currentProjectPath || null;
+            const otherProjectCount = this.generationQueue.filter(item =>
+                item.projectPath && item.projectPath !== currentProject
+            ).length;
+
             message += `, ${queuedCount} queued`;
+            if (otherProjectCount > 0) {
+                message += ` (${otherProjectCount} from other projects)`;
+            }
         }
 
         if (!this.generationStatusToast || !this.generationStatusToast.parentNode) {
