@@ -14,7 +14,13 @@ This script downloads and processes Project Gutenberg texts:
 import os
 import re
 import requests
-from typing import List, Tuple
+from typing import List, Tuple, Optional
+try:
+    from bs4 import BeautifulSoup
+    HAS_BS4 = True
+except ImportError:
+    HAS_BS4 = False
+    print("Warning: beautifulsoup4 not found. HTML processing will be limited.")
 
 
 class GutenbergProcessor:
@@ -45,7 +51,7 @@ class GutenbergProcessor:
 
     def download_text(self, url: str) -> str:
         """
-        Download text from a URL and verify it's a valid txt file
+        Download text from a URL (supports .txt, .htm, .html files)
 
         Args:
             url: URL to download from
@@ -54,19 +60,20 @@ class GutenbergProcessor:
             Downloaded text content
 
         Raises:
-            ValueError: If URL doesn't point to a valid txt file
+            ValueError: If URL doesn't point to a valid text or HTML file
         """
-        # Verify URL points to a .txt file
-        if not url.lower().endswith('.txt'):
-            raise ValueError(f"URL does not point to a .txt file: {url}")
+        url_lower = url.lower()
+        # Verify URL points to a supported file type
+        if not (url_lower.endswith('.txt') or url_lower.endswith('.htm') or url_lower.endswith('.html')):
+            raise ValueError(f"URL does not point to a .txt, .htm, or .html file: {url}")
 
         response = requests.get(url, timeout=30)
         response.raise_for_status()
 
         # Verify content-type if available
         content_type = response.headers.get('content-type', '')
-        if content_type and 'text' not in content_type.lower():
-            raise ValueError(f"URL does not return text content: {content_type}")
+        if content_type and not any(t in content_type.lower() for t in ['text', 'html']):
+            raise ValueError(f"URL does not return text/html content: {content_type}")
 
         return response.text
 
@@ -147,6 +154,118 @@ class GutenbergProcessor:
                 return title
 
         return ''
+
+    def is_html(self, text: str) -> bool:
+        """
+        Detect if the text content is HTML
+
+        Args:
+            text: Text to check
+
+        Returns:
+            True if content appears to be HTML
+        """
+        # Look for common HTML patterns
+        html_patterns = [
+            r'<!DOCTYPE\s+html',
+            r'<html[>\s]',
+            r'<head[>\s]',
+            r'<body[>\s]',
+            r'<div[>\s]',
+            r'<p[>\s]'
+        ]
+
+        text_lower = text[:1000].lower()  # Check first 1000 chars
+        return any(re.search(pattern, text_lower, re.IGNORECASE) for pattern in html_patterns)
+
+    def extract_html_chapters(self, html_content: str, title: str) -> List[Tuple[str, str]]:
+        """
+        Extract chapters from Gutenberg HTML format
+
+        Args:
+            html_content: HTML content
+            title: Book title
+
+        Returns:
+            List of tuples (chapter_title, chapter_text)
+        """
+        if not HAS_BS4:
+            raise ValueError("beautifulsoup4 is required for HTML processing. Install with: pip install beautifulsoup4")
+
+        soup = BeautifulSoup(html_content, 'html.parser')
+
+        # Remove Gutenberg header and footer
+        # Look for the main content div/body
+        main_content = soup.find('body')
+        if not main_content:
+            main_content = soup
+
+        chapters = []
+
+        # Strategy 1: Look for chapter divisions with h2 or h3 headers
+        # Gutenberg HTML files often use h2 for chapter headers
+        chapter_headers = main_content.find_all(['h2', 'h3'])
+
+        if chapter_headers:
+            # Process content by chapter headers
+            for i, header in enumerate(chapter_headers):
+                chapter_title = header.get_text(strip=True)
+
+                # Skip table of contents and front matter
+                if any(skip in chapter_title.lower() for skip in ['contents', 'table of contents', 'toc', 'index']):
+                    continue
+
+                # Collect all content until the next header
+                content_parts = []
+                current = header.find_next_sibling()
+
+                while current:
+                    # Stop if we hit another chapter header
+                    if current.name in ['h2', 'h3']:
+                        break
+
+                    # Get text from paragraph-level elements
+                    if current.name in ['p', 'div']:
+                        text = current.get_text(separator=' ', strip=True)
+                        if text:
+                            content_parts.append(text)
+
+                    current = current.find_next_sibling()
+
+                if content_parts:
+                    chapter_text = '\n\n'.join(content_parts)
+                    chapters.append((chapter_title, chapter_text))
+
+        # Strategy 2: If no clear chapter structure, split by major divs or sections
+        if not chapters:
+            # Look for div elements with significant content
+            divs = main_content.find_all('div', recursive=False)
+
+            for i, div in enumerate(divs):
+                # Get all paragraphs in this div
+                paragraphs = div.find_all('p')
+                if paragraphs:
+                    text_parts = [p.get_text(separator=' ', strip=True) for p in paragraphs]
+                    text_parts = [t for t in text_parts if t]  # Filter empty
+
+                    if text_parts:
+                        chapter_text = '\n\n'.join(text_parts)
+                        # Use first few words as chapter title if no header
+                        first_words = ' '.join(chapter_text.split()[:5])
+                        chapter_title = f"Section {i+1}: {first_words}..."
+                        chapters.append((chapter_title, chapter_text))
+
+        # Strategy 3: If still no chapters, get all paragraphs as one chapter
+        if not chapters:
+            all_paragraphs = main_content.find_all('p')
+            text_parts = [p.get_text(separator=' ', strip=True) for p in all_paragraphs]
+            text_parts = [t for t in text_parts if t]  # Filter empty
+
+            if text_parts:
+                chapter_text = '\n\n'.join(text_parts)
+                chapters.append((title, chapter_text))
+
+        return chapters
 
     def process_carriage_returns(self, text: str) -> str:
         """
@@ -276,7 +395,7 @@ class GutenbergProcessor:
 
     def process_url(self, url: str) -> Tuple[str, List[str]]:
         """
-        Process a single Gutenberg URL
+        Process a single Gutenberg URL (supports both .txt and .html files)
 
         Args:
             url: URL to process
@@ -284,39 +403,103 @@ class GutenbergProcessor:
         Returns:
             Tuple of (book_name, list of saved file paths)
         """
-        # Download text (verifies it's a valid .txt file)
+        # Download content
         print(f"Downloading: {url}")
         try:
-            text = self.download_text(url)
+            content = self.download_text(url)
         except ValueError as e:
             print(f"Skipping {url}: {e}")
             raise
 
-        # Extract title from the raw text (before stripping metadata)
-        title = self.extract_title(text)
+        # Check if content is HTML
+        is_html = self.is_html(content)
+        print(f"Content type: {'HTML' if is_html else 'Plain text'}")
 
-        if not title:
-            print(f"Warning: Could not extract title from {url}")
-            # Extract book ID from URL as fallback
-            title = self.extract_book_name(url)
+        if is_html:
+            # Process HTML content
+            # Try to extract title from HTML
+            if HAS_BS4:
+                soup = BeautifulSoup(content, 'html.parser')
+                title_tag = soup.find('title')
+                if title_tag:
+                    # Clean up title (remove "The Project Gutenberg eBook of" etc)
+                    title = title_tag.get_text(strip=True)
+                    title = re.sub(r'The Project Gutenberg eBook of\s+', '', title, flags=re.IGNORECASE)
+                    title = re.sub(r'\s+by\s+.+$', '', title)  # Remove author
+                    title = re.sub(r'[^\w\s-]', '', title)
+                    title = re.sub(r'\s+', '_', title)
+                    title = title[:50]
+                else:
+                    title = None
 
-        print(f"Processing book: {title}")
+            if not title:
+                print(f"Warning: Could not extract title from HTML")
+                title = self.extract_book_name(url)
 
-        # Strip Gutenberg metadata and replace with title
-        text = self.strip_gutenberg_metadata(text, title)
+            print(f"Processing HTML book: {title}")
 
-        # Process carriage returns (remove singles, preserve 4+ as section breaks)
-        text = self.process_carriage_returns(text)
+            # Extract chapters from HTML
+            chapters_data = self.extract_html_chapters(content, title)
+            print(f"Found {len(chapters_data)} chapters from HTML structure")
 
-        # Split into sections by section break markers
-        sections = self.split_by_section_breaks(text)
-        print(f"Found {len(sections)} sections")
+            # Save chapters
+            saved_files = []
+            book_dir = os.path.join(self.output_dir, title)
+            os.makedirs(book_dir, exist_ok=True)
 
-        # Save sections (using title as the folder name)
-        saved_files = self.save_chapters(sections, title)
-        print(f"Saved {len(saved_files)} files to {title}/")
+            for i, (chapter_title, chapter_text) in enumerate(chapters_data, start=1):
+                # Sanitize chapter title for filename
+                sanitized = re.sub(r'[^\w\s-]', '', chapter_title)
+                sanitized = re.sub(r'\s+', '_', sanitized)
+                sanitized = sanitized.strip('_')[:50]  # Limit length
 
-        return title, saved_files
+                if not sanitized:
+                    sanitized = f"chapter_{i}"
+
+                filepath = os.path.join(book_dir, f"{sanitized}.txt")
+
+                # Handle duplicate filenames
+                counter = 1
+                while os.path.exists(filepath):
+                    filepath = os.path.join(book_dir, f"{sanitized}_{counter}.txt")
+                    counter += 1
+
+                # Write chapter with title header
+                with open(filepath, 'w', encoding='utf-8') as f:
+                    f.write(f"{chapter_title}\n\n{chapter_text}")
+
+                saved_files.append(filepath)
+
+            print(f"Saved {len(saved_files)} chapters to {title}/")
+            return title, saved_files
+
+        else:
+            # Process plain text content (original logic)
+            # Extract title from the raw text (before stripping metadata)
+            title = self.extract_title(content)
+
+            if not title:
+                print(f"Warning: Could not extract title from {url}")
+                # Extract book ID from URL as fallback
+                title = self.extract_book_name(url)
+
+            print(f"Processing book: {title}")
+
+            # Strip Gutenberg metadata and replace with title
+            text = self.strip_gutenberg_metadata(content, title)
+
+            # Process carriage returns (remove singles, preserve 4+ as section breaks)
+            text = self.process_carriage_returns(text)
+
+            # Split into sections by section break markers
+            sections = self.split_by_section_breaks(text)
+            print(f"Found {len(sections)} sections")
+
+            # Save sections (using title as the folder name)
+            saved_files = self.save_chapters(sections, title)
+            print(f"Saved {len(saved_files)} files to {title}/")
+
+            return title, saved_files
 
     def process_urls(self, urls: List[str]) -> dict:
         """
