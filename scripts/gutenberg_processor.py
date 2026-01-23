@@ -62,9 +62,11 @@ class GutenbergProcessor:
         Raises:
             ValueError: If URL doesn't point to a valid text or HTML file
         """
-        url_lower = url.lower()
+        # Remove fragment identifier (#...) and query parameters before checking extension
+        url_for_check = url.split('#')[0].split('?')[0].lower()
+
         # Verify URL points to a supported file type
-        if not (url_lower.endswith('.txt') or url_lower.endswith('.htm') or url_lower.endswith('.html')):
+        if not (url_for_check.endswith('.txt') or url_for_check.endswith('.htm') or url_for_check.endswith('.html')):
             raise ValueError(f"URL does not point to a .txt, .htm, or .html file: {url}")
 
         response = requests.get(url, timeout=30)
