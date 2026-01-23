@@ -1689,8 +1689,9 @@
             errorDiv.textContent = '';
 
             try {
-                const formData = new FormData();
-                formData.append('project_name', projectName);
+                const requestData = {
+                    project_name: projectName
+                };
 
                 if (sourceType === 'url') {
                     const gutenbergUrl = document.getElementById('gutenbergUrl').value;
@@ -1698,22 +1699,39 @@
                         errorDiv.textContent = 'Please enter a Gutenberg URL';
                         return;
                     }
-                    formData.append('gutenberg_url', gutenbergUrl);
+                    requestData.text_source = {
+                        type: 'url',
+                        url: gutenbergUrl
+                    };
                 } else {
                     const textFile = document.getElementById('textFile').files[0];
                     if (!textFile) {
                         errorDiv.textContent = 'Please select a text file';
                         return;
                     }
-                    formData.append('text_file', textFile);
+
+                    // Read file content as text
+                    const fileContent = await new Promise((resolve, reject) => {
+                        const reader = new FileReader();
+                        reader.onload = (e) => resolve(e.target.result);
+                        reader.onerror = reject;
+                        reader.readAsText(textFile);
+                    });
+
+                    requestData.text_source = {
+                        type: 'file',
+                        content: fileContent,
+                        filename: textFile.name
+                    };
                 }
 
                 const response = await fetch(`${SERVER_URL}/api/project/create`, {
                     method: 'POST',
                     headers: {
+                        'Content-Type': 'application/json',
                         'X-API-Key': API_KEY
                     },
-                    body: formData
+                    body: JSON.stringify(requestData)
                 });
 
                 if (response.ok) {
