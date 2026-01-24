@@ -366,6 +366,17 @@ class TTSTab {
         return html;
     }
 
+    /**
+     * Check if a take's input text matches the current chunk text
+     * Returns true if the take is outdated (text has changed since generation)
+     */
+    isTakeOutdated(take, currentChunkText) {
+        // If no input_text stored (older takes), we can't tell - assume current
+        if (!take.input_text) return false;
+        // Compare stored input text with current chunk text
+        return take.input_text !== currentChunkText;
+    }
+
     renderSingleChunk(chunk, takeCounter = 0) {
         // Renders a single chunk's take rows
         let html = '';
@@ -383,10 +394,11 @@ class TTSTab {
                 // First take: chunk preview + icons
                 const firstTake = sortedAudio[0];
                 const isBest = firstTake.is_best_take;
+                const isOutdated = this.isTakeOutdated(firstTake, chunk.text);
                 const takeId = `take_${chunk.id}_${takeCounter++}`;
 
                 html += `
-                    <div class="chunk-take-row ${isBest ? 'best-take' : 'non-best-take'}"
+                    <div class="chunk-take-row ${isBest ? 'best-take' : 'non-best-take'}${isOutdated ? ' outdated-take' : ''}"
                          data-chunk-id="${chunk.id}">
                         <div class="chunk-take-header"
                              onclick="ttsTab.highlightChunk(${chunk.id}, true)"
@@ -399,6 +411,7 @@ class TTSTab {
                                 <button class="chunk-icon add" onclick="event.stopPropagation(); ttsTab.selectChunk(${chunk.id}); setTimeout(() => ttsTab.generateChunkAudio(${chunk.id}), 100)" title="Generate take">
                                     <span class="material-symbols-outlined">add</span>
                                 </button>
+                                ${isOutdated ? '<span class="material-symbols-outlined outdated-icon" title="Text changed since generation">edit_off</span>' : ''}
                                 <span class="chunk-preview-text">${chunkPreview}</span>
                             </div>
                             <div class="take-icons">
@@ -419,6 +432,12 @@ class TTSTab {
                             </div>
                         </div>
                         <div class="take-settings" id="${takeId}">
+                            ${isOutdated ? `
+                            <div class="setting-row warning-row outdated-warning">
+                                <span class="material-symbols-outlined warning-icon">edit_off</span>
+                                <span class="warning-text">Outdated: chunk text has changed since this take was generated</span>
+                            </div>
+                            ` : ''}
                             <div class="setting-row">
                                 <span class="setting-label">Voice</span>
                                 <span class="setting-value">${firstTake.voice_sample || 'Default'}</span>
@@ -487,16 +506,19 @@ class TTSTab {
                 for (let i = 1; i < sortedAudio.length; i++) {
                     const take = sortedAudio[i];
                     const isBest = take.is_best_take;
+                    const isOutdated = this.isTakeOutdated(take, chunk.text);
                     const takeId = `take_${chunk.id}_${takeCounter++}`;
 
                     html += `
-                        <div class="chunk-take-row additional-take ${isBest ? 'best-take' : 'non-best-take'}"
+                        <div class="chunk-take-row additional-take ${isBest ? 'best-take' : 'non-best-take'}${isOutdated ? ' outdated-take' : ''}"
                              data-chunk-id="${chunk.id}">
                             <div class="chunk-take-header"
                                  onclick="ttsTab.highlightChunk(${chunk.id}, true)"
                                  onmouseenter="ttsTab.highlightChunk(${chunk.id})"
                                  onmouseleave="ttsTab.unhighlightChunk(${chunk.id})">
-                                <div class="chunk-left"></div>
+                                <div class="chunk-left">
+                                    ${isOutdated ? '<span class="material-symbols-outlined outdated-icon" title="Text changed since generation">edit_off</span>' : ''}
+                                </div>
                                 <div class="take-icons">
                                     <button class="take-icon check-circle ${isBest ? 'best' : ''}"
                                             onclick='event.stopPropagation(); ttsTab.setBestTake(${chunk.id}, "${take.audio_file}")'
@@ -515,6 +537,12 @@ class TTSTab {
                                 </div>
                             </div>
                             <div class="take-settings" id="${takeId}">
+                                ${isOutdated ? `
+                                <div class="setting-row warning-row outdated-warning">
+                                    <span class="material-symbols-outlined warning-icon">edit_off</span>
+                                    <span class="warning-text">Outdated: chunk text has changed since this take was generated</span>
+                                </div>
+                                ` : ''}
                                 <div class="setting-row">
                                     <span class="setting-label">Voice</span>
                                     <span class="setting-value">${take.voice_sample || 'Default'}</span>
