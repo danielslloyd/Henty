@@ -90,71 +90,59 @@ class GutenbergTab {
     }
 
     /**
-     * Apply syntax highlighting to XML text with visual boundaries for chapters and chunks
+     * Apply syntax highlighting to XML text
+     * - Hide chapter and chunk tags, show only their content
+     * - Convert <p> tags to line breaks
+     * - Make other tags collapsible and styled
      */
     highlightXML(xmlText) {
         if (!xmlText) return '';
 
-        // Escape HTML entities
-        let highlighted = xmlText
-            .replace(/&/g, '&amp;')
-            .replace(/</g, '&lt;')
-            .replace(/>/g, '&gt;');
+        let html = xmlText;
 
-        // First, wrap entire chunk elements as blocks (including content)
-        // Match <chunk>content</chunk> and wrap in a block div
-        highlighted = highlighted.replace(
-            /(&lt;chunk&gt;)([\s\S]*?)(&lt;\/chunk&gt;)/g,
-            '<div class="xml-chunk-block">$1$2$3</div>'
+        // First, handle chapter tags - extract title for header, hide tags
+        html = html.replace(
+            /<chapter\s+title="([^"]*)">\s*/gi,
+            '<div class="xml-chapter-section"><div class="xml-chapter-header" onclick="toggleChapterCollapse(this)"><span class="collapse-icon">&#9660;</span><span class="chapter-title">$1</span></div><div class="xml-chapter-content">'
+        );
+        html = html.replace(/<\/chapter>\s*/gi, '</div></div>');
+
+        // Handle non-voiced sections similarly
+        html = html.replace(
+            /<non-voiced\s+title="([^"]*)">\s*/gi,
+            '<div class="xml-non-voiced-section"><div class="xml-non-voiced-header" onclick="toggleChapterCollapse(this)"><span class="collapse-icon">&#9660;</span><span class="non-voiced-title">$1</span> <span class="non-voiced-badge">(non-voiced)</span></div><div class="xml-chapter-content">'
+        );
+        html = html.replace(/<\/non-voiced>\s*/gi, '</div></div>');
+
+        // Handle chunk tags - hide them completely, just show content with a subtle separator
+        html = html.replace(/<chunk>\s*/gi, '<div class="xml-chunk-content">');
+        html = html.replace(/\s*<\/chunk>/gi, '</div>');
+
+        // Handle <p> tags - convert to line breaks
+        html = html.replace(/<p>\s*/gi, '<div class="xml-paragraph">');
+        html = html.replace(/\s*<\/p>/gi, '</div>');
+
+        // Handle pause tags - make them collapsible and styled
+        html = html.replace(
+            /<pause\s+duration="([^"]*)"\s*\/>/gi,
+            '<div class="xml-tag-block xml-pause-tag" onclick="toggleTagDetails(this)"><span class="tag-icon">&#9208;</span><span class="tag-label">Pause</span><span class="tag-value">$1s</span></div>'
         );
 
-        // Wrap chapter opening tags
-        highlighted = highlighted.replace(
-            /(&lt;chapter\s+[^&]*&gt;)/g,
-            '<div class="xml-chapter-boundary">$1</div>'
+        // Handle common_file tags - make them collapsible and styled
+        html = html.replace(
+            /<common_file\s+path="([^"]*)"\s*\/>/gi,
+            '<div class="xml-tag-block xml-common-file-tag" onclick="toggleTagDetails(this)"><span class="tag-icon">&#128266;</span><span class="tag-label">Audio File</span><span class="tag-value">$1</span></div>'
         );
 
-        // Wrap chapter closing tags
-        highlighted = highlighted.replace(
-            /(&lt;\/chapter&gt;)/g,
-            '<div class="xml-chapter-end">$1</div>'
-        );
+        // Handle book tags - hide them
+        html = html.replace(/<\?xml[^>]*\?>\s*/gi, '');
+        html = html.replace(/<book>\s*/gi, '<div class="xml-book-container">');
+        html = html.replace(/\s*<\/book>/gi, '</div>');
 
-        // Wrap non-voiced opening tags
-        highlighted = highlighted.replace(
-            /(&lt;non-voiced\s+[^&]*&gt;)/g,
-            '<div class="xml-non-voiced-boundary">$1</div>'
-        );
+        // Escape any remaining < and > in text content that aren't part of our HTML
+        // This is tricky - we need to be careful not to break our generated HTML
 
-        // Wrap non-voiced closing tags
-        highlighted = highlighted.replace(
-            /(&lt;\/non-voiced&gt;)/g,
-            '<div class="xml-non-voiced-end">$1</div>'
-        );
-
-        // Highlight XML tags with attributes
-        highlighted = highlighted.replace(
-            /&lt;(\/?)([\w-]+)((?:\s+[\w-]+="[^"]*")*)\s*(\/??)&gt;/g,
-            (match, slash1, tagName, attributes, slash2) => {
-                let result = '<span class="xml-bracket">&lt;</span>';
-                result += slash1;
-                result += `<span class="xml-tag">${tagName}</span>`;
-
-                // Highlight attributes
-                if (attributes) {
-                    result += attributes.replace(
-                        /([\w-]+)="([^"]*)"/g,
-                        '<span class="xml-attribute">$1</span>=<span class="xml-value">"$2"</span>'
-                    );
-                }
-
-                result += slash2;
-                result += '<span class="xml-bracket">&gt;</span>';
-                return result;
-            }
-        );
-
-        return highlighted;
+        return html;
     }
 
     displayXML() {
@@ -164,28 +152,21 @@ class GutenbergTab {
         console.log('[DISPLAY XML] XML length:', this.xmlContent.length);
 
         if (!this.xmlContent) {
-            editor.innerHTML = '';
+            editor.innerHTML = '<div class="xml-empty-state">No content. Load a Project Gutenberg text or upload a file to begin.</div>';
             return;
         }
 
-        // Filter out <p> and </p> tags for cleaner display
-        let filteredXML = this.xmlContent
-            .replace(/<p>/gi, '')
-            .replace(/<\/p>/gi, '');
+        // Clean up Gutenberg-style formatting first
+        let cleanedXML = this.cleanGutenbergWhitespace(this.xmlContent);
 
-        // Clean up Gutenberg-style formatting:
-        // 1. Remove all leading indentation (spaces/tabs at start of lines)
-        // 2. Collapse line breaks within text content (keep breaks around tags)
-        filteredXML = this.cleanGutenbergWhitespace(filteredXML);
-
-        // Apply syntax highlighting
-        editor.innerHTML = this.highlightXML(filteredXML);
+        // Apply syntax highlighting and structure
+        editor.innerHTML = this.highlightXML(cleanedXML);
     }
 
     /**
      * Clean up whitespace from Gutenberg source:
      * - Remove all indentation (leading spaces/tabs)
-     * - Collapse line breaks that don't coincide with XML tags into single spaces
+     * - Collapse excessive line breaks
      */
     cleanGutenbergWhitespace(xml) {
         // First, remove all leading whitespace from each line
@@ -195,39 +176,15 @@ class GutenbergTab {
         // Join lines back together
         let cleaned = lines.join('\n');
 
-        // Now handle line breaks within chunk content:
-        // Line breaks that are NOT adjacent to XML tags should become spaces
-        // We process the text between tags separately
+        // Collapse excessive whitespace between tags
+        cleaned = cleaned.replace(/>\s+</g, '><');
 
-        // Match text content between > and < (the actual content, not tags)
-        cleaned = cleaned.replace(/>([^<]+)</g, (match, content) => {
-            // Collapse multiple whitespace (including newlines) into single spaces
-            // but preserve intentional paragraph breaks (double newlines)
-            const processed = content
-                // First, normalize line breaks
-                .replace(/\r\n/g, '\n')
-                // Collapse single newlines (not preceded/followed by newlines) into spaces
-                .replace(/(?<!\n)\n(?!\n)/g, ' ')
-                // Collapse multiple spaces into single space
-                .replace(/ +/g, ' ');
-
-            return '>' + processed + '<';
-        });
-
-        // Clean up extra whitespace around tags
-        // Remove blank lines between tags
-        cleaned = cleaned.replace(/>\s*\n\s*\n+\s*</g, '>\n<');
-
-        // Preserve structure by keeping newlines around block-level elements
-        cleaned = cleaned
-            .replace(/(<\/chunk>)\s*/g, '$1\n')
-            .replace(/\s*(<chunk>)/g, '\n$1')
-            .replace(/(<\/chapter>)\s*/g, '$1\n')
-            .replace(/\s*(<chapter\s)/g, '\n$1')
-            .replace(/(<\/non-voiced>)\s*/g, '$1\n')
-            .replace(/\s*(<non-voiced\s)/g, '\n$1')
-            .replace(/(<\/book>)\s*/g, '$1\n')
-            .replace(/\s*(<book>)/g, '\n$1');
+        // But preserve some spacing for readability
+        cleaned = cleaned.replace(/<\/chunk><chunk>/g, '</chunk>\n<chunk>');
+        cleaned = cleaned.replace(/<\/chapter>/g, '</chapter>\n');
+        cleaned = cleaned.replace(/<chapter/g, '\n<chapter');
+        cleaned = cleaned.replace(/<\/non-voiced>/g, '</non-voiced>\n');
+        cleaned = cleaned.replace(/<non-voiced/g, '\n<non-voiced');
 
         // Clean up multiple consecutive newlines
         cleaned = cleaned.replace(/\n{3,}/g, '\n\n');
