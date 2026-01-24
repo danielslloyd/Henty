@@ -2069,7 +2069,7 @@ def get_project_text_files():
 
 @app.route('/api/project/update-chunk-text', methods=['POST'])
 def update_chunk_text():
-    """Update the text of a specific chunk and mark as dirty"""
+    """Update the text of a specific chunk and mark as dirty. Auto-splits if text is too long."""
     try:
         import json
         from datetime import datetime
@@ -2098,17 +2098,73 @@ def update_chunk_text():
         if not chunk:
             return jsonify({'error': 'Chunk not found'}), 404
 
-        # Update chunk
-        chunk['text'] = new_text
-        # Use provided nickname if available, otherwise auto-generate from text
-        if new_nickname is not None:
-            chunk['nickname'] = new_nickname
-        else:
-            chunk['nickname'] = new_text[:50].strip() + ('...' if len(new_text) > 50 else '')
+        # Check if the new text exceeds max chunk size and needs splitting
+        max_chunk_size = config.MAX_CHUNK_SIZE
+        was_split = False
+        new_chunks = []
 
-        # Mark as dirty if there are generated audios
-        if len(chunk.get('generated_audios', [])) > 0:
-            chunk['dirty'] = True
+        if len(new_text) > max_chunk_size:
+            # Text is too long, need to split it
+            print(f"[UPDATE CHUNK] Chunk {chunk_id} text ({len(new_text)} chars) exceeds max ({max_chunk_size}), splitting...")
+
+            # Get split chunks
+            split_result = converter.smart_chunk_text(new_text, max_chunk_size)
+
+            if len(split_result) > 1:
+                was_split = True
+
+                # Find the chunk's position in the container's chunks list
+                chunks_list = container.get('chunks', [])
+                chunk_index = next((i for i, c in enumerate(chunks_list) if c['id'] == chunk_id), None)
+
+                if chunk_index is None:
+                    return jsonify({'error': 'Chunk position not found'}), 404
+
+                # Update the original chunk with the first split piece
+                first_piece = split_result[0]
+                chunk['text'] = first_piece['text']
+                chunk['nickname'] = first_piece['text'][:50].strip() + ('...' if len(first_piece['text']) > 50 else '')
+
+                # Mark as dirty if there are generated audios
+                if len(chunk.get('generated_audios', [])) > 0:
+                    chunk['dirty'] = True
+
+                new_chunks.append(chunk)
+
+                # Get the highest chunk ID in this chapter
+                max_id = max(c['id'] for c in chunks_list)
+
+                # Insert remaining pieces as new chunks after the original
+                for i, piece in enumerate(split_result[1:], 1):
+                    new_chunk = {
+                        'id': max_id + i,
+                        'type': 'text',
+                        'text': piece['text'],
+                        'nickname': piece['text'][:50].strip() + ('...' if len(piece['text']) > 50 else ''),
+                        'start_pos': piece.get('start_pos', 0),
+                        'end_pos': piece.get('end_pos', len(piece['text'])),
+                        'dirty': False,
+                        'generated_audios': []
+                    }
+                    # Insert at the correct position
+                    chunks_list.insert(chunk_index + i, new_chunk)
+                    new_chunks.append(new_chunk)
+
+                print(f"[UPDATE CHUNK] Split into {len(split_result)} chunks")
+        else:
+            # No split needed, just update the chunk normally
+            chunk['text'] = new_text
+            # Use provided nickname if available, otherwise auto-generate from text
+            if new_nickname is not None:
+                chunk['nickname'] = new_nickname
+            else:
+                chunk['nickname'] = new_text[:50].strip() + ('...' if len(new_text) > 50 else '')
+
+            # Mark as dirty if there are generated audios
+            if len(chunk.get('generated_audios', [])) > 0:
+                chunk['dirty'] = True
+
+            new_chunks.append(chunk)
 
         # Update project metadata
         converter.current_project_metadata['last_modified'] = datetime.now().isoformat()
@@ -2123,7 +2179,10 @@ def update_chunk_text():
 
         return jsonify({
             'success': True,
-            'chunk': chunk
+            'chunk': chunk,
+            'was_split': was_split,
+            'new_chunks': new_chunks,
+            'split_count': len(new_chunks) if was_split else 0
         })
 
     except Exception as e:
@@ -2599,7 +2658,8 @@ def generate_project_chunk_audio():
                     'temperature': temperature,
                     'audio_duration_seconds': round(audio_duration, 2),
                     'possibly_truncated': possibly_truncated,
-                    'generation_time_ms': generation_time_ms
+                    'generation_time_ms': generation_time_ms,
+                    'input_text': chunk_text  # Store the text used for generation to detect outdated takes
                 }
                 chunk['generated_audios'].append(audio_entry)
 

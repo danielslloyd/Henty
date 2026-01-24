@@ -451,6 +451,56 @@
             border-radius: 2px;
         }
 
+        /* Chapter boundary visual indicators */
+        .xml-editor .xml-chapter-boundary {
+            display: block;
+            background: rgba(16, 185, 129, 0.1);
+            border-left: 4px solid #10b981;
+            border-top: 1px dashed #10b981;
+            padding: 4px 8px;
+            margin: 12px 0 4px 0;
+            border-radius: 4px;
+        }
+
+        .xml-editor .xml-chapter-end {
+            display: block;
+            border-bottom: 1px dashed #10b981;
+            margin: 4px 0 12px 0;
+            padding-bottom: 4px;
+        }
+
+        /* Chunk boundary block display */
+        .xml-editor .xml-chunk-block {
+            display: block;
+            background: rgba(59, 130, 246, 0.05);
+            border-left: 3px solid #3b82f6;
+            padding: 4px 8px;
+            margin: 4px 0;
+            border-radius: 2px;
+        }
+
+        .xml-editor .xml-chunk-block:hover {
+            background: rgba(59, 130, 246, 0.1);
+        }
+
+        /* Non-voiced section */
+        .xml-editor .xml-non-voiced-boundary {
+            display: block;
+            background: rgba(156, 163, 175, 0.1);
+            border-left: 4px solid #9ca3af;
+            border-top: 1px dashed #9ca3af;
+            padding: 4px 8px;
+            margin: 12px 0 4px 0;
+            border-radius: 4px;
+        }
+
+        .xml-editor .xml-non-voiced-end {
+            display: block;
+            border-bottom: 1px dashed #9ca3af;
+            margin: 4px 0 12px 0;
+            padding-bottom: 4px;
+        }
+
         /* Placeholder for contenteditable */
         .xml-editor:empty:before {
             content: attr(data-placeholder);
@@ -923,6 +973,31 @@
             font-size: 11px;
             color: #92400e;
             font-weight: 500;
+        }
+
+        /* Outdated take indicators */
+        .chunk-take-row.outdated-take {
+            background: rgba(239, 68, 68, 0.05) !important;
+            border-left-color: #f87171 !important;
+        }
+
+        .outdated-icon {
+            color: #f87171;
+            font-size: 16px;
+            margin-right: 4px;
+        }
+
+        .outdated-warning {
+            background: #fee2e2 !important;
+            border-color: #fca5a5 !important;
+        }
+
+        .outdated-warning .warning-icon {
+            color: #ef4444;
+        }
+
+        .outdated-warning .warning-text {
+            color: #991b1b;
         }
 
         .setting-label {
@@ -1565,11 +1640,13 @@
                     // Clear all options
                     dropdown.innerHTML = '';
 
-                    // Add "Select a project..." option
-                    const selectOption = document.createElement('option');
-                    selectOption.value = '';
-                    selectOption.textContent = 'Select a project...';
-                    dropdown.appendChild(selectOption);
+                    // Only add "Select a project..." option if no project is currently selected
+                    if (!currentProjectPath) {
+                        const selectOption = document.createElement('option');
+                        selectOption.value = '';
+                        selectOption.textContent = 'Select a project...';
+                        dropdown.appendChild(selectOption);
+                    }
 
                     // Add "+ New Project" option
                     const newOption = document.createElement('option');
@@ -1623,6 +1700,9 @@
                 // Update current project
                 currentProjectPath = projectPath;
 
+                // Reload dropdown (this removes "Select a project" option when a project is selected)
+                await loadProjectsDropdown();
+
                 // Update dropdown to show selected project
                 const dropdown = document.getElementById('projectDropdown');
                 dropdown.value = projectPath;
@@ -1639,9 +1719,9 @@
                 console.error('Error switching project:', error);
                 showToast('Failed to load project: ' + error.message, 'error');
                 hideMainContent();
-                // Reset dropdown to empty
-                const dropdown = document.getElementById('projectDropdown');
-                dropdown.value = '';
+                currentProjectPath = null;
+                // Reload dropdown to show "Select a project" option again
+                await loadProjectsDropdown();
             }
         }
 
@@ -1651,11 +1731,12 @@
             document.getElementById('mainContent').classList.remove('hidden');
         }
 
-        function hideMainContent() {
+        async function hideMainContent() {
             document.getElementById('projectPrompt').style.display = 'flex';
             document.getElementById('mainContent').classList.add('hidden');
-            const dropdown = document.getElementById('projectDropdown');
-            dropdown.value = '';
+            currentProjectPath = null;
+            // Reload dropdown to show "Select a project" option again
+            await loadProjectsDropdown();
         }
 
         // Modal functions
