@@ -582,6 +582,89 @@
             opacity: 0.8;
         }
 
+        /* XML Tag Display Styling */
+        .xml-editor .xml-tag-display {
+            font-family: 'SF Mono', 'Monaco', 'Inconsolata', 'Roboto Mono', monospace;
+            font-size: 12px;
+            color: #64748b;
+            background: #f1f5f9;
+            padding: 2px 6px;
+            border-radius: 4px;
+            display: inline;
+            white-space: nowrap;
+        }
+
+        .xml-editor .xml-tag-name {
+            color: #0369a1;
+            font-weight: 600;
+        }
+
+        .xml-editor .xml-attr-name {
+            color: #9333ea;
+        }
+
+        .xml-editor .xml-attr-value {
+            color: #16a34a;
+        }
+
+        /* Chunk block styling */
+        .xml-editor .xml-chunk-block {
+            display: block;
+            margin: 12px 0;
+            padding: 8px 12px;
+            background: #fafbfc;
+            border-left: 3px solid #3b82f6;
+            border-radius: 0 4px 4px 0;
+        }
+
+        .xml-editor .xml-chunk-block:hover {
+            background: #f0f7ff;
+        }
+
+        .xml-editor .xml-chunk-block .xml-chunk-content {
+            margin: 8px 0;
+            padding: 0;
+            border: none;
+        }
+
+        /* XML Declaration styling */
+        .xml-editor .xml-declaration {
+            margin-bottom: 16px;
+            opacity: 0.6;
+        }
+
+        /* P tag styling - subtle */
+        .xml-editor .xml-p-tag {
+            opacity: 0.5;
+            font-size: 10px;
+        }
+
+        .xml-editor .xml-paragraph {
+            display: inline;
+        }
+
+        /* Chapter header with visible tag */
+        .xml-editor .xml-chapter-header .xml-tag-display,
+        .xml-editor .xml-non-voiced-header .xml-tag-display {
+            background: rgba(255,255,255,0.2);
+            color: white;
+        }
+
+        .xml-editor .xml-chapter-header .xml-tag-name,
+        .xml-editor .xml-non-voiced-header .xml-tag-name {
+            color: white;
+        }
+
+        .xml-editor .xml-chapter-header .xml-attr-name,
+        .xml-editor .xml-non-voiced-header .xml-attr-name {
+            color: #a5f3fc;
+        }
+
+        .xml-editor .xml-chapter-header .xml-attr-value,
+        .xml-editor .xml-non-voiced-header .xml-attr-value {
+            color: #bbf7d0;
+        }
+
         /* Legacy XML tag styling (for any remaining visible tags) */
         .xml-editor .xml-tag {
             color: #0066cc;
@@ -1795,8 +1878,8 @@
         function updatePageTitleForProject(projectName) {
             const titleElement = document.getElementById('appTitle');
             if (projectName) {
-                document.title = `${projectName} - Henty`;
-                titleElement.innerHTML = `<span class="material-symbols-outlined">mic</span> ${projectName}`;
+                document.title = `Henty - ${projectName}`;
+                titleElement.innerHTML = `<span class="material-symbols-outlined">mic</span> Henty - ${projectName}`;
             } else {
                 document.title = 'Henty - Audiobook Creator';
                 titleElement.innerHTML = '<span class="material-symbols-outlined">mic</span> Henty';

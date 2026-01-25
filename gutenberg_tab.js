@@ -91,56 +91,85 @@ class GutenbergTab {
 
     /**
      * Apply syntax highlighting to XML text
-     * - Hide chapter and chunk tags, show only their content
-     * - Convert <p> tags to line breaks
-     * - Make other tags collapsible and styled
+     * - Show all XML tags with syntax highlighting
+     * - Make chapters collapsible sections
+     * - Show chunk boundaries clearly
+     * - Convert <p> tags to visible line breaks
      */
     highlightXML(xmlText) {
         if (!xmlText) return '';
 
-        let html = xmlText;
+        // Escape HTML entities first
+        let html = xmlText
+            .replace(/&/g, '&amp;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;');
 
-        // First, handle chapter tags - extract title for header, hide tags
+        // Handle chapter opening tags - create collapsible section with visible tag
         html = html.replace(
-            /<chapter\s+title="([^"]*)">\s*/gi,
-            '<div class="xml-chapter-section"><div class="xml-chapter-header" onclick="toggleChapterCollapse(this)"><span class="collapse-icon">&#9660;</span><span class="chapter-title">$1</span></div><div class="xml-chapter-content">'
+            /&lt;chapter\s+title="([^"]*)"&gt;/gi,
+            '<div class="xml-chapter-section"><div class="xml-chapter-header" onclick="toggleChapterCollapse(this)"><span class="collapse-icon">&#9660;</span><span class="xml-tag-display">&lt;<span class="xml-tag-name">chapter</span> <span class="xml-attr-name">title</span>=<span class="xml-attr-value">"$1"</span>&gt;</span></div><div class="xml-chapter-content">'
         );
-        html = html.replace(/<\/chapter>\s*/gi, '</div></div>');
+        html = html.replace(
+            /&lt;\/chapter&gt;/gi,
+            '<span class="xml-tag-display">&lt;/<span class="xml-tag-name">chapter</span>&gt;</span></div></div>'
+        );
 
         // Handle non-voiced sections similarly
         html = html.replace(
-            /<non-voiced\s+title="([^"]*)">\s*/gi,
-            '<div class="xml-non-voiced-section"><div class="xml-non-voiced-header" onclick="toggleChapterCollapse(this)"><span class="collapse-icon">&#9660;</span><span class="non-voiced-title">$1</span> <span class="non-voiced-badge">(non-voiced)</span></div><div class="xml-chapter-content">'
+            /&lt;non-voiced\s+title="([^"]*)"&gt;/gi,
+            '<div class="xml-non-voiced-section"><div class="xml-non-voiced-header" onclick="toggleChapterCollapse(this)"><span class="collapse-icon">&#9660;</span><span class="xml-tag-display">&lt;<span class="xml-tag-name">non-voiced</span> <span class="xml-attr-name">title</span>=<span class="xml-attr-value">"$1"</span>&gt;</span></div><div class="xml-chapter-content">'
         );
-        html = html.replace(/<\/non-voiced>\s*/gi, '</div></div>');
-
-        // Handle chunk tags - hide them completely, just show content with a subtle separator
-        html = html.replace(/<chunk>\s*/gi, '<div class="xml-chunk-content">');
-        html = html.replace(/\s*<\/chunk>/gi, '</div>');
-
-        // Handle <p> tags - convert to line breaks
-        html = html.replace(/<p>\s*/gi, '<div class="xml-paragraph">');
-        html = html.replace(/\s*<\/p>/gi, '</div>');
-
-        // Handle pause tags - make them collapsible and styled
         html = html.replace(
-            /<pause\s+duration="([^"]*)"\s*\/>/gi,
-            '<div class="xml-tag-block xml-pause-tag" onclick="toggleTagDetails(this)"><span class="tag-icon">&#9208;</span><span class="tag-label">Pause</span><span class="tag-value">$1s</span></div>'
+            /&lt;\/non-voiced&gt;/gi,
+            '<span class="xml-tag-display">&lt;/<span class="xml-tag-name">non-voiced</span>&gt;</span></div></div>'
         );
 
-        // Handle common_file tags - make them collapsible and styled
+        // Handle chunk tags - show them with styling
         html = html.replace(
-            /<common_file\s+path="([^"]*)"\s*\/>/gi,
-            '<div class="xml-tag-block xml-common-file-tag" onclick="toggleTagDetails(this)"><span class="tag-icon">&#128266;</span><span class="tag-label">Audio File</span><span class="tag-value">$1</span></div>'
+            /&lt;chunk&gt;/gi,
+            '<div class="xml-chunk-block"><span class="xml-tag-display">&lt;<span class="xml-tag-name">chunk</span>&gt;</span><div class="xml-chunk-content">'
+        );
+        html = html.replace(
+            /&lt;\/chunk&gt;/gi,
+            '</div><span class="xml-tag-display">&lt;/<span class="xml-tag-name">chunk</span>&gt;</span></div>'
         );
 
-        // Handle book tags - hide them
-        html = html.replace(/<\?xml[^>]*\?>\s*/gi, '');
-        html = html.replace(/<book>\s*/gi, '<div class="xml-book-container">');
-        html = html.replace(/\s*<\/book>/gi, '</div>');
+        // Handle <p> tags - show them and create line breaks
+        html = html.replace(
+            /&lt;p&gt;/gi,
+            '<span class="xml-tag-display xml-p-tag">&lt;<span class="xml-tag-name">p</span>&gt;</span><div class="xml-paragraph">'
+        );
+        html = html.replace(
+            /&lt;\/p&gt;/gi,
+            '</div><span class="xml-tag-display xml-p-tag">&lt;/<span class="xml-tag-name">p</span>&gt;</span>'
+        );
 
-        // Escape any remaining < and > in text content that aren't part of our HTML
-        // This is tricky - we need to be careful not to break our generated HTML
+        // Handle pause tags
+        html = html.replace(
+            /&lt;pause\s+duration="([^"]*)"\s*\/&gt;/gi,
+            '<div class="xml-tag-block xml-pause-tag"><span class="xml-tag-display">&lt;<span class="xml-tag-name">pause</span> <span class="xml-attr-name">duration</span>=<span class="xml-attr-value">"$1"</span>/&gt;</span></div>'
+        );
+
+        // Handle common_file tags
+        html = html.replace(
+            /&lt;common_file\s+path="([^"]*)"\s*\/&gt;/gi,
+            '<div class="xml-tag-block xml-common-file-tag"><span class="xml-tag-display">&lt;<span class="xml-tag-name">common_file</span> <span class="xml-attr-name">path</span>=<span class="xml-attr-value">"$1"</span>/&gt;</span></div>'
+        );
+
+        // Handle XML declaration and book tags
+        html = html.replace(
+            /&lt;\?xml[^?]*\?&gt;/gi,
+            '<div class="xml-declaration"><span class="xml-tag-display">&lt;?xml version="1.0" encoding="UTF-8"?&gt;</span></div>'
+        );
+        html = html.replace(
+            /&lt;book&gt;/gi,
+            '<div class="xml-book-container"><span class="xml-tag-display">&lt;<span class="xml-tag-name">book</span>&gt;</span>'
+        );
+        html = html.replace(
+            /&lt;\/book&gt;/gi,
+            '<span class="xml-tag-display">&lt;/<span class="xml-tag-name">book</span>&gt;</span></div>'
+        );
 
         return html;
     }
@@ -253,8 +282,7 @@ class GutenbergTab {
             const editor = document.getElementById('pseudoXmlEditor');
             const xmlContent = editor.textContent || editor.innerText;
 
-            // TODO: Parse XML and convert to chapters format
-            // For now, just save the XML content
+            // Save the XML content to the server
             const response = await fetch(`${SERVER_URL}/api/project/save-xml`, {
                 method: 'POST',
                 headers: {
@@ -267,16 +295,28 @@ class GutenbergTab {
             });
 
             if (response.ok) {
-                alert('XML saved successfully!');
+                const result = await response.json();
                 this.xmlContent = xmlContent;
                 await this.loadXML();  // Reload to sync
+
+                // Refresh TTS tab to pick up chunk text changes
+                if (typeof ttsTab !== 'undefined' && ttsTab.refreshChapters) {
+                    console.log('[GUTENBERG] Refreshing TTS tab after XML save...');
+                    await ttsTab.refreshChapters();
+                    // Reload current chapter if one is selected
+                    if (ttsTab.currentChapterIndex !== null) {
+                        await ttsTab.loadChapter(ttsTab.currentChapterIndex);
+                    }
+                }
+
+                showToast('XML saved successfully!', 'success');
             } else {
                 const error = await response.json();
                 throw new Error(error.error || 'Failed to save XML');
             }
         } catch (error) {
             console.error('Error saving XML:', error);
-            alert('Error saving XML: ' + error.message);
+            showToast('Error saving XML: ' + error.message, 'error');
         }
     }
 
