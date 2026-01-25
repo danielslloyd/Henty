@@ -76,15 +76,16 @@ class GutenbergTab {
 
                 console.log('[LOAD XML] Loaded chapters:', this.chapters.length);
                 console.log('[LOAD XML] content_xml length:', this.xmlContent.length);
-                console.log('[LOAD XML] content_xml has <chunk>:', this.xmlContent.includes('<chunk>'));
-                console.log('[LOAD XML] content_xml has <chapter:', this.xmlContent.includes('<chapter'));
-                console.log('[LOAD XML] content_xml first 500 chars:', this.xmlContent.substring(0, 500));
+                console.log('[LOAD CODE] content_xml has <chunk>:', this.xmlContent.includes('<chunk>'));
+                console.log('[LOAD CODE] content_xml has <chapter:', this.xmlContent.includes('<chapter'));
+                console.log('[LOAD CODE] content_xml first 500 chars:', this.xmlContent.substring(0, 500));
 
-                // If we have chapters but no XML, generate XML from chapters
-                if (this.chapters.length > 0 && !this.xmlContent) {
-                    console.log('[LOAD XML] No content_xml, generating from chapters...');
+                // Always regenerate code from chapters to ensure chunks are included
+                // The chapters array is the source of truth and includes all chunk data
+                if (this.chapters.length > 0) {
+                    console.log('[LOAD CODE] Regenerating code from chapters to include chunks...');
                     this.xmlContent = this.chaptersToXML(this.chapters);
-                    console.log('[LOAD XML] Generated XML first 500 chars:', this.xmlContent.substring(0, 500));
+                    console.log('[LOAD CODE] Generated code first 500 chars:', this.xmlContent.substring(0, 500));
                 }
 
                 this.displayXML();
@@ -256,12 +257,12 @@ class GutenbergTab {
             .replace(/&amp;/g, '&');
     }
 
-    async saveXML() {
+    async saveCode() {
         try {
             const editor = document.getElementById('pseudoXmlEditor');
-            const xmlContent = editor.textContent || editor.innerText;
+            const codeContent = editor.textContent || editor.innerText;
 
-            // Save the XML content to the server
+            // Save the code content to the server
             const response = await fetch(`${SERVER_URL}/api/project/save-xml`, {
                 method: 'POST',
                 headers: {
@@ -269,18 +270,18 @@ class GutenbergTab {
                     'X-API-Key': API_KEY
                 },
                 body: JSON.stringify({
-                    xml_content: xmlContent
+                    xml_content: codeContent
                 })
             });
 
             if (response.ok) {
                 const result = await response.json();
-                this.xmlContent = xmlContent;
-                await this.loadXML();  // Reload to sync
+                this.xmlContent = codeContent;
+                await this.loadXML();  // Reload to sync chapters
 
                 // Refresh TTS tab to pick up chunk text changes
                 if (typeof ttsTab !== 'undefined' && ttsTab.refreshChapters) {
-                    console.log('[GUTENBERG] Refreshing TTS tab after XML save...');
+                    console.log('[CODE EDITOR] Refreshing TTS tab after code save...');
                     await ttsTab.refreshChapters();
                     // Reload current chapter if one is selected
                     if (ttsTab.currentChapterIndex !== null) {
@@ -288,15 +289,20 @@ class GutenbergTab {
                     }
                 }
 
-                showToast('XML saved successfully!', 'success');
+                showToast('Code saved successfully!', 'success');
             } else {
                 const error = await response.json();
-                throw new Error(error.error || 'Failed to save XML');
+                throw new Error(error.error || 'Failed to save code');
             }
         } catch (error) {
-            console.error('Error saving XML:', error);
-            showToast('Error saving XML: ' + error.message, 'error');
+            console.error('Error saving code:', error);
+            showToast('Error saving code: ' + error.message, 'error');
         }
+    }
+
+    // Alias for backwards compatibility
+    async saveXML() {
+        return this.saveCode();
     }
 
     insertTag(tagType) {

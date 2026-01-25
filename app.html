@@ -1239,7 +1239,7 @@
             </div>
             <div class="toggle-item">
                 <input type="checkbox" id="toggle-xml" checked onchange="updatePaneVisibility()">
-                <label for="toggle-xml"><span class="material-symbols-outlined">edit_note</span> XML Editor</label>
+                <label for="toggle-xml"><span class="material-symbols-outlined">code</span> Code Editor</label>
             </div>
             <div class="toggle-item">
                 <input type="checkbox" id="toggle-tts" checked onchange="updatePaneVisibility()">
@@ -1280,25 +1280,25 @@
             </div>
         </div>
 
-        <!-- Pane 2: XML Editor -->
+        <!-- Pane 2: Code Editor -->
         <div class="pane" id="pane-xml">
             <div class="pane-header">
-                <h2>XML Structure</h2>
+                <h2>Code Editor</h2>
                 <div class="pane-actions">
                     <button class="pane-btn" onclick="gutenbergTab.processText()">Process Text</button>
-                    <button class="pane-btn" onclick="gutenbergTab.saveXML()">Save XML</button>
+                    <button class="pane-btn" onclick="gutenbergTab.saveCode()">Save</button>
                     <button class="pane-btn" onclick="gutenbergTab.validateChunks()">Validate</button>
                 </div>
             </div>
             <div class="pane-content" style="padding: 15px; display: flex; flex-direction: column;">
                 <div class="xml-tips">
-                    <strong>XML Editing:</strong>
+                    <strong>Code Editing:</strong>
                     <button class="xml-btn" onclick="gutenbergTab.insertTag('chapter')">+ Chapter</button>
                     <button class="xml-btn" onclick="gutenbergTab.insertTag('chunk')">+ Chunk</button>
                     <button class="xml-btn" onclick="gutenbergTab.insertTag('pause')">+ Pause</button>
                     <button class="xml-btn" onclick="gutenbergTab.wrapSelection('footnote')">Footnote</button>
                 </div>
-                <div class="xml-editor" id="pseudoXmlEditor" contenteditable="true" spellcheck="false" data-placeholder="Load or process text to see XML structure..."></div>
+                <div class="xml-editor" id="pseudoXmlEditor" contenteditable="true" spellcheck="false" data-placeholder="Load or process text to see code structure..."></div>
             </div>
         </div>
 
