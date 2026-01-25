@@ -4024,7 +4024,7 @@ def merge_chapters():
 @app.route('/api/project/save-xml', methods=['POST'])
 @auth_manager.require_api_key
 def save_xml_content():
-    """Save XML content to project"""
+    """Save XML content to project and update chunk data"""
     try:
         if converter.current_project_path is None:
             return jsonify({'error': 'No project loaded'}), 400
@@ -4035,8 +4035,12 @@ def save_xml_content():
         if not xml_content:
             return jsonify({'error': 'xml_content is required'}), 400
 
-        # Save XML content to metadata
+        # Parse XML to update chapter/chunk data
+        chapters_updated = parse_xml_to_chapters(xml_content, converter.current_project_metadata.get('chapters', []))
+
+        # Save XML content and updated chapters to metadata
         converter.current_project_metadata['content_xml'] = xml_content
+        converter.current_project_metadata['chapters'] = chapters_updated
         converter.current_project_metadata['last_modified'] = datetime.now().isoformat()
 
         # Save to file
@@ -4049,7 +4053,8 @@ def save_xml_content():
 
         return jsonify({
             'success': True,
-            'message': 'XML content saved successfully'
+            'message': 'XML content saved successfully',
+            'chapters_count': len(chapters_updated)
         })
 
     except Exception as e:
@@ -4057,6 +4062,151 @@ def save_xml_content():
         print(f"Error saving XML content: {str(e)}")
         print(traceback.format_exc())
         return jsonify({'error': str(e)}), 500
+
+
+def parse_xml_to_chapters(xml_content, existing_chapters):
+    """
+    Parse XML content and update chapters with new chunk text.
+    Preserves existing audio takes but updates chunk text.
+    """
+    import re
+
+    # Create a map of existing chapters by title for matching
+    existing_chapter_map = {}
+    for chapter in existing_chapters:
+        title = chapter.get('title') or chapter.get('name', '')
+        existing_chapter_map[title] = chapter
+
+    new_chapters = []
+
+    # Parse chapter tags
+    chapter_pattern = r'<chapter\s+title="([^"]*)">([\s\S]*?)</chapter>'
+    non_voiced_pattern = r'<non-voiced\s+title="([^"]*)">([\s\S]*?)</non-voiced>'
+
+    # Find all chapters and non-voiced sections
+    all_sections = []
+
+    for match in re.finditer(chapter_pattern, xml_content):
+        all_sections.append({
+            'type': 'chapter',
+            'title': match.group(1),
+            'content': match.group(2),
+            'start': match.start()
+        })
+
+    for match in re.finditer(non_voiced_pattern, xml_content):
+        all_sections.append({
+            'type': 'non-voiced',
+            'title': match.group(1),
+            'content': match.group(2),
+            'start': match.start()
+        })
+
+    # Sort by position in document
+    all_sections.sort(key=lambda x: x['start'])
+
+    for section in all_sections:
+        title = section['title']
+        content = section['content']
+        is_non_voiced = section['type'] == 'non-voiced'
+
+        # Get existing chapter if it exists
+        existing_chapter = existing_chapter_map.get(title)
+
+        # Parse chunks from content
+        chunk_pattern = r'<chunk>([\s\S]*?)</chunk>'
+        pause_pattern = r'<pause\s+duration="([^"]*)"\s*/>'
+        common_file_pattern = r'<common_file\s+path="([^"]*)"\s*/>'
+
+        new_chunks = []
+        chunk_id = 0
+
+        # Find all elements (chunks, pauses, common_files) and sort by position
+        elements = []
+
+        for match in re.finditer(chunk_pattern, content):
+            elements.append({
+                'type': 'text',
+                'text': match.group(1).strip(),
+                'start': match.start()
+            })
+
+        for match in re.finditer(pause_pattern, content):
+            elements.append({
+                'type': 'pause',
+                'duration': float(match.group(1)),
+                'start': match.start()
+            })
+
+        for match in re.finditer(common_file_pattern, content):
+            elements.append({
+                'type': 'common_file',
+                'path': match.group(1),
+                'start': match.start()
+            })
+
+        # Sort by position
+        elements.sort(key=lambda x: x['start'])
+
+        # Create chunk map from existing chapter
+        existing_chunk_map = {}
+        if existing_chapter:
+            for i, chunk in enumerate(existing_chapter.get('chunks', [])):
+                existing_chunk_map[i] = chunk
+
+        # Process elements and create new chunk list
+        for i, elem in enumerate(elements):
+            if elem['type'] == 'text':
+                # Try to find matching existing chunk
+                existing_chunk = existing_chunk_map.get(i, {})
+
+                # Check if text has changed
+                old_text = existing_chunk.get('text', '')
+                new_text = elem['text']
+
+                # Create chunk with preserved audio data
+                chunk = {
+                    'id': existing_chunk.get('id', chunk_id),
+                    'type': 'text',
+                    'text': new_text,
+                    'nickname': new_text[:50].strip() + ('...' if len(new_text) > 50 else ''),
+                    'dirty': old_text != new_text and len(existing_chunk.get('generated_audios', [])) > 0,
+                    'generated_audios': existing_chunk.get('generated_audios', [])
+                }
+                new_chunks.append(chunk)
+                chunk_id = max(chunk_id, chunk['id']) + 1
+
+            elif elem['type'] == 'pause':
+                chunk = {
+                    'id': chunk_id,
+                    'type': 'pause',
+                    'duration': elem['duration'],
+                    'generated_audios': []
+                }
+                new_chunks.append(chunk)
+                chunk_id += 1
+
+            elif elem['type'] == 'common_file':
+                chunk = {
+                    'id': chunk_id,
+                    'type': 'common_file',
+                    'path': elem['path'],
+                    'generated_audios': []
+                }
+                new_chunks.append(chunk)
+                chunk_id += 1
+
+        # Create new chapter
+        new_chapter = {
+            'id': existing_chapter.get('id') if existing_chapter else str(uuid.uuid4()),
+            'title': title,
+            'name': title,
+            'non_voiced': is_non_voiced,
+            'chunks': new_chunks
+        }
+        new_chapters.append(new_chapter)
+
+    return new_chapters
 
 # Serve static HTML and JavaScript files
 @app.route('/')
