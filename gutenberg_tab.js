@@ -75,11 +75,16 @@ class GutenbergTab {
                 this.xmlContent = data.content_xml || '';
 
                 console.log('[LOAD XML] Loaded chapters:', this.chapters.length);
-                console.log('[LOAD XML] XML length:', this.xmlContent.length);
+                console.log('[LOAD XML] content_xml length:', this.xmlContent.length);
+                console.log('[LOAD XML] content_xml has <chunk>:', this.xmlContent.includes('<chunk>'));
+                console.log('[LOAD XML] content_xml has <chapter:', this.xmlContent.includes('<chapter'));
+                console.log('[LOAD XML] content_xml first 500 chars:', this.xmlContent.substring(0, 500));
 
                 // If we have chapters but no XML, generate XML from chapters
                 if (this.chapters.length > 0 && !this.xmlContent) {
+                    console.log('[LOAD XML] No content_xml, generating from chapters...');
                     this.xmlContent = this.chaptersToXML(this.chapters);
+                    console.log('[LOAD XML] Generated XML first 500 chars:', this.xmlContent.substring(0, 500));
                 }
 
                 this.displayXML();
@@ -114,18 +119,33 @@ class GutenbergTab {
         const editor = document.getElementById('pseudoXmlEditor');
 
         console.log('[DISPLAY XML] Called');
-        console.log('[DISPLAY XML] XML length:', this.xmlContent.length);
+        console.log('[DISPLAY XML] xmlContent length:', this.xmlContent.length);
 
         if (!this.xmlContent) {
             editor.innerHTML = '<div class="xml-empty-state">No content. Load a Project Gutenberg text or upload a file to begin.</div>';
             return;
         }
 
+        // DEBUG: Check if xmlContent has chunk tags before processing
+        console.log('[DISPLAY XML] Before clean - has <chunk>:', this.xmlContent.includes('<chunk>'));
+        console.log('[DISPLAY XML] Before clean - has <chapter:', this.xmlContent.includes('<chapter'));
+
         // Clean up Gutenberg-style formatting first
         let cleanedXML = this.cleanGutenbergWhitespace(this.xmlContent);
 
+        // DEBUG: Check if cleanedXML still has chunk tags after processing
+        console.log('[DISPLAY XML] After clean - has <chunk>:', cleanedXML.includes('<chunk>'));
+        console.log('[DISPLAY XML] After clean - has <chapter:', cleanedXML.includes('<chapter'));
+        console.log('[DISPLAY XML] Cleaned first 500 chars:', cleanedXML.substring(0, 500));
+
         // Apply escaping and p-tag conversion
-        editor.innerHTML = this.highlightXML(cleanedXML);
+        const finalHTML = this.highlightXML(cleanedXML);
+
+        // DEBUG: Check final output
+        console.log('[DISPLAY XML] Final HTML has &lt;chunk&gt;:', finalHTML.includes('&lt;chunk&gt;'));
+        console.log('[DISPLAY XML] Final HTML first 500 chars:', finalHTML.substring(0, 500));
+
+        editor.innerHTML = finalHTML;
     }
 
     /**
