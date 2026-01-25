@@ -90,7 +90,7 @@ class GutenbergTab {
     }
 
     /**
-     * Display XML text as plain text
+     * Display XML text as plain text with all tags visible
      * - Escape HTML entities so XML tags display as text
      * - Convert <p> tags to line breaks for readability
      */
@@ -103,9 +103,9 @@ class GutenbergTab {
             .replace(/</g, '&lt;')
             .replace(/>/g, '&gt;');
 
-        // Convert <p> tags to line breaks for readability
+        // Convert <p> and </p> tags to line breaks (they represent paragraph breaks)
         html = html.replace(/&lt;p&gt;/gi, '\n');
-        html = html.replace(/&lt;\/p&gt;/gi, '\n');
+        html = html.replace(/&lt;\/p&gt;/gi, '');
 
         return html;
     }
@@ -124,32 +124,55 @@ class GutenbergTab {
         // Clean up Gutenberg-style formatting first
         let cleanedXML = this.cleanGutenbergWhitespace(this.xmlContent);
 
-        // Apply syntax highlighting and structure
+        // Apply escaping and p-tag conversion
         editor.innerHTML = this.highlightXML(cleanedXML);
     }
 
     /**
      * Clean up whitespace from Gutenberg source:
      * - Remove all indentation (leading spaces/tabs)
-     * - Collapse excessive line breaks
+     * - Collapse line breaks INSIDE text content into spaces (Gutenberg source formatting)
+     * - Preserve line breaks that are part of XML structure (adjacent to tags)
      */
     cleanGutenbergWhitespace(xml) {
-        // First, remove all leading whitespace from each line
+        // Remove all leading whitespace from each line (indentation)
         let lines = xml.split('\n');
         lines = lines.map(line => line.trimStart());
-
-        // Join lines back together
         let cleaned = lines.join('\n');
 
-        // Collapse excessive whitespace between tags
-        cleaned = cleaned.replace(/>\s+</g, '><');
+        // Now we need to collapse line breaks that are INSIDE chunk content
+        // (i.e., between > and < but not adjacent to tags)
+        // These are Gutenberg source code line breaks, not real content breaks
 
-        // But preserve some spacing for readability
+        // Process text content between tags: collapse internal newlines to spaces
+        // Match content between > and < (text nodes)
+        cleaned = cleaned.replace(/>([^<]+)</g, (match, content) => {
+            // Replace newlines (and surrounding whitespace) with single space
+            // But preserve if the content is just whitespace (between tags)
+            if (content.trim() === '') {
+                return '><';  // Remove whitespace-only text nodes
+            }
+            // Collapse internal newlines to spaces
+            const processed = content
+                .replace(/\s*\n\s*/g, ' ')  // Replace newlines with spaces
+                .replace(/\s+/g, ' ')        // Collapse multiple spaces
+                .trim();
+            return '>' + processed + '<';
+        });
+
+        // Now add proper line breaks for XML structure readability
+        // Add newline before chapter/non-voiced opening tags
+        cleaned = cleaned.replace(/<(chapter|non-voiced)\s/g, '\n\n<$1 ');
+
+        // Add newline after chapter/non-voiced closing tags
+        cleaned = cleaned.replace(/<\/(chapter|non-voiced)>/g, '</$1>\n\n');
+
+        // Add newline between chunks for readability
         cleaned = cleaned.replace(/<\/chunk><chunk>/g, '</chunk>\n<chunk>');
-        cleaned = cleaned.replace(/<\/chapter>/g, '</chapter>\n');
-        cleaned = cleaned.replace(/<chapter/g, '\n<chapter');
-        cleaned = cleaned.replace(/<\/non-voiced>/g, '</non-voiced>\n');
-        cleaned = cleaned.replace(/<non-voiced/g, '\n<non-voiced');
+
+        // Add newline after book opening and before book closing
+        cleaned = cleaned.replace(/<book>/g, '<book>\n');
+        cleaned = cleaned.replace(/<\/book>/g, '\n</book>');
 
         // Clean up multiple consecutive newlines
         cleaned = cleaned.replace(/\n{3,}/g, '\n\n');
