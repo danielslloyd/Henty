@@ -135,15 +135,9 @@ class GutenbergTab {
             '</div><span class="xml-tag-display">&lt;/<span class="xml-tag-name">chunk</span>&gt;</span></div>'
         );
 
-        // Handle <p> tags - show them and create line breaks
-        html = html.replace(
-            /&lt;p&gt;/gi,
-            '<span class="xml-tag-display xml-p-tag">&lt;<span class="xml-tag-name">p</span>&gt;</span><div class="xml-paragraph">'
-        );
-        html = html.replace(
-            /&lt;\/p&gt;/gi,
-            '</div><span class="xml-tag-display xml-p-tag">&lt;/<span class="xml-tag-name">p</span>&gt;</span>'
-        );
+        // Handle <p> tags - convert to line breaks without showing tags
+        html = html.replace(/&lt;p&gt;/gi, '<div class="xml-paragraph">');
+        html = html.replace(/&lt;\/p&gt;/gi, '</div>');
 
         // Handle pause tags
         html = html.replace(
@@ -359,9 +353,12 @@ class GutenbergTab {
     async validateChunks() {
         try {
             const response = await fetch(`${SERVER_URL}/api/project/validate-chunks`, {
+                method: 'POST',
                 headers: {
+                    'Content-Type': 'application/json',
                     'X-API-Key': API_KEY
-                }
+                },
+                body: JSON.stringify({})
             });
 
             if (response.ok) {
