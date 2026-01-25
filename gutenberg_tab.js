@@ -90,80 +90,22 @@ class GutenbergTab {
     }
 
     /**
-     * Apply syntax highlighting to XML text
-     * - Show all XML tags with syntax highlighting
-     * - Make chapters collapsible sections
-     * - Show chunk boundaries clearly
-     * - Convert <p> tags to visible line breaks
+     * Display XML text as plain text
+     * - Escape HTML entities so XML tags display as text
+     * - Convert <p> tags to line breaks for readability
      */
     highlightXML(xmlText) {
         if (!xmlText) return '';
 
-        // Escape HTML entities first
+        // Escape HTML entities so XML displays as text
         let html = xmlText
             .replace(/&/g, '&amp;')
             .replace(/</g, '&lt;')
             .replace(/>/g, '&gt;');
 
-        // Handle chapter opening tags - create collapsible section with visible tag
-        html = html.replace(
-            /&lt;chapter\s+title="([^"]*)"&gt;/gi,
-            '<div class="xml-chapter-section"><div class="xml-chapter-header" onclick="toggleChapterCollapse(this)"><span class="collapse-icon">&#9660;</span><span class="xml-tag-display">&lt;<span class="xml-tag-name">chapter</span> <span class="xml-attr-name">title</span>=<span class="xml-attr-value">"$1"</span>&gt;</span></div><div class="xml-chapter-content">'
-        );
-        html = html.replace(
-            /&lt;\/chapter&gt;/gi,
-            '<span class="xml-tag-display">&lt;/<span class="xml-tag-name">chapter</span>&gt;</span></div></div>'
-        );
-
-        // Handle non-voiced sections similarly
-        html = html.replace(
-            /&lt;non-voiced\s+title="([^"]*)"&gt;/gi,
-            '<div class="xml-non-voiced-section"><div class="xml-non-voiced-header" onclick="toggleChapterCollapse(this)"><span class="collapse-icon">&#9660;</span><span class="xml-tag-display">&lt;<span class="xml-tag-name">non-voiced</span> <span class="xml-attr-name">title</span>=<span class="xml-attr-value">"$1"</span>&gt;</span></div><div class="xml-chapter-content">'
-        );
-        html = html.replace(
-            /&lt;\/non-voiced&gt;/gi,
-            '<span class="xml-tag-display">&lt;/<span class="xml-tag-name">non-voiced</span>&gt;</span></div></div>'
-        );
-
-        // Handle chunk tags - show them with styling
-        html = html.replace(
-            /&lt;chunk&gt;/gi,
-            '<div class="xml-chunk-block"><span class="xml-tag-display">&lt;<span class="xml-tag-name">chunk</span>&gt;</span><div class="xml-chunk-content">'
-        );
-        html = html.replace(
-            /&lt;\/chunk&gt;/gi,
-            '</div><span class="xml-tag-display">&lt;/<span class="xml-tag-name">chunk</span>&gt;</span></div>'
-        );
-
-        // Handle <p> tags - convert to line breaks without showing tags
-        html = html.replace(/&lt;p&gt;/gi, '<div class="xml-paragraph">');
-        html = html.replace(/&lt;\/p&gt;/gi, '</div>');
-
-        // Handle pause tags
-        html = html.replace(
-            /&lt;pause\s+duration="([^"]*)"\s*\/&gt;/gi,
-            '<div class="xml-tag-block xml-pause-tag"><span class="xml-tag-display">&lt;<span class="xml-tag-name">pause</span> <span class="xml-attr-name">duration</span>=<span class="xml-attr-value">"$1"</span>/&gt;</span></div>'
-        );
-
-        // Handle common_file tags
-        html = html.replace(
-            /&lt;common_file\s+path="([^"]*)"\s*\/&gt;/gi,
-            '<div class="xml-tag-block xml-common-file-tag"><span class="xml-tag-display">&lt;<span class="xml-tag-name">common_file</span> <span class="xml-attr-name">path</span>=<span class="xml-attr-value">"$1"</span>/&gt;</span></div>'
-        );
-
-        // Handle XML declaration and book tags
-        html = html.replace(
-            /&lt;\?xml[^?]*\?&gt;/gi,
-            '<div class="xml-declaration"><span class="xml-tag-display">&lt;?xml version="1.0" encoding="UTF-8"?&gt;</span></div>'
-        );
-        html = html.replace(
-            /&lt;book&gt;/gi,
-            '<div class="xml-book-container"><span class="xml-tag-display">&lt;<span class="xml-tag-name">book</span>&gt;</span>'
-        );
-        html = html.replace(
-            /&lt;\/book&gt;/gi,
-            '<span class="xml-tag-display">&lt;/<span class="xml-tag-name">book</span>&gt;</span></div>'
-        );
+        // Convert <p> tags to line breaks for readability
+        html = html.replace(/&lt;p&gt;/gi, '\n');
+        html = html.replace(/&lt;\/p&gt;/gi, '\n');
 
         return html;
     }

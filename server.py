@@ -3761,7 +3761,7 @@ def validate_project_chunks():
         if converter.current_project_path is None:
             return jsonify({'error': 'No project loaded'}), 400
 
-        data = request.json
+        data = request.json or {}
         max_chunk_size = data.get('max_chunk_size', config.MAX_CHUNK_SIZE)
 
         project_file = os.path.join(converter.current_project_path, 'project.json')
@@ -3771,14 +3771,15 @@ def validate_project_chunks():
         oversized_chunks = []
 
         for chapter in project_data.get('chapters', []):
+            chapter_title = chapter.get('title') or chapter.get('name', '')
             for chunk in chapter.get('chunks', []):
                 chunk_text = chunk.get('text', '')
                 if len(chunk_text) > max_chunk_size:
                     oversized_chunks.append({
-                        'chapter_id': chapter['id'],
-                        'chapter_name': chapter.get('name', ''),
-                        'chunk_id': chunk['id'],
-                        'chunk_size': len(chunk_text),
+                        'chapter_id': chapter.get('id', ''),
+                        'chapter_title': chapter_title,
+                        'chunk_id': chunk.get('id', 0),
+                        'size': len(chunk_text),
                         'chunk_preview': chunk_text[:50] + '...'
                     })
 
