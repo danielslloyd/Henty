@@ -1619,6 +1619,20 @@ def create_project():
                                     chunk['dirty'] = False
                                     chunk['generated_audios'] = []
 
+                                # Add chapter title as the first chunk (so it gets read aloud)
+                                title_chunk = {
+                                    'id': 0,
+                                    'type': 'text',
+                                    'text': chapter_title,
+                                    'nickname': chapter_title[:50].strip() + ('...' if len(chapter_title) > 50 else ''),
+                                    'dirty': False,
+                                    'generated_audios': []
+                                }
+                                # Renumber existing chunks to start from 1
+                                for j, chunk in enumerate(chunks):
+                                    chunk['id'] = j + 1
+                                chunks.insert(0, title_chunk)
+
                                 chapter_entry = {
                                     'id': f'chapter_{i}',
                                     'title': chapter_title,
@@ -1699,6 +1713,7 @@ def create_project():
                             # Create chapters with chunks
                             new_chapters = []
                             for detected_chapter in detected_chapters:
+                                chapter_title = detected_chapter['title']
                                 chunks = converter.smart_chunk_text(detected_chapter['text'])
 
                                 # Add chunk structure
@@ -1706,9 +1721,23 @@ def create_project():
                                     chunk['dirty'] = False
                                     chunk['generated_audios'] = []
 
+                                # Add chapter title as the first chunk (so it gets read aloud)
+                                title_chunk = {
+                                    'id': 0,
+                                    'type': 'text',
+                                    'text': chapter_title,
+                                    'nickname': chapter_title[:50].strip() + ('...' if len(chapter_title) > 50 else ''),
+                                    'dirty': False,
+                                    'generated_audios': []
+                                }
+                                # Renumber existing chunks to start from 1
+                                for j, chunk in enumerate(chunks):
+                                    chunk['id'] = j + 1
+                                chunks.insert(0, title_chunk)
+
                                 chapter_entry = {
                                     'id': detected_chapter['id'],
-                                    'title': detected_chapter['title'],
+                                    'title': chapter_title,
                                     'order': detected_chapter['order'],
                                     'chunks': chunks,
                                     'audio_output': None,
@@ -1992,6 +2021,8 @@ def add_text_file_to_project():
         # Create chapters with chunks for each detected chapter
         new_chapters = []
         for detected_chapter in detected_chapters:
+            chapter_title = detected_chapter['title']
+
             # Chunk the chapter text
             chunks = converter.smart_chunk_text(detected_chapter['text'])
 
@@ -2000,10 +2031,24 @@ def add_text_file_to_project():
                 chunk['dirty'] = False
                 chunk['generated_audios'] = []
 
+            # Add chapter title as the first chunk (so it gets read aloud)
+            title_chunk = {
+                'id': 0,
+                'type': 'text',
+                'text': chapter_title,
+                'nickname': chapter_title[:50].strip() + ('...' if len(chapter_title) > 50 else ''),
+                'dirty': False,
+                'generated_audios': []
+            }
+            # Renumber existing chunks to start from 1
+            for j, chunk in enumerate(chunks):
+                chunk['id'] = j + 1
+            chunks.insert(0, title_chunk)
+
             # Create chapter entry
             chapter_entry = {
                 'id': detected_chapter['id'],
-                'title': detected_chapter['title'],
+                'title': chapter_title,
                 'order': detected_chapter['order'],
                 'chunks': chunks,
                 'audio_output': None,  # Will be set when chapter is stitched
@@ -4025,7 +4070,7 @@ def merge_chapters():
 @app.route('/api/project/save-xml', methods=['POST'])
 @auth_manager.require_api_key
 def save_xml_content():
-    """Save XML content to project and update chunk data"""
+    """Save XML content to project and update chunk data (legacy endpoint)"""
     try:
         if converter.current_project_path is None:
             return jsonify({'error': 'No project loaded'}), 400
@@ -4061,6 +4106,49 @@ def save_xml_content():
     except Exception as e:
         import traceback
         print(f"Error saving XML content: {str(e)}")
+        print(traceback.format_exc())
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/project/save-markdown', methods=['POST'])
+@auth_manager.require_api_key
+def save_markdown_content():
+    """Save Markdown content to project and update chunk data"""
+    try:
+        if converter.current_project_path is None:
+            return jsonify({'error': 'No project loaded'}), 400
+
+        data = request.json
+        markdown_content = data.get('markdown_content')
+
+        if not markdown_content:
+            return jsonify({'error': 'markdown_content is required'}), 400
+
+        # Parse markdown to update chapter/chunk data
+        chapters_updated = parse_markdown_to_chapters(markdown_content, converter.current_project_metadata.get('chapters', []))
+
+        # Save markdown content and updated chapters to metadata
+        converter.current_project_metadata['content_markdown'] = markdown_content
+        converter.current_project_metadata['chapters'] = chapters_updated
+        converter.current_project_metadata['last_modified'] = datetime.now().isoformat()
+
+        # Save to file
+        project_file = os.path.join(converter.current_project_path, 'project.json')
+        with open(project_file, 'w', encoding='utf-8') as f:
+            json.dump(converter.current_project_metadata, f, indent=2, ensure_ascii=False)
+
+        # Invalidate lookup caches after modifying metadata
+        converter._invalidate_lookup_caches()
+
+        return jsonify({
+            'success': True,
+            'message': 'Markdown content saved successfully',
+            'chapters_count': len(chapters_updated)
+        })
+
+    except Exception as e:
+        import traceback
+        print(f"Error saving markdown content: {str(e)}")
         print(traceback.format_exc())
         return jsonify({'error': str(e)}), 500
 
@@ -4208,6 +4296,183 @@ def parse_xml_to_chapters(xml_content, existing_chapters):
         new_chapters.append(new_chapter)
 
     return new_chapters
+
+
+def parse_markdown_to_chapters(markdown_content, existing_chapters):
+    """
+    Parse Markdown content and update chapters with new chunk text.
+    Preserves existing audio takes but updates chunk text.
+
+    Format:
+        ## Chapter Title        <- Chapter header (title becomes first chunk)
+        </chunk>                <- Chunk boundary
+        Text content            <- Chunk text (no escaping needed)
+        </chunk>
+        [pause:1.5]             <- Pause marker
+        </chunk>
+        More text...
+
+        ### Section [non-voiced] <- Non-voiced section
+    """
+    import re
+
+    # Create a map of existing chapters by title for matching
+    existing_chapter_map = {}
+    for chapter in existing_chapters:
+        title = chapter.get('title') or chapter.get('name', '')
+        existing_chapter_map[title] = chapter
+
+    new_chapters = []
+
+    # Split by chapter headers (## or ###)
+    # ## Title = voiced chapter
+    # ### Title [non-voiced] = non-voiced section
+    chapter_pattern = r'^(#{2,3})\s+(.+?)(?:\s+\[non-voiced\])?\s*$'
+
+    lines = markdown_content.split('\n')
+    current_chapter = None
+    current_chunks = []
+    current_chunk_text = []
+
+    def finalize_chunk():
+        """Finalize current chunk and add to list"""
+        nonlocal current_chunk_text
+        if current_chunk_text:
+            # Join lines and clean up whitespace
+            text = '\n'.join(current_chunk_text).strip()
+            # Collapse single newlines to spaces (markdown style)
+            # but preserve double newlines (blank lines) as paragraph breaks
+            text = re.sub(r'(?<!\n)\n(?!\n)', ' ', text)
+            text = re.sub(r'\n{2,}', '\n\n', text)
+            text = text.strip()
+            if text:
+                current_chunks.append({'type': 'text', 'text': text})
+        current_chunk_text = []
+
+    def finalize_chapter():
+        """Finalize current chapter and add to list"""
+        nonlocal current_chapter, current_chunks, current_chunk_text
+        if current_chapter:
+            finalize_chunk()  # Finalize any pending chunk
+
+            title = current_chapter['title']
+            is_non_voiced = current_chapter.get('non_voiced', False)
+            existing_chapter = existing_chapter_map.get(title)
+
+            # Build chunk list, preserving audio data where possible
+            existing_chunk_map = {}
+            if existing_chapter:
+                for i, chunk in enumerate(existing_chapter.get('chunks', [])):
+                    existing_chunk_map[i] = chunk
+
+            new_chunk_list = []
+            chunk_id = 0
+
+            for i, chunk_data in enumerate(current_chunks):
+                if chunk_data['type'] == 'text':
+                    existing_chunk = existing_chunk_map.get(i, {})
+                    old_text = existing_chunk.get('text', '')
+                    new_text = chunk_data['text']
+
+                    chunk = {
+                        'id': existing_chunk.get('id', chunk_id),
+                        'type': 'text',
+                        'text': new_text,
+                        'nickname': new_text[:50].strip() + ('...' if len(new_text) > 50 else ''),
+                        'dirty': old_text != new_text and len(existing_chunk.get('generated_audios', [])) > 0,
+                        'generated_audios': existing_chunk.get('generated_audios', [])
+                    }
+                    new_chunk_list.append(chunk)
+                    chunk_id = max(chunk_id, chunk['id']) + 1
+
+                elif chunk_data['type'] == 'pause':
+                    chunk = {
+                        'id': chunk_id,
+                        'type': 'pause',
+                        'duration': chunk_data.get('duration', 1.0),
+                        'generated_audios': []
+                    }
+                    new_chunk_list.append(chunk)
+                    chunk_id += 1
+
+                elif chunk_data['type'] == 'common_file':
+                    chunk = {
+                        'id': chunk_id,
+                        'type': 'common_file',
+                        'path': chunk_data.get('path', ''),
+                        'generated_audios': []
+                    }
+                    new_chunk_list.append(chunk)
+                    chunk_id += 1
+
+            new_chapter = {
+                'id': existing_chapter.get('id') if existing_chapter else str(uuid.uuid4()),
+                'title': title,
+                'name': title,
+                'non_voiced': is_non_voiced,
+                'chunks': new_chunk_list
+            }
+            new_chapters.append(new_chapter)
+
+        current_chapter = None
+        current_chunks = []
+        current_chunk_text = []
+
+    for line in lines:
+        # Check for chapter header
+        chapter_match = re.match(chapter_pattern, line, re.MULTILINE)
+        if chapter_match:
+            # Finalize previous chapter
+            finalize_chapter()
+
+            # Start new chapter
+            header_level = chapter_match.group(1)
+            title = chapter_match.group(2).strip()
+            is_non_voiced = '[non-voiced]' in line.lower() or header_level == '###'
+
+            current_chapter = {
+                'title': title,
+                'non_voiced': is_non_voiced
+            }
+
+            # The chapter title becomes the first chunk
+            current_chunks.append({'type': 'text', 'text': title})
+            continue
+
+        # Check for chunk boundary
+        if line.strip() == '</chunk>':
+            finalize_chunk()
+            continue
+
+        # Check for pause marker
+        pause_match = re.match(r'^\[pause:(\d+\.?\d*)\]$', line.strip())
+        if pause_match:
+            finalize_chunk()
+            current_chunks.append({
+                'type': 'pause',
+                'duration': float(pause_match.group(1))
+            })
+            continue
+
+        # Check for file marker
+        file_match = re.match(r'^\[file:(.+)\]$', line.strip())
+        if file_match:
+            finalize_chunk()
+            current_chunks.append({
+                'type': 'common_file',
+                'path': file_match.group(1)
+            })
+            continue
+
+        # Regular text line - add to current chunk
+        if current_chapter:
+            current_chunk_text.append(line)
+
+    # Finalize last chapter
+    finalize_chapter()
+
+    return new_chapters
+
 
 # Serve static HTML and JavaScript files
 @app.route('/')

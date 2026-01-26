@@ -13,24 +13,45 @@ class ReaderTab {
     }
 
     /**
-     * Process chunk text for display: strip <p> tags and convert to newlines
+     * Process chunk text for display
+     * Handles both markdown-style (plain text) and legacy XML-style (<p> tags)
      */
     processChunkText(text) {
         if (!text) return '';
 
-        // Replace </p> tags with double newline for paragraph breaks
-        let processed = text.replace(/<\/p>/gi, '\n\n');
+        let processed = text;
 
-        // Remove opening <p> tags
-        processed = processed.replace(/<p>/gi, '');
+        // Handle legacy <p> tags if present
+        if (processed.includes('<p>') || processed.includes('</p>')) {
+            processed = processed.replace(/<\/p>/gi, '\n\n');
+            processed = processed.replace(/<p>/gi, '');
+        }
 
-        // Convert newlines to <br> tags for HTML rendering
+        // Escape HTML to prevent XSS
+        processed = processed
+            .replace(/&/g, '&amp;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;');
+
+        // Convert double newlines to paragraph breaks, single to line breaks
+        processed = processed.replace(/\n\n/g, '</p><p>');
         processed = processed.replace(/\n/g, '<br>');
+
+        // Wrap in paragraph if we added paragraph breaks
+        if (processed.includes('</p><p>')) {
+            processed = '<p>' + processed + '</p>';
+        }
 
         return processed;
     }
 
     async init() {
+        await this.loadChapters();
+        this.renderContent();
+    }
+
+    async refresh() {
+        console.log('[READER] Refreshing content...');
         await this.loadChapters();
         this.renderContent();
     }
