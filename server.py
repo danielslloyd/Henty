@@ -4305,14 +4305,16 @@ def parse_markdown_to_chapters(markdown_content, existing_chapters):
 
     Format:
         ## Chapter Title        <- Chapter header (title becomes first chunk)
-        </chunk>                <- Chunk boundary
-        Text content            <- Chunk text (no escaping needed)
-        </chunk>
-        [pause:1.5]             <- Pause marker
-        </chunk>
-        More text...
+        Chunk text here.</chunk>Next chunk.</chunk>More text...
+        [pause:1.5]</chunk>     <- Pause marker (inline)
+        Text after pause...
 
         ### Section [non-voiced] <- Non-voiced section
+
+    Notes:
+    - </chunk> markers are inline, splitting text into chunks
+    - Newlines in text represent actual paragraph breaks (from <p> tags)
+    - [pause:X] and [file:X] are special markers
     """
     import re
 
@@ -4324,152 +4326,128 @@ def parse_markdown_to_chapters(markdown_content, existing_chapters):
 
     new_chapters = []
 
-    # Split by chapter headers (## or ###)
-    # ## Title = voiced chapter
-    # ### Title [non-voiced] = non-voiced section
-    chapter_pattern = r'^(#{2,3})\s+(.+?)(?:\s+\[non-voiced\])?\s*$'
+    # Split content by chapter headers (## or ###)
+    # Pattern matches: ## Title or ### Title [non-voiced]
+    chapter_split_pattern = r'(?=^#{2,3}\s+.+$)'
+    chapter_sections = re.split(chapter_split_pattern, markdown_content, flags=re.MULTILINE)
 
-    lines = markdown_content.split('\n')
-    current_chapter = None
-    current_chunks = []
-    current_chunk_text = []
-
-    def finalize_chunk():
-        """Finalize current chunk and add to list"""
-        nonlocal current_chunk_text
-        if current_chunk_text:
-            # Join lines and clean up whitespace
-            text = '\n'.join(current_chunk_text).strip()
-            # Collapse single newlines to spaces (markdown style)
-            # but preserve double newlines (blank lines) as paragraph breaks
-            text = re.sub(r'(?<!\n)\n(?!\n)', ' ', text)
-            text = re.sub(r'\n{2,}', '\n\n', text)
-            text = text.strip()
-            if text:
-                current_chunks.append({'type': 'text', 'text': text})
-        current_chunk_text = []
-
-    def finalize_chapter():
-        """Finalize current chapter and add to list"""
-        nonlocal current_chapter, current_chunks, current_chunk_text
-        if current_chapter:
-            finalize_chunk()  # Finalize any pending chunk
-
-            title = current_chapter['title']
-            is_non_voiced = current_chapter.get('non_voiced', False)
-            existing_chapter = existing_chapter_map.get(title)
-
-            # Build chunk list, preserving audio data where possible
-            existing_chunk_map = {}
-            if existing_chapter:
-                for i, chunk in enumerate(existing_chapter.get('chunks', [])):
-                    existing_chunk_map[i] = chunk
-
-            new_chunk_list = []
-            chunk_id = 0
-
-            for i, chunk_data in enumerate(current_chunks):
-                if chunk_data['type'] == 'text':
-                    existing_chunk = existing_chunk_map.get(i, {})
-                    old_text = existing_chunk.get('text', '')
-                    new_text = chunk_data['text']
-
-                    chunk = {
-                        'id': existing_chunk.get('id', chunk_id),
-                        'type': 'text',
-                        'text': new_text,
-                        'nickname': new_text[:50].strip() + ('...' if len(new_text) > 50 else ''),
-                        'dirty': old_text != new_text and len(existing_chunk.get('generated_audios', [])) > 0,
-                        'generated_audios': existing_chunk.get('generated_audios', [])
-                    }
-                    new_chunk_list.append(chunk)
-                    chunk_id = max(chunk_id, chunk['id']) + 1
-
-                elif chunk_data['type'] == 'pause':
-                    chunk = {
-                        'id': chunk_id,
-                        'type': 'pause',
-                        'duration': chunk_data.get('duration', 1.0),
-                        'generated_audios': []
-                    }
-                    new_chunk_list.append(chunk)
-                    chunk_id += 1
-
-                elif chunk_data['type'] == 'common_file':
-                    chunk = {
-                        'id': chunk_id,
-                        'type': 'common_file',
-                        'path': chunk_data.get('path', ''),
-                        'generated_audios': []
-                    }
-                    new_chunk_list.append(chunk)
-                    chunk_id += 1
-
-            new_chapter = {
-                'id': existing_chapter.get('id') if existing_chapter else str(uuid.uuid4()),
-                'title': title,
-                'name': title,
-                'non_voiced': is_non_voiced,
-                'chunks': new_chunk_list
-            }
-            new_chapters.append(new_chapter)
-
-        current_chapter = None
-        current_chunks = []
-        current_chunk_text = []
-
-    for line in lines:
-        # Check for chapter header
-        chapter_match = re.match(chapter_pattern, line, re.MULTILINE)
-        if chapter_match:
-            # Finalize previous chapter
-            finalize_chapter()
-
-            # Start new chapter
-            header_level = chapter_match.group(1)
-            title = chapter_match.group(2).strip()
-            is_non_voiced = '[non-voiced]' in line.lower() or header_level == '###'
-
-            current_chapter = {
-                'title': title,
-                'non_voiced': is_non_voiced
-            }
-
-            # The chapter title becomes the first chunk
-            current_chunks.append({'type': 'text', 'text': title})
+    for section in chapter_sections:
+        section = section.strip()
+        if not section:
             continue
 
-        # Check for chunk boundary
-        if line.strip() == '</chunk>':
-            finalize_chunk()
+        # Extract chapter header
+        header_match = re.match(r'^(#{2,3})\s+(.+?)(?:\s+\[non-voiced\])?\s*$', section, re.MULTILINE)
+        if not header_match:
             continue
 
-        # Check for pause marker
-        pause_match = re.match(r'^\[pause:(\d+\.?\d*)\]$', line.strip())
-        if pause_match:
-            finalize_chunk()
-            current_chunks.append({
-                'type': 'pause',
-                'duration': float(pause_match.group(1))
-            })
-            continue
+        header_level = header_match.group(1)
+        title = header_match.group(2).strip()
+        # Remove [non-voiced] from title if present
+        title = re.sub(r'\s*\[non-voiced\]\s*$', '', title, flags=re.IGNORECASE).strip()
+        is_non_voiced = '[non-voiced]' in section.split('\n')[0].lower() or header_level == '###'
 
-        # Check for file marker
-        file_match = re.match(r'^\[file:(.+)\]$', line.strip())
-        if file_match:
-            finalize_chunk()
-            current_chunks.append({
-                'type': 'common_file',
-                'path': file_match.group(1)
-            })
-            continue
+        # Get content after the header line
+        content = section[header_match.end():].strip()
 
-        # Regular text line - add to current chunk
-        if current_chapter:
-            current_chunk_text.append(line)
+        # Parse chunks from content by splitting on </chunk>
+        raw_chunks = content.split('</chunk>')
 
-    # Finalize last chapter
-    finalize_chapter()
+        parsed_chunks = []
+
+        # First chunk is always the chapter title
+        parsed_chunks.append({'type': 'text', 'text': title})
+
+        for raw_chunk in raw_chunks:
+            raw_chunk = raw_chunk.strip()
+            if not raw_chunk:
+                continue
+
+            # Check for pause marker
+            pause_match = re.match(r'^\[pause:(\d+\.?\d*)\](.*)$', raw_chunk, re.DOTALL)
+            if pause_match:
+                parsed_chunks.append({
+                    'type': 'pause',
+                    'duration': float(pause_match.group(1))
+                })
+                # If there's text after the pause marker, add it as a text chunk
+                remaining = pause_match.group(2).strip()
+                if remaining:
+                    parsed_chunks.append({'type': 'text', 'text': remaining})
+                continue
+
+            # Check for file marker
+            file_match = re.match(r'^\[file:(.+?)\](.*)$', raw_chunk, re.DOTALL)
+            if file_match:
+                parsed_chunks.append({
+                    'type': 'common_file',
+                    'path': file_match.group(1)
+                })
+                # If there's text after the file marker, add it as a text chunk
+                remaining = file_match.group(2).strip()
+                if remaining:
+                    parsed_chunks.append({'type': 'text', 'text': remaining})
+                continue
+
+            # Regular text chunk - preserve newlines as they represent paragraph breaks
+            parsed_chunks.append({'type': 'text', 'text': raw_chunk})
+
+        # Get existing chapter for preserving audio data
+        existing_chapter = existing_chapter_map.get(title)
+        existing_chunk_map = {}
+        if existing_chapter:
+            for i, chunk in enumerate(existing_chapter.get('chunks', [])):
+                existing_chunk_map[i] = chunk
+
+        # Build final chunk list with preserved audio data
+        new_chunk_list = []
+        chunk_id = 0
+
+        for i, chunk_data in enumerate(parsed_chunks):
+            if chunk_data['type'] == 'text':
+                existing_chunk = existing_chunk_map.get(i, {})
+                old_text = existing_chunk.get('text', '')
+                new_text = chunk_data['text']
+
+                chunk = {
+                    'id': existing_chunk.get('id', chunk_id),
+                    'type': 'text',
+                    'text': new_text,
+                    'nickname': new_text[:50].strip() + ('...' if len(new_text) > 50 else ''),
+                    'dirty': old_text != new_text and len(existing_chunk.get('generated_audios', [])) > 0,
+                    'generated_audios': existing_chunk.get('generated_audios', [])
+                }
+                new_chunk_list.append(chunk)
+                chunk_id = max(chunk_id, chunk['id']) + 1
+
+            elif chunk_data['type'] == 'pause':
+                chunk = {
+                    'id': chunk_id,
+                    'type': 'pause',
+                    'duration': chunk_data.get('duration', 1.0),
+                    'generated_audios': []
+                }
+                new_chunk_list.append(chunk)
+                chunk_id += 1
+
+            elif chunk_data['type'] == 'common_file':
+                chunk = {
+                    'id': chunk_id,
+                    'type': 'common_file',
+                    'path': chunk_data.get('path', ''),
+                    'generated_audios': []
+                }
+                new_chunk_list.append(chunk)
+                chunk_id += 1
+
+        new_chapter = {
+            'id': existing_chapter.get('id') if existing_chapter else str(uuid.uuid4()),
+            'title': title,
+            'name': title,
+            'non_voiced': is_non_voiced,
+            'chunks': new_chunk_list
+        }
+        new_chapters.append(new_chapter)
 
     return new_chapters
 

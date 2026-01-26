@@ -129,15 +129,15 @@ class GutenbergTab {
      * Convert chapters array to markdown format
      * Format:
      *   ## Chapter Title      <- This becomes chunk 0 when parsed
-     *   </chunk>
-     *   Chunk text            <- This becomes chunk 1, etc.
-     *   </chunk>
-     *   [pause:1.5]
-     *   </chunk>
-     *   More text...
+     *   Chunk text here.</chunk>Next chunk text.</chunk>More text...
+     *   [pause:1.5]</chunk>
+     *   Text after pause...
      *
-     * Note: The ## header line is automatically added as chunk 0 by the parser,
-     * so we skip outputting chunk 0 if its text matches the title.
+     * Notes:
+     * - </chunk> markers are inline, not on separate lines
+     * - Newlines in text represent real paragraph breaks (from <p> tags)
+     * - The ## header line is automatically added as chunk 0 by the parser,
+     *   so we skip outputting chunk 0 if its text matches the title.
      */
     chaptersToMarkdown(chapters) {
         let markdown = '';
@@ -170,19 +170,18 @@ class GutenbergTab {
                 for (let j = startIdx; j < chapter.chunks.length; j++) {
                     const chunk = chapter.chunks[j];
 
-                    // Add chunk boundary before each chunk (except the first content chunk)
-                    if (j > startIdx) {
-                        markdown += '\n</chunk>\n';
-                    }
-
                     if (chunk.type === 'pause') {
-                        markdown += `\n[pause:${chunk.duration || 1.0}]\n`;
+                        markdown += `[pause:${chunk.duration || 1.0}]</chunk>`;
                     } else if (chunk.type === 'common_file') {
-                        markdown += `\n[file:${chunk.path || ''}]\n`;
+                        markdown += `[file:${chunk.path || ''}]</chunk>`;
                     } else {
                         // Text chunk - no escaping needed!
                         const text = chunk.text || '';
-                        markdown += `\n${text}\n`;
+                        markdown += text;
+                        // Add </chunk> after text (except for last chunk in chapter)
+                        if (j < chapter.chunks.length - 1) {
+                            markdown += '</chunk>';
+                        }
                     }
                 }
             }
