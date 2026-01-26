@@ -1,12 +1,21 @@
 /**
  * Gutenberg Processing Tab Logic
- * Handles raw text loading, XML editing, chapter processing, and validation
+ * Handles raw text loading, Markdown editing, chapter processing, and validation
+ *
+ * Markdown Format:
+ *   ## Chapter Title     <- Chapter header (also becomes first chunk)
+ *   </chunk>             <- Chunk boundary marker
+ *   Text content here    <- Chunk text (no escaping needed)
+ *   </chunk>
+ *   [pause:1.5]          <- Pause marker
+ *   </chunk>
+ *   More text...
  */
 
 class GutenbergTab {
     constructor() {
         this.rawText = '';
-        this.xmlContent = '';
+        this.markdownContent = '';
         this.chapters = [];
         this.defaultGutenbergUrl = '';
     }
@@ -16,8 +25,8 @@ class GutenbergTab {
         await this.loadDefaultUrl();
         // Load raw text from project if available
         await this.loadRawText();
-        // Load XML content from project
-        await this.loadXML();
+        // Load markdown content from project
+        await this.loadMarkdown();
     }
 
     async loadDefaultUrl() {
@@ -61,7 +70,7 @@ class GutenbergTab {
         }
     }
 
-    async loadXML() {
+    async loadMarkdown() {
         try {
             const response = await fetch(`${SERVER_URL}/api/project/get-text-files`, {
                 headers: {
@@ -72,216 +81,141 @@ class GutenbergTab {
             if (response.ok) {
                 const data = await response.json();
                 this.chapters = data.chapters || [];
-                this.xmlContent = data.content_xml || '';
 
-                console.log('[LOAD XML] Loaded chapters:', this.chapters.length);
-                console.log('[LOAD XML] content_xml length:', this.xmlContent.length);
-                console.log('[LOAD CODE] content_xml has <chunk>:', this.xmlContent.includes('<chunk>'));
-                console.log('[LOAD CODE] content_xml has <chapter:', this.xmlContent.includes('<chapter'));
-                console.log('[LOAD CODE] content_xml first 500 chars:', this.xmlContent.substring(0, 500));
+                console.log('[LOAD MARKDOWN] Loaded chapters:', this.chapters.length);
 
-                // Always regenerate code from chapters to ensure chunks are included
-                // The chapters array is the source of truth and includes all chunk data
+                // Always generate markdown from chapters (chapters are the source of truth)
                 if (this.chapters.length > 0) {
-                    console.log('[LOAD CODE] Regenerating code from chapters to include chunks...');
-                    this.xmlContent = this.chaptersToXML(this.chapters);
-                    console.log('[LOAD CODE] Generated code first 500 chars:', this.xmlContent.substring(0, 500));
+                    console.log('[LOAD MARKDOWN] Generating markdown from chapters...');
+                    this.markdownContent = this.chaptersToMarkdown(this.chapters);
+                    console.log('[LOAD MARKDOWN] Generated markdown first 500 chars:', this.markdownContent.substring(0, 500));
+                } else {
+                    this.markdownContent = '';
                 }
 
-                this.displayXML();
+                this.displayMarkdown();
             }
         } catch (error) {
-            console.error('Error loading XML:', error);
+            console.error('Error loading markdown:', error);
         }
     }
 
     /**
-     * Display XML text as plain text with all tags visible
-     * - Escape HTML entities so XML tags display as text
-     * - Convert <p> tags to line breaks for readability
+     * Display markdown in the editor
+     * No escaping needed - text displays as-is
      */
-    highlightXML(xmlText) {
-        if (!xmlText) return '';
-
-        // Escape HTML entities so XML displays as text
-        let html = xmlText
-            .replace(/&/g, '&amp;')
-            .replace(/</g, '&lt;')
-            .replace(/>/g, '&gt;');
-
-        // Convert <p> and </p> tags to line breaks (they represent paragraph breaks)
-        html = html.replace(/&lt;p&gt;/gi, '\n');
-        html = html.replace(/&lt;\/p&gt;/gi, '');
-
-        return html;
-    }
-
-    displayXML() {
+    displayMarkdown() {
         const editor = document.getElementById('pseudoXmlEditor');
 
-        console.log('[DISPLAY XML] Called');
-        console.log('[DISPLAY XML] xmlContent length:', this.xmlContent.length);
+        console.log('[DISPLAY MARKDOWN] Called');
+        console.log('[DISPLAY MARKDOWN] markdownContent length:', this.markdownContent.length);
 
-        if (!this.xmlContent) {
+        if (!this.markdownContent) {
             editor.innerHTML = '<div class="xml-empty-state">No content. Load a Project Gutenberg text or upload a file to begin.</div>';
             return;
         }
 
-        // DEBUG: Check if xmlContent has chunk tags before processing
-        console.log('[DISPLAY XML] Before clean - has <chunk>:', this.xmlContent.includes('<chunk>'));
-        console.log('[DISPLAY XML] Before clean - has <chapter:', this.xmlContent.includes('<chapter'));
+        // For markdown, we display as plain text (no HTML escaping needed in contenteditable)
+        // But we do need to escape for innerHTML
+        const escaped = this.markdownContent
+            .replace(/&/g, '&amp;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;');
 
-        // Clean up Gutenberg-style formatting first
-        let cleanedXML = this.cleanGutenbergWhitespace(this.xmlContent);
-
-        // DEBUG: Check if cleanedXML still has chunk tags after processing
-        console.log('[DISPLAY XML] After clean - has <chunk>:', cleanedXML.includes('<chunk>'));
-        console.log('[DISPLAY XML] After clean - has <chapter:', cleanedXML.includes('<chapter'));
-        console.log('[DISPLAY XML] Cleaned first 500 chars:', cleanedXML.substring(0, 500));
-
-        // Apply escaping and p-tag conversion
-        const finalHTML = this.highlightXML(cleanedXML);
-
-        // DEBUG: Check final output
-        console.log('[DISPLAY XML] Final HTML has &lt;chunk&gt;:', finalHTML.includes('&lt;chunk&gt;'));
-        console.log('[DISPLAY XML] Final HTML first 500 chars:', finalHTML.substring(0, 500));
-
-        editor.innerHTML = finalHTML;
+        editor.innerHTML = escaped;
     }
 
     /**
-     * Clean up whitespace from Gutenberg source:
-     * - Remove all indentation (leading spaces/tabs)
-     * - Collapse line breaks INSIDE text content into spaces (Gutenberg source formatting)
-     * - Preserve line breaks that are part of XML structure (adjacent to tags)
+     * Convert chapters array to markdown format
+     * Format:
+     *   ## Chapter Title      <- This becomes chunk 0 when parsed
+     *   </chunk>
+     *   Chunk text            <- This becomes chunk 1, etc.
+     *   </chunk>
+     *   [pause:1.5]
+     *   </chunk>
+     *   More text...
+     *
+     * Note: The ## header line is automatically added as chunk 0 by the parser,
+     * so we skip outputting chunk 0 if its text matches the title.
      */
-    cleanGutenbergWhitespace(xml) {
-        // Remove all leading whitespace from each line (indentation)
-        let lines = xml.split('\n');
-        lines = lines.map(line => line.trimStart());
-        let cleaned = lines.join('\n');
+    chaptersToMarkdown(chapters) {
+        let markdown = '';
 
-        // Now we need to collapse line breaks that are INSIDE chunk content
-        // (i.e., between > and < but not adjacent to tags)
-        // These are Gutenberg source code line breaks, not real content breaks
-
-        // Process text content between tags: collapse internal newlines to spaces
-        // Match content between > and < (text nodes)
-        cleaned = cleaned.replace(/>([^<]+)</g, (match, content) => {
-            // Replace newlines (and surrounding whitespace) with single space
-            // But preserve if the content is just whitespace (between tags)
-            if (content.trim() === '') {
-                return '><';  // Remove whitespace-only text nodes
-            }
-            // Collapse internal newlines to spaces
-            const processed = content
-                .replace(/\s*\n\s*/g, ' ')  // Replace newlines with spaces
-                .replace(/\s+/g, ' ')        // Collapse multiple spaces
-                .trim();
-            return '>' + processed + '<';
-        });
-
-        // Now add proper line breaks for XML structure readability
-        // Add newline before chapter/non-voiced opening tags
-        cleaned = cleaned.replace(/<(chapter|non-voiced)\s/g, '\n\n<$1 ');
-
-        // Add newline after chapter/non-voiced closing tags
-        cleaned = cleaned.replace(/<\/(chapter|non-voiced)>/g, '</$1>\n\n');
-
-        // Add newline between chunks for readability
-        cleaned = cleaned.replace(/<\/chunk><chunk>/g, '</chunk>\n<chunk>');
-
-        // Add newline after book opening and before book closing
-        cleaned = cleaned.replace(/<book>/g, '<book>\n');
-        cleaned = cleaned.replace(/<\/book>/g, '\n</book>');
-
-        // Clean up multiple consecutive newlines
-        cleaned = cleaned.replace(/\n{3,}/g, '\n\n');
-
-        return cleaned.trim();
-    }
-
-    chaptersToXML(chapters) {
-        // Convert chapters array to pseudo-XML format
-        let xml = '<?xml version="1.0" encoding="UTF-8"?>\n<book>\n';
-
-        for (const chapter of chapters) {
+        for (let i = 0; i < chapters.length; i++) {
+            const chapter = chapters[i];
             const title = chapter.title || chapter.name || 'Untitled';
             const isNonVoiced = chapter.non_voiced || false;
 
-            if (isNonVoiced) {
-                xml += `  <non-voiced title="${this.escapeXML(title)}">\n`;
-            } else {
-                xml += `  <chapter title="${this.escapeXML(title)}">\n`;
+            // Add blank line between chapters (except first)
+            if (i > 0) {
+                markdown += '\n\n';
             }
 
-            if (chapter.chunks) {
-                for (const chunk of chapter.chunks) {
+            // Chapter header (non-voiced uses ###)
+            // This header becomes chunk 0 when parsed
+            if (isNonVoiced) {
+                markdown += `### ${title} [non-voiced]\n`;
+            } else {
+                markdown += `## ${title}\n`;
+            }
+
+            if (chapter.chunks && chapter.chunks.length > 0) {
+                // Determine starting index - skip chunk 0 if it's the title
+                let startIdx = 0;
+                if (chapter.chunks[0]?.type === 'text' && chapter.chunks[0]?.text === title) {
+                    startIdx = 1;  // Skip the title chunk since ## header represents it
+                }
+
+                for (let j = startIdx; j < chapter.chunks.length; j++) {
+                    const chunk = chapter.chunks[j];
+
+                    // Add chunk boundary before each chunk (except the first content chunk)
+                    if (j > startIdx) {
+                        markdown += '\n</chunk>\n';
+                    }
+
                     if (chunk.type === 'pause') {
-                        xml += `    <pause duration="${chunk.duration || 1.0}"/>\n`;
+                        markdown += `\n[pause:${chunk.duration || 1.0}]\n`;
                     } else if (chunk.type === 'common_file') {
-                        xml += `    <common_file path="${this.escapeXML(chunk.path || '')}"/>\n`;
+                        markdown += `\n[file:${chunk.path || ''}]\n`;
                     } else {
+                        // Text chunk - no escaping needed!
                         const text = chunk.text || '';
-                        xml += `    <chunk>${this.escapeXML(text)}</chunk>\n`;
+                        markdown += `\n${text}\n`;
                     }
                 }
             }
-
-            if (isNonVoiced) {
-                xml += '  </non-voiced>\n';
-            } else {
-                xml += '  </chapter>\n';
-            }
         }
 
-        xml += '</book>';
-        return xml;
-    }
-
-    escapeXML(text) {
-        return text
-            .replace(/&/g, '&amp;')
-            .replace(/</g, '&lt;')
-            .replace(/>/g, '&gt;')
-            .replace(/"/g, '&quot;')
-            .replace(/'/g, '&apos;');
-    }
-
-    unescapeXML(text) {
-        return text
-            .replace(/&apos;/g, "'")
-            .replace(/&quot;/g, '"')
-            .replace(/&gt;/g, '>')
-            .replace(/&lt;/g, '<')
-            .replace(/&amp;/g, '&');
+        return markdown.trim();
     }
 
     async saveCode() {
         try {
             const editor = document.getElementById('pseudoXmlEditor');
-            const codeContent = editor.textContent || editor.innerText;
+            const markdownContent = editor.textContent || editor.innerText;
 
-            // Save the code content to the server
-            const response = await fetch(`${SERVER_URL}/api/project/save-xml`, {
+            // Save the markdown content to the server
+            const response = await fetch(`${SERVER_URL}/api/project/save-markdown`, {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
                     'X-API-Key': API_KEY
                 },
                 body: JSON.stringify({
-                    xml_content: codeContent
+                    markdown_content: markdownContent
                 })
             });
 
             if (response.ok) {
                 const result = await response.json();
-                this.xmlContent = codeContent;
-                await this.loadXML();  // Reload to sync chapters
+                this.markdownContent = markdownContent;
+                await this.loadMarkdown();  // Reload to sync chapters
 
                 // Refresh TTS tab to pick up chunk text changes
                 if (typeof ttsTab !== 'undefined' && ttsTab.refreshChapters) {
-                    console.log('[CODE EDITOR] Refreshing TTS tab after code save...');
+                    console.log('[MARKDOWN EDITOR] Refreshing TTS tab after save...');
                     await ttsTab.refreshChapters();
                     // Reload current chapter if one is selected
                     if (ttsTab.currentChapterIndex !== null) {
@@ -289,56 +223,45 @@ class GutenbergTab {
                     }
                 }
 
-                showToast('Code saved successfully!', 'success');
+                // Refresh Reader tab if available
+                if (typeof readerTab !== 'undefined' && readerTab.refresh) {
+                    console.log('[MARKDOWN EDITOR] Refreshing Reader tab after save...');
+                    await readerTab.refresh();
+                }
+
+                showToast('Saved successfully!', 'success');
             } else {
                 const error = await response.json();
-                throw new Error(error.error || 'Failed to save code');
+                throw new Error(error.error || 'Failed to save');
             }
         } catch (error) {
-            console.error('Error saving code:', error);
-            showToast('Error saving code: ' + error.message, 'error');
+            console.error('Error saving markdown:', error);
+            showToast('Error saving: ' + error.message, 'error');
         }
     }
 
-    // Alias for backwards compatibility
-    async saveXML() {
-        return this.saveCode();
-    }
-
-    insertTag(tagType) {
+    // Insert a new chapter break at cursor
+    insertChapterBreak() {
         const editor = document.getElementById('pseudoXmlEditor');
-
-        let insertText = '';
-        if (tagType === 'chapter') {
-            insertText = '\n  <chapter title="New Chapter">\n    <chunk>Chapter text goes here</chunk>\n  </chapter>\n';
-        } else if (tagType === 'chunk') {
-            insertText = '\n    <chunk>Chunk text goes here</chunk>\n';
-        } else if (tagType === 'pause') {
-            insertText = '\n    <pause duration="1.0"/>\n';
-        }
-
-        // Insert at cursor position in contenteditable div
+        const insertText = '\n\n## New Chapter\n\nChapter text goes here.\n';
         document.execCommand('insertText', false, insertText);
         editor.focus();
     }
 
-    wrapSelection(tagType) {
-        const selection = window.getSelection();
+    // Insert a chunk boundary at cursor
+    insertChunkBreak() {
+        const editor = document.getElementById('pseudoXmlEditor');
+        const insertText = '\n\n</chunk>\n\n';
+        document.execCommand('insertText', false, insertText);
+        editor.focus();
+    }
 
-        if (selection.rangeCount === 0 || selection.toString().length === 0) {
-            alert('Please select some text first');
-            return;
-        }
-
-        const selectedText = selection.toString();
-
-        let wrappedText = '';
-        if (tagType === 'footnote') {
-            wrappedText = `<footnote>${selectedText}</footnote>`;
-        }
-
-        // Replace selected text with wrapped version
-        document.execCommand('insertText', false, wrappedText);
+    // Insert a pause marker at cursor
+    insertPause() {
+        const editor = document.getElementById('pseudoXmlEditor');
+        const insertText = '\n\n[pause:1.0]\n\n</chunk>\n\n';
+        document.execCommand('insertText', false, insertText);
+        editor.focus();
     }
 
     async validateChunks() {
@@ -387,7 +310,7 @@ class GutenbergTab {
             if (response.ok) {
                 const result = await response.json();
                 alert(`Rechunking complete! Fixed ${result.chunks_fixed || 0} chunks.`);
-                await this.loadXML();  // Reload XML
+                await this.loadMarkdown();  // Reload markdown
             } else {
                 throw new Error('Failed to auto-rechunk');
             }
@@ -420,18 +343,18 @@ class GutenbergTab {
                 console.log('[GUTENBERG] Success! Result:', result);
                 console.log('[GUTENBERG] Chapters received:', result.chapters?.length || 0);
 
-                // Reload both raw text and XML
+                // Reload both raw text and markdown
                 console.log('[GUTENBERG] Reloading raw text...');
                 await this.loadRawText();
                 console.log('[GUTENBERG] Raw text loaded. Length:', this.rawText.length);
 
-                console.log('[GUTENBERG] Reloading XML...');
-                await this.loadXML();
-                console.log('[GUTENBERG] XML loaded. Count:', this.chapters.length);
+                console.log('[GUTENBERG] Reloading markdown...');
+                await this.loadMarkdown();
+                console.log('[GUTENBERG] Markdown loaded. Count:', this.chapters.length);
 
                 console.log('[GUTENBERG] Displaying content...');
                 this.displayRawText();
-                this.displayXML();
+                this.displayMarkdown();
                 console.log('[GUTENBERG] Complete!');
 
                 alert(`Successfully loaded! ${result.chapters?.length || 0} chapters created.`);
@@ -530,7 +453,7 @@ class GutenbergTab {
             });
 
             if (response.ok) {
-                await this.loadXML();
+                await this.loadMarkdown();
 
                 // Refresh TTS tab chapters dropdown after processing
                 if (typeof ttsTab !== 'undefined' && ttsTab.refreshChapters) {
