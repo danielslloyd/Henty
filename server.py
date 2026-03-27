@@ -2786,12 +2786,15 @@ def transcribe_take():
             return jsonify({'error': 'audio_file is required'}), 400
 
         audio_path = os.path.join(converter.audio_dir, audio_file)
+        audio_path = os.path.abspath(audio_path)
         if not os.path.exists(audio_path):
             return jsonify({'error': f'Audio file not found: {audio_file}'}), 404
 
+        print(f"[Transcription] Loading audio from: {audio_path}")
+
         # Load model and transcribe
         model = get_whisper_model()
-        result = model.transcribe(audio_path, language='en', fp16=False)
+        result = model.transcribe(str(audio_path), language='en', fp16=False)
         transcription = result['text'].strip()
 
         # Compute similarity against original chunk text
