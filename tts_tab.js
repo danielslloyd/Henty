@@ -431,6 +431,7 @@ class TTSTab {
                                 </button>
                             </div>
                         </div>
+                        <div id="transcription_bar_${chunk.id}_${firstTake.audio_file}">${this.renderTranscriptionBar(firstTake)}</div>
                         <div class="take-settings" id="${takeId}">
                             ${isOutdated ? `
                             <div class="setting-row warning-row outdated-warning">
@@ -536,6 +537,7 @@ class TTSTab {
                                     </button>
                                 </div>
                             </div>
+                            <div id="transcription_bar_${chunk.id}_${take.audio_file}">${this.renderTranscriptionBar(take)}</div>
                             <div class="take-settings" id="${takeId}">
                                 ${isOutdated ? `
                                 <div class="setting-row warning-row outdated-warning">
@@ -933,6 +935,10 @@ class TTSTab {
 
             console.log('[TTS TAB] Audio generated successfully');
 
+            // Capture new audio file for transcription (fire-and-forget after UI reload)
+            const newAudioFile = data.audio_file;
+            const chunkTextForTranscription = chunk ? chunk.text : null;
+
             // Clear progress polling for this chunk
             clearInterval(progressInterval);
             this.hideProgressBar(chunkId);
@@ -967,6 +973,11 @@ class TTSTab {
                 console.log('[TTS TAB] Other generations still active, reloading just this chunk');
                 // Reload just this chunk's UI to show the new take
                 await this.reloadSingleChunk(chunkId);
+            }
+
+            // Auto-transcribe the new take (non-blocking)
+            if (newAudioFile && chunkTextForTranscription) {
+                this.transcribeTake(chunkId, newAudioFile, chunkTextForTranscription);
             }
 
             // Restore audio playback if it was playing
@@ -1605,6 +1616,79 @@ class TTSTab {
             if (currentWidth < 90) {
                 progressBar.style.width = (currentWidth + 2) + '%';
             }
+        }
+    }
+
+    // --- Transcription scoring ---
+
+    renderTranscriptionBar(take) {
+        if (take.transcription) {
+            const score = take.similarity_score ?? 0;
+            const cls = score >= 85 ? 'score-high' : score >= 60 ? 'score-mid' : 'score-low';
+            const escaped = take.transcription.replace(/</g, '&lt;').replace(/>/g, '&gt;');
+            return `<div class="take-transcription">
+                <span class="score-badge ${cls}">${score}%</span>
+                <span class="transcription-text" title="${escaped}">${escaped}</span>
+            </div>`;
+        }
+        if (take._transcribing) {
+            return `<div class="take-transcription transcribing">
+                <span class="material-symbols-outlined" style="font-size:14px;animation:spin 1s linear infinite">progress_activity</span>
+                <span>Transcribing...</span>
+            </div>`;
+        }
+        return '';
+    }
+
+    async transcribeTake(chunkId, audioFile, chunkText) {
+        // Show "transcribing" indicator on the row immediately
+        const rowId = `transcription_bar_${chunkId}_${audioFile}`;
+        const el = document.getElementById(rowId);
+        if (el) {
+            el.outerHTML = `<div class="take-transcription transcribing" id="${rowId}">
+                <span class="material-symbols-outlined" style="font-size:14px;animation:spin 1s linear infinite">progress_activity</span>
+                <span>Transcribing...</span>
+            </div>`;
+        }
+
+        try {
+            const response = await fetch(`${SERVER_URL}/api/project/transcribe-take`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', 'X-API-Key': API_KEY },
+                body: JSON.stringify({
+                    audio_file: audioFile,
+                    chunk_text: chunkText,
+                    text_file_id: this.currentChapter.id,
+                    chunk_id: chunkId
+                })
+            });
+            const data = await response.json();
+            if (!response.ok) throw new Error(data.error || 'Transcription failed');
+
+            const score = data.similarity_score ?? 0;
+            const cls = score >= 85 ? 'score-high' : score >= 60 ? 'score-mid' : 'score-low';
+            const escaped = data.transcription.replace(/</g, '&lt;').replace(/>/g, '&gt;');
+
+            const updated = document.getElementById(rowId);
+            if (updated) {
+                updated.className = 'take-transcription';
+                updated.innerHTML = `<span class="score-badge ${cls}">${score}%</span>
+                    <span class="transcription-text" title="${escaped}">${escaped}</span>`;
+            }
+
+            // Also persist in local chapter data so it survives UI-only refreshes
+            const chunk = this.currentChapter.chunks.find(c => c.id === chunkId);
+            if (chunk) {
+                const entry = (chunk.generated_audios || []).find(a => a.audio_file === audioFile);
+                if (entry) {
+                    entry.transcription = data.transcription;
+                    entry.similarity_score = score;
+                }
+            }
+        } catch (err) {
+            console.error('[TTS TAB] Transcription failed:', err);
+            const el2 = document.getElementById(rowId);
+            if (el2) el2.remove();
         }
     }
 }
