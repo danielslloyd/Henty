@@ -20,6 +20,38 @@ from auth import AuthManager
 
 app = Flask(__name__)
 
+# Lazy-loaded Whisper model for transcription scoring
+_whisper_model = None
+_whisper_model_lock = threading.Lock()
+
+def get_whisper_model():
+    global _whisper_model
+    with _whisper_model_lock:
+        if _whisper_model is None:
+            try:
+                import whisper
+            except ImportError:
+                print("openai-whisper not found, installing...")
+                import subprocess, sys
+                subprocess.check_call([sys.executable, "-m", "pip", "install", "openai-whisper"])
+                import whisper
+            print("Loading Whisper base.en model for transcription scoring...")
+            _whisper_model = whisper.load_model("base.en")
+            print("Whisper model loaded.")
+        return _whisper_model
+
+def compute_similarity(text_a, text_b):
+    """Compute normalized similarity score between two strings (0.0–1.0)."""
+    import difflib
+    import re
+    def normalize(t):
+        t = t.lower()
+        t = re.sub(r"[^\w\s]", "", t)
+        return " ".join(t.split())
+    a = normalize(text_a)
+    b = normalize(text_b)
+    return difflib.SequenceMatcher(None, a, b).ratio()
+
 # Configure CORS for remote access
 # Note: When using wildcard (*), we can't use credentials
 if config.ALLOWED_ORIGINS == ['*'] or config.ALLOWED_ORIGINS == '*':
@@ -2734,6 +2766,70 @@ def generate_project_chunk_audio():
     except Exception as e:
         import traceback
         print(f"Error generating chunk audio: {str(e)}")
+        print(traceback.format_exc())
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/project/transcribe-take', methods=['POST'])
+def transcribe_take():
+    """Transcribe a generated take with Whisper and score it against the original chunk text."""
+    try:
+        if converter.current_project_path is None:
+            return jsonify({'error': 'No project loaded'}), 400
+
+        data = request.json
+        audio_file = data.get('audio_file')
+        chunk_text = data.get('chunk_text', '')
+        text_file_id = data.get('text_file_id')
+        chunk_id = data.get('chunk_id')
+
+        if not audio_file:
+            return jsonify({'error': 'audio_file is required'}), 400
+
+        audio_path = os.path.join(converter.audio_dir, audio_file)
+        if not os.path.exists(audio_path):
+            return jsonify({'error': f'Audio file not found: {audio_file}'}), 404
+
+        # Load model and transcribe
+        model = get_whisper_model()
+        result = model.transcribe(audio_path, language='en', fp16=False)
+        transcription = result['text'].strip()
+
+        # Compute similarity against original chunk text
+        similarity = 0.0
+        if chunk_text:
+            similarity = compute_similarity(chunk_text, transcription)
+        similarity_score = round(similarity * 100, 1)
+
+        print(f"[Transcription] {audio_file}: score={similarity_score}%")
+
+        # Persist into project.json if chunk reference provided
+        if text_file_id is not None and chunk_id is not None:
+            chapter_map, text_file_map, chunk_maps = converter.get_chapter_and_chunk_lookups()
+            container = chapter_map.get(text_file_id) or text_file_map.get(text_file_id)
+            if container:
+                chunk = chunk_maps.get(text_file_id, {}).get(chunk_id)
+                if chunk:
+                    for entry in chunk.get('generated_audios', []):
+                        if entry.get('audio_file') == audio_file:
+                            entry['transcription'] = transcription
+                            entry['similarity_score'] = similarity_score
+                            break
+                    from datetime import datetime
+                    converter.current_project_metadata['last_modified'] = datetime.now().isoformat()
+                    project_file = os.path.join(converter.current_project_path, 'project.json')
+                    with open(project_file, 'w', encoding='utf-8') as f:
+                        json.dump(converter.current_project_metadata, f, indent=2, ensure_ascii=False)
+                    converter._invalidate_lookup_caches()
+
+        return jsonify({
+            'success': True,
+            'transcription': transcription,
+            'similarity_score': similarity_score
+        })
+
+    except Exception as e:
+        import traceback
+        print(f"Error transcribing take: {str(e)}")
         print(traceback.format_exc())
         return jsonify({'error': str(e)}), 500
 

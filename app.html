@@ -713,6 +713,11 @@
             100% { transform: translateX(100%); }
         }
 
+        @keyframes spin {
+            from { transform: rotate(0deg); }
+            to { transform: rotate(360deg); }
+        }
+
         /* Error placeholder for failed chunk generation */
         .chunk-error-placeholder {
             position: absolute;
@@ -926,6 +931,58 @@
 
         .outdated-warning .warning-text {
             color: #991b1b;
+        }
+
+        /* Transcription scoring */
+        .take-transcription {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            padding: 4px 16px 6px 48px;
+            font-size: 12px;
+            color: #64748b;
+            border-top: 1px solid #f8fafc;
+            background: rgba(248, 250, 252, 0.7);
+        }
+
+        .take-transcription.transcribing {
+            color: #94a3b8;
+            font-style: italic;
+        }
+
+        .score-badge {
+            display: inline-flex;
+            align-items: center;
+            padding: 1px 6px;
+            border-radius: 10px;
+            font-size: 11px;
+            font-weight: 600;
+            letter-spacing: 0.2px;
+            flex-shrink: 0;
+        }
+
+        .score-badge.score-high {
+            background: rgba(16, 185, 129, 0.12);
+            color: #059669;
+        }
+
+        .score-badge.score-mid {
+            background: rgba(245, 158, 11, 0.12);
+            color: #d97706;
+        }
+
+        .score-badge.score-low {
+            background: rgba(239, 68, 68, 0.12);
+            color: #dc2626;
+        }
+
+        .transcription-text {
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            flex: 1;
+            min-width: 0;
+            color: #64748b;
         }
 
         .setting-label {
