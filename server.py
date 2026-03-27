@@ -2836,6 +2836,70 @@ def transcribe_take():
         print(traceback.format_exc())
         return jsonify({'error': str(e)}), 500
 
+@app.route('/api/debug/whisper', methods=['GET'])
+def debug_whisper():
+    """
+    Diagnostic endpoint: checks ffmpeg availability and tests Whisper on a
+    voice sample so we can isolate path vs. model vs. ffmpeg issues.
+    """
+    import subprocess
+    import shutil
+    import traceback
+
+    result = {
+        'ffmpeg_in_path': False,
+        'ffmpeg_version': None,
+        'whisper_model_loaded': False,
+        'voice_sample_path': None,
+        'voice_sample_exists': False,
+        'transcription_test': None,
+        'error': None,
+    }
+
+    # 1. Check ffmpeg
+    ffmpeg_exe = shutil.which('ffmpeg')
+    result['ffmpeg_in_path'] = ffmpeg_exe is not None
+    if ffmpeg_exe:
+        try:
+            ver = subprocess.check_output(
+                [ffmpeg_exe, '-version'], stderr=subprocess.STDOUT, timeout=5
+            ).decode(errors='replace').split('\n')[0]
+            result['ffmpeg_version'] = ver
+        except Exception as fe:
+            result['ffmpeg_version'] = f'error: {fe}'
+
+    # 2. Find a voice sample to test with
+    vs_dir = os.path.abspath(converter.voice_samples_dir)
+    sample_path = None
+    if os.path.isdir(vs_dir):
+        for fn in os.listdir(vs_dir):
+            if fn.lower().endswith(('.wav', '.mp3', '.flac', '.m4a')):
+                sample_path = os.path.join(vs_dir, fn)
+                break
+    result['voice_sample_path'] = sample_path
+    result['voice_sample_exists'] = sample_path is not None and os.path.exists(sample_path)
+
+    # 3. Try to load the model
+    try:
+        model = get_whisper_model()
+        result['whisper_model_loaded'] = True
+    except Exception as me:
+        result['error'] = f'Model load failed: {me}'
+        return jsonify(result)
+
+    # 4. Try transcribing the voice sample
+    if sample_path and os.path.exists(sample_path):
+        try:
+            tr = model.transcribe(str(sample_path), language='en', fp16=False)
+            result['transcription_test'] = tr['text'].strip()[:200]
+        except Exception as te:
+            result['transcription_test'] = f'FAILED: {te}'
+            result['error'] = traceback.format_exc()
+    else:
+        result['transcription_test'] = 'skipped — no voice sample found'
+
+    return jsonify(result)
+
 @app.route('/api/project/stitch-best-takes', methods=['POST'])
 def stitch_project_best_takes():
     """Stitch together the best takes from all chunks in a chapter/text file within the current project"""
