@@ -426,6 +426,7 @@ class TTSTab {
                                 <button class="take-icon diff" data-diff-for="diff_${takeId}" onclick="event.stopPropagation(); ttsTab.toggleDiffPanel('diff_${takeId}')" title="Compare transcription" ${firstTake.transcription ? '' : 'disabled'}>
                                     <span class="material-symbols-outlined">speaker_notes</span>
                                 </button>
+                                ${firstTake.similarity_score !== undefined ? `<span class="take-score-badge score-${firstTake.similarity_score >= 85 ? 'high' : firstTake.similarity_score >= 60 ? 'mid' : 'low'}" title="Similarity: ${firstTake.similarity_score}%">${firstTake.similarity_score}%</span>` : ''}
                                 <button class="take-icon play" onclick="event.stopPropagation(); ttsTab.playTakeAudio('${firstTake.audio_url}', event)" title="Play">
                                     <span class="material-symbols-outlined">play_arrow</span>
                                 </button>
@@ -434,7 +435,6 @@ class TTSTab {
                                 </button>
                             </div>
                         </div>
-                        <div id="transcription_bar_${chunk.id}_${firstTake.audio_file}">${this.renderTranscriptionBar(firstTake)}</div>
                         <div class="take-diff" id="diff_${takeId}">${this.renderDiffPanel(firstTake)}</div>
                         <div class="take-settings" id="${takeId}">
                             ${isOutdated ? `
@@ -536,6 +536,7 @@ class TTSTab {
                                     <button class="take-icon diff" data-diff-for="diff_${takeId}" onclick="event.stopPropagation(); ttsTab.toggleDiffPanel('diff_${takeId}')" title="Compare transcription" ${take.transcription ? '' : 'disabled'}>
                                         <span class="material-symbols-outlined">speaker_notes</span>
                                     </button>
+                                    ${take.similarity_score !== undefined ? `<span class="take-score-badge score-${take.similarity_score >= 85 ? 'high' : take.similarity_score >= 60 ? 'mid' : 'low'}" title="Similarity: ${take.similarity_score}%">${take.similarity_score}%</span>` : ''}
                                     <button class="take-icon play" onclick="event.stopPropagation(); ttsTab.playTakeAudio('${take.audio_url}', event)" title="Play">
                                         <span class="material-symbols-outlined">play_arrow</span>
                                     </button>
@@ -544,7 +545,6 @@ class TTSTab {
                                     </button>
                                 </div>
                             </div>
-                            <div id="transcription_bar_${chunk.id}_${take.audio_file}">${this.renderTranscriptionBar(take)}</div>
                             <div class="take-diff" id="diff_${takeId}">${this.renderDiffPanel(take)}</div>
                             <div class="take-settings" id="${takeId}">
                                 ${isOutdated ? `
