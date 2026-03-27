@@ -1,32 +1,12 @@
 @echo off
-REM Henty Launcher Script with Git Pull for Windows
-REM Pulls latest changes from GitHub, then starts the server and opens the landing page
+REM Henty Launcher Script for Windows
+REM Checks dependencies (Python, ffmpeg), then starts the server and opens the app
 
 echo.
 echo ================================================
 echo   Henty Audiobook Creation Suite
 echo ================================================
 echo.
-
-REM Check if Git is available
-git --version >nul 2>&1
-if %errorlevel% neq 0 (
-    echo [WARNING] Git is not installed or not in PATH
-    echo Skipping git pull...
-    echo.
-) else (
-    echo [INFO] Pulling latest changes from GitHub...
-    git pull
-    if %errorlevel% neq 0 (
-        echo [WARNING] Git pull failed or there are conflicts
-        echo Please resolve any issues manually
-        echo.
-        pause
-    ) else (
-        echo [SUCCESS] Successfully pulled latest changes
-        echo.
-    )
-)
 
 REM Check if Python is available
 python --version >nul 2>&1
@@ -43,6 +23,27 @@ if not exist "server.py" (
     echo Please run this script from the Henty directory
     pause
     exit /b 1
+)
+
+REM Check if ffmpeg is available, install if not
+ffmpeg -version >nul 2>&1
+if %errorlevel% neq 0 (
+    echo [INFO] ffmpeg not found - required for audio transcription scoring
+    echo [INFO] Attempting to install via winget...
+    winget install --id Gyan.FFmpeg -e --accept-package-agreements --accept-source-agreements
+    if %errorlevel% neq 0 (
+        echo [WARNING] winget install failed. Please install ffmpeg manually:
+        echo   1. Download from https://ffmpeg.org/download.html
+        echo   2. Extract and add the bin\ folder to your system PATH
+        echo   Transcription scoring will not work until ffmpeg is installed.
+        echo.
+    ) else (
+        echo [SUCCESS] ffmpeg installed. You may need to restart the launcher
+        echo           once for PATH changes to take effect.
+        echo.
+    )
+) else (
+    echo [OK] ffmpeg found
 )
 
 echo [INFO] Starting server on http://localhost:5000...
