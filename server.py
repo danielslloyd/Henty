@@ -3590,23 +3590,43 @@ def add_gutenberg_url_to_project():
 
         print(f"\n=== Adding Gutenberg URL to project: {url} ===")
 
-        # Use GutenbergProcessor to download and process the text
         processor = GutenbergProcessor(output_dir=converter.current_project_path)
 
-        title = None
+        # Extract numeric book ID from whatever URL format was given
+        book_id = processor.get_gutenberg_book_id(url)
+        if not book_id:
+            return jsonify({'error': f'Could not extract a Gutenberg book ID from: {url}'}), 400
+        print(f"Book ID: {book_id}")
+
+        # Always download the canonical plain text for content
+        plain_text_url = processor.get_plain_text_url(book_id)
+        print(f"Downloading plain text: {plain_text_url}")
+        raw_content = processor.download_text(plain_text_url)
+
+        # Extract title and strip Gutenberg header/footer
+        title = processor.extract_title(raw_content) or processor.extract_book_name(url)
+        print(f"Title: {title}")
+        text = processor.strip_gutenberg_metadata(raw_content, title)
+        text = processor.process_carriage_returns(text)
+        text = text.replace('<<<SECTION_BREAK>>>', '\n\n')
+        print(f"Processed text: {len(text)} characters")
+
+        raw_text_file = os.path.join(converter.current_project_path, 'raw_text.txt')
+        with open(raw_text_file, 'w', encoding='utf-8') as f:
+            f.write(text)
+
         detected_chapters = None
 
-        # --- Try EPUB first for clean chapter structure ---
-        book_id = processor.get_gutenberg_book_id(url)
-        if book_id:
-            epub_bytes = processor.download_epub(book_id)
-            if epub_bytes:
-                try:
-                    epub_title, epub_chapters_data = processor.extract_epub_chapters(epub_bytes)
-                    print(f"EPUB: found {len(epub_chapters_data)} chapters")
-                    if epub_title:
-                        title = epub_title
-                    if epub_chapters_data:
+        # Download EPUB for chapter titles, then split plain text at those positions
+        epub_bytes = processor.download_epub(book_id)
+        if epub_bytes:
+            try:
+                chapter_titles = processor.get_epub_chapter_titles(epub_bytes)
+                print(f"EPUB titles found: {len(chapter_titles)}")
+                if chapter_titles:
+                    epub_splits = processor.split_text_by_chapter_titles(text, chapter_titles)
+                    print(f"Plain text split into {len(epub_splits)} chapters via EPUB")
+                    if epub_splits:
                         detected_chapters = [
                             {
                                 'id': str(uuid.uuid4()),
@@ -3614,44 +3634,17 @@ def add_gutenberg_url_to_project():
                                 'order': i,
                                 'text': ch_text,
                             }
-                            for i, (ch_title, ch_text) in enumerate(epub_chapters_data)
+                            for i, (ch_title, ch_text) in enumerate(epub_splits)
                         ]
-                except Exception as epub_err:
-                    print(f"EPUB parsing failed ({epub_err}), falling back to plain text")
+            except Exception as epub_err:
+                print(f"EPUB chapter extraction failed ({epub_err}), falling back")
 
-        # --- Fall back to plain-text processing ---
-        if detected_chapters is None:
-            print(f"Downloading plain text from {url}...")
-            text = processor.download_text(url)
-
-            if not title:
-                title = processor.extract_title(text) or processor.extract_book_name(url)
-            print(f"Extracted title: {title}")
-
-            text = processor.strip_gutenberg_metadata(text, title)
-            text = processor.process_carriage_returns(text)
-            text = text.replace('<<<SECTION_BREAK>>>', '\n\n')
-            print(f"Processed text length: {len(text)} characters")
-
-            raw_text_file = os.path.join(converter.current_project_path, 'raw_text.txt')
-            with open(raw_text_file, 'w', encoding='utf-8') as f:
-                f.write(text)
-            print(f"Saved raw text to {raw_text_file}")
-
+        # Fall back to plain-text chapter detection if EPUB didn't produce results
+        if not detected_chapters:
+            print("Falling back to plain-text chapter detection")
             detected_chapters = converter.detect_chapters(text)
-            print(f"Detected {len(detected_chapters)} chapter(s) from plain text")
-        else:
-            # Save combined plain text from EPUB chapters for reference
-            text = '\n\n'.join(
-                f"{ch['title']}\n\n{ch['text']}" for ch in detected_chapters
-            )
-            raw_text_file = os.path.join(converter.current_project_path, 'raw_text.txt')
-            with open(raw_text_file, 'w', encoding='utf-8') as f:
-                f.write(text)
 
-        if not title:
-            title = processor.extract_book_name(url)
-        print(f"Title: {title}, Chapters: {len(detected_chapters)}")
+        print(f"Final chapter count: {len(detected_chapters)}")
 
         # Generate XML content
         xml_content = converter.text_to_xml_content(text, detected_chapters)

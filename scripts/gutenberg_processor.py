@@ -50,224 +50,160 @@ class GutenbergProcessor:
         os.makedirs(output_dir, exist_ok=True)
 
     def get_gutenberg_book_id(self, url: str) -> Optional[str]:
-        """Extract the numeric book ID from any Gutenberg URL."""
-        match = re.search(r'/(?:ebooks|epub)/(\d+)', url)
-        if match:
-            return match.group(1)
-        match = re.search(r'pg(\d+)', url)
-        if match:
-            return match.group(1)
+        """Extract numeric book ID from any Gutenberg URL format."""
+        # Covers /ebooks/120, /epub/120/pg120.txt, pg120.txt, etc.
+        for pattern in [r'/(?:ebooks|epub)/(\d+)', r'pg(\d+)']:
+            m = re.search(pattern, url)
+            if m:
+                return m.group(1)
         return None
 
+    def get_epub_url(self, book_id: str) -> str:
+        """Canonical no-images EPUB URL."""
+        return f"https://www.gutenberg.org/ebooks/{book_id}.epub.noimages"
+
+    def get_plain_text_url(self, book_id: str) -> str:
+        """Canonical plain-text cache URL."""
+        return f"https://www.gutenberg.org/cache/epub/{book_id}/pg{book_id}.txt"
+
     def download_epub(self, book_id: str) -> Optional[bytes]:
-        """Download the EPUB for a Gutenberg book ID, returning raw bytes or None."""
-        epub_url = f"https://www.gutenberg.org/cache/epub/{book_id}/pg{book_id}.epub"
+        """Download the no-images EPUB; returns None on failure."""
+        url = self.get_epub_url(book_id)
         try:
-            print(f"Trying EPUB: {epub_url}")
-            resp = requests.get(epub_url, timeout=60)
+            print(f"Downloading EPUB: {url}")
+            resp = requests.get(url, timeout=60)
             resp.raise_for_status()
             return resp.content
         except Exception as e:
-            print(f"EPUB download failed ({e}), will use text fallback")
+            print(f"EPUB download failed ({e})")
             return None
 
-    def extract_epub_chapters(self, epub_bytes: bytes) -> Tuple[str, List[Tuple[str, str]]]:
+    def get_epub_chapter_titles(self, epub_bytes: bytes) -> List[str]:
         """
-        Parse an EPUB (ZIP archive) and return (title, [(chapter_title, chapter_text), ...]).
-        Uses the NCX/nav table of contents to determine chapter boundaries.
-        Requires beautifulsoup4.
+        Extract ordered chapter titles from an EPUB's NCX or nav.xhtml.
+        Returns a flat list of title strings (front/back matter skipped).
         """
-        import zipfile
-        import io
-
+        import zipfile, io
         if not HAS_BS4:
-            raise ValueError("beautifulsoup4 is required for EPUB processing")
+            return []
 
-        chapters: List[Tuple[str, str]] = []
-        title = ''
+        skip_kw = {'contents', 'table of contents', 'cover', 'copyright',
+                   'title page', 'half-title', 'dedication', 'epigraph',
+                   'acknowledgement', 'index', 'bibliography', 'about the'}
+        titles: List[str] = []
 
         with zipfile.ZipFile(io.BytesIO(epub_bytes)) as zf:
             names = set(zf.namelist())
 
-            # 1. Locate OPF via container.xml
+            # Locate OPF
             opf_path = None
             try:
-                container_xml = zf.read('META-INF/container.xml').decode('utf-8', errors='replace')
-                csoup = BeautifulSoup(container_xml, 'xml')
-                rf = csoup.find('rootfile')
+                c = zf.read('META-INF/container.xml').decode('utf-8', errors='replace')
+                rf = BeautifulSoup(c, 'xml').find('rootfile')
                 if rf:
                     opf_path = rf.get('full-path')
             except Exception:
                 pass
+            opf_path = opf_path or next((n for n in names if n.endswith('.opf')), None)
             if not opf_path:
-                opf_path = next((n for n in names if n.endswith('.opf')), None)
-            if not opf_path:
-                raise ValueError("Could not locate OPF file in EPUB")
+                return []
 
             opf_dir = os.path.dirname(opf_path)
+            opf_soup = BeautifulSoup(
+                zf.read(opf_path).decode('utf-8', errors='replace'), 'xml'
+            )
 
-            # 2. Parse OPF for title, manifest, spine
-            opf_content = zf.read(opf_path).decode('utf-8', errors='replace')
-            opf_soup = BeautifulSoup(opf_content, 'xml')
+            def abs_path(href: str) -> str:
+                return (opf_dir.rstrip('/') + '/' + href.lstrip('/')) if opf_dir else href
 
-            title_tag = opf_soup.find('dc:title')
-            if title_tag:
-                raw = title_tag.get_text(strip=True)
-                title = re.sub(r'[^\w\s-]', '', raw)
-                title = re.sub(r'\s+', '_', title)[:50]
-
-            def opf_abs(href: str) -> str:
-                """Resolve an OPF-relative href to a zip path."""
-                if opf_dir:
-                    return opf_dir.rstrip('/') + '/' + href.lstrip('/')
-                return href
-
-            manifest: dict = {}
-            for item in opf_soup.find_all('item'):
-                iid = item.get('id', '')
-                href = item.get('href', '')
-                manifest[iid] = {
-                    'href': href,
-                    'path': opf_abs(href),
+            manifest = {
+                item.get('id', ''): {
+                    'path': abs_path(item.get('href', '')),
                     'media_type': item.get('media-type', ''),
                     'properties': item.get('properties', ''),
                 }
+                for item in opf_soup.find_all('item')
+            }
 
-            spine_ids = [
-                item.get('idref') for item in opf_soup.find_all('itemref')
-                if item.get('linear', 'yes').lower() != 'no'
-            ]
-
-            # 3. Build nav_map: zip-path-basename -> chapter title (from NCX or nav.xhtml)
-            nav_map: dict = {}
+            def _add(t: str) -> None:
+                t = t.strip()
+                if t and not any(kw in t.lower() for kw in skip_kw):
+                    titles.append(t)
 
             # Try NCX (EPUB 2)
             ncx_item = opf_soup.find('item', attrs={'media-type': 'application/x-dtbncx+xml'})
             if ncx_item:
-                ncx_info = manifest.get(ncx_item.get('id', ''), {})
-                ncx_path = ncx_info.get('path', '')
+                ncx_path = manifest.get(ncx_item.get('id', ''), {}).get('path', '')
                 try:
-                    ncx_content = zf.read(ncx_path).decode('utf-8', errors='replace')
-                    ncx_soup = BeautifulSoup(ncx_content, 'xml')
+                    ncx_soup = BeautifulSoup(
+                        zf.read(ncx_path).decode('utf-8', errors='replace'), 'xml'
+                    )
                     for pt in ncx_soup.find_all('navPoint'):
                         lbl = pt.find('navLabel')
-                        ct = pt.find('content')
-                        if lbl and ct:
-                            src = ct.get('src', '').split('#')[0]
-                            ch_title = lbl.get_text(strip=True)
-                            nav_map[src] = ch_title
-                            nav_map[os.path.basename(src)] = ch_title
-                except Exception as ncx_err:
-                    print(f"NCX parse error: {ncx_err}")
+                        if lbl:
+                            _add(lbl.get_text(strip=True))
+                    if titles:
+                        return titles
+                except Exception as e:
+                    print(f"NCX parse error: {e}")
 
             # Try nav.xhtml (EPUB 3)
-            if not nav_map:
-                nav_item = next(
-                    (v for v in manifest.values() if 'nav' in v.get('properties', '')), None
-                )
-                if nav_item:
-                    try:
-                        nav_content = zf.read(nav_item['path']).decode('utf-8', errors='replace')
-                        nav_soup = BeautifulSoup(nav_content, 'html.parser')
-                        nav_el = (nav_soup.find('nav', attrs={'epub:type': 'toc'}) or
-                                  nav_soup.find('nav'))
-                        if nav_el:
-                            for a in nav_el.find_all('a'):
-                                src = a.get('href', '').split('#')[0]
-                                ch_title = a.get_text(strip=True)
-                                nav_map[src] = ch_title
-                                nav_map[os.path.basename(src)] = ch_title
-                    except Exception as nav_err:
-                        print(f"nav.xhtml parse error: {nav_err}")
+            nav_item = next(
+                (v for v in manifest.values() if 'nav' in v.get('properties', '')), None
+            )
+            if nav_item:
+                try:
+                    nav_soup = BeautifulSoup(
+                        zf.read(nav_item['path']).decode('utf-8', errors='replace'),
+                        'html.parser'
+                    )
+                    nav_el = (nav_soup.find('nav', attrs={'epub:type': 'toc'})
+                              or nav_soup.find('nav'))
+                    if nav_el:
+                        for a in nav_el.find_all('a'):
+                            _add(a.get_text(strip=True))
+                except Exception as e:
+                    print(f"nav.xhtml parse error: {e}")
 
-            # 4. Extract text for each spine item in order
-            skip_keywords = {'contents', 'table of contents', 'cover', 'copyright',
-                             'title page', 'half-title', 'dedication', 'epigraph',
-                             'preface', 'foreword', 'acknowledgement'}
+        return titles
 
-            for idref in spine_ids:
-                info = manifest.get(idref)
-                if not info or 'html' not in info.get('media_type', ''):
-                    continue
+    def split_text_by_chapter_titles(
+        self, text: str, chapter_titles: List[str]
+    ) -> List[Tuple[str, str]]:
+        """
+        Split stripped plain text at positions matching EPUB chapter titles.
+        Each title is searched as a standalone line (case-insensitive, punctuation-tolerant).
+        Returns [(title, chapter_text), ...] for titles that matched.
+        """
+        splits: List[Tuple[int, int, str]] = []  # (match_start, content_start, title)
 
-                item_href = info['href']
-                item_path = info['path']
+        for title in chapter_titles:
+            # Build a loose regex: escape, then allow optional punctuation between words
+            escaped = re.escape(title)
+            # allow optional trailing period / roman numeral variations
+            pattern = r'(?:^|\n)[ \t]*(' + escaped + r'\.?)[ \t]*(?:\n|$)'
+            m = re.search(pattern, text, re.IGNORECASE)
+            if m:
+                splits.append((m.start(), m.end(), title))
 
-                # Read HTML content
-                html_bytes = None
-                for attempt in [item_path, item_href]:
-                    if attempt in names:
-                        html_bytes = zf.read(attempt)
-                        break
-                if html_bytes is None:
-                    continue
+        if not splits:
+            return []
 
-                html_content = html_bytes.decode('utf-8', errors='replace')
-                doc = BeautifulSoup(html_content, 'html.parser')
-                body = doc.find('body')
-                if not body:
-                    continue
+        splits.sort(key=lambda x: x[0])
 
-                # Resolve chapter title
-                basename = os.path.basename(item_href)
-                ch_title = nav_map.get(item_href) or nav_map.get(basename) or ''
-                if not ch_title:
-                    h_tag = body.find(['h1', 'h2', 'h3'])
-                    if h_tag:
-                        ch_title = h_tag.get_text(strip=True)
+        chapters: List[Tuple[str, str]] = []
+        for i, (_, content_start, title) in enumerate(splits):
+            next_start = splits[i + 1][0] if i + 1 < len(splits) else len(text)
+            chapter_text = text[content_start:next_start].strip()
+            if chapter_text:
+                chapters.append((title, chapter_text))
 
-                # Skip non-content pages
-                if ch_title and any(kw in ch_title.lower() for kw in skip_keywords):
-                    continue
-
-                # Extract paragraphs (skip div containers that wrap other blocks)
-                text_parts = []
-                for el in body.find_all(['p', 'div', 'blockquote']):
-                    if el.name == 'div' and el.find(['p', 'div', 'blockquote']):
-                        continue
-                    t = el.get_text(separator=' ', strip=True)
-                    if t and len(t) > 30:
-                        text_parts.append(t)
-
-                if not text_parts:
-                    continue
-
-                chapter_text = '\n\n'.join(text_parts)
-                if len(chapter_text) < 100:
-                    continue
-
-                chapters.append((ch_title or f"Chapter {len(chapters) + 1}", chapter_text))
-
-        return title, chapters
+        return chapters
 
     def download_text(self, url: str) -> str:
-        """
-        Download text from a URL (supports .txt, .htm, .html files)
-
-        Args:
-            url: URL to download from
-
-        Returns:
-            Downloaded text content
-
-        Raises:
-            ValueError: If URL doesn't point to a valid text or HTML file
-        """
-        # Remove fragment identifier (#...) and query parameters before checking extension
-        url_for_check = url.split('#')[0].split('?')[0].lower()
-
-        # Verify URL points to a supported file type
-        if not (url_for_check.endswith('.txt') or url_for_check.endswith('.htm') or url_for_check.endswith('.html')):
-            raise ValueError(f"URL does not point to a .txt, .htm, or .html file: {url}")
-
+        """Download text from a URL (plain-text or HTML)."""
         response = requests.get(url, timeout=30)
         response.raise_for_status()
-
-        # Verify content-type if available
-        content_type = response.headers.get('content-type', '')
-        if content_type and not any(t in content_type.lower() for t in ['text', 'html']):
-            raise ValueError(f"URL does not return text/html content: {content_type}")
-
         return response.text
 
     def strip_gutenberg_metadata(self, text: str, title: str) -> str:

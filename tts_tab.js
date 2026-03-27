@@ -1774,8 +1774,33 @@ class TTSTab {
             }
         } catch (err) {
             console.error('[TTS TAB] Transcription failed:', err);
-            const el2 = document.getElementById(rowId);
-            if (el2) el2.remove();
+            const errMsg = err.message || 'Transcription failed';
+
+            // Show error badge in the bar
+            const barEl = document.getElementById(rowId);
+            if (barEl) {
+                barEl.className = 'take-transcription';
+                barEl.innerHTML = `<span class="score-badge score-low">ERR</span>
+                    <span class="transcription-text" style="color:#dc2626">${errMsg}</span>`;
+
+                // Populate diff panel with original text + error message side by side
+                const diffEl = barEl.nextElementSibling;
+                if (diffEl && diffEl.classList.contains('take-diff')) {
+                    const orig = chunkText.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+                    diffEl.innerHTML = `<div class="diff-panel-header">
+                        <span class="diff-col-label">Original</span>
+                        <span class="diff-divider"></span>
+                        <span class="diff-col-label">Transcription Error <span class="score-badge score-low">ERR</span></span>
+                    </div>
+                    <div class="diff-cols">
+                        <div class="diff-col diff-original">${orig}</div>
+                        <div class="diff-col diff-transcription" style="color:#dc2626;font-style:italic">${errMsg}</div>
+                    </div>`;
+                    const diffPanelId = diffEl.id;
+                    const btn = document.querySelector(`[data-diff-for="${diffPanelId}"]`);
+                    if (btn) btn.removeAttribute('disabled');
+                }
+            }
         }
     }
 }
