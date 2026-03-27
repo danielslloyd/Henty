@@ -409,7 +409,7 @@ class TTSTab {
                                     <span class="material-symbols-outlined">tune</span>
                                 </button>
                                 <button class="chunk-icon add" onclick="event.stopPropagation(); ttsTab.selectChunk(${chunk.id}); setTimeout(() => ttsTab.generateChunkAudio(${chunk.id}), 100)" title="Generate take">
-                                    <span class="material-symbols-outlined">add</span>
+                                    <span class="material-symbols-outlined">text_to_speech</span>
                                 </button>
                                 ${isOutdated ? '<span class="material-symbols-outlined outdated-icon" title="Text changed since generation">edit_off</span>' : ''}
                                 <span class="chunk-preview-text">${chunkPreview}</span>
@@ -423,6 +423,9 @@ class TTSTab {
                                 <button class="take-icon settings" data-settings-for="${takeId}" onclick="event.stopPropagation(); ttsTab.toggleTakeSettings('${takeId}')" title="View settings">
                                     <span class="material-symbols-outlined">settings</span>
                                 </button>
+                                <button class="take-icon diff" data-diff-for="diff_${takeId}" onclick="event.stopPropagation(); ttsTab.toggleDiffPanel('diff_${takeId}')" title="Compare transcription" ${firstTake.transcription ? '' : 'disabled'}>
+                                    <span class="material-symbols-outlined">speaker_notes</span>
+                                </button>
                                 <button class="take-icon play" onclick="event.stopPropagation(); ttsTab.playTakeAudio('${firstTake.audio_url}', event)" title="Play">
                                     <span class="material-symbols-outlined">play_arrow</span>
                                 </button>
@@ -432,6 +435,7 @@ class TTSTab {
                             </div>
                         </div>
                         <div id="transcription_bar_${chunk.id}_${firstTake.audio_file}">${this.renderTranscriptionBar(firstTake)}</div>
+                        <div class="take-diff" id="diff_${takeId}">${this.renderDiffPanel(firstTake)}</div>
                         <div class="take-settings" id="${takeId}">
                             ${isOutdated ? `
                             <div class="setting-row warning-row outdated-warning">
@@ -529,6 +533,9 @@ class TTSTab {
                                     <button class="take-icon settings" data-settings-for="${takeId}" onclick="event.stopPropagation(); ttsTab.toggleTakeSettings('${takeId}')" title="View settings">
                                         <span class="material-symbols-outlined">settings</span>
                                     </button>
+                                    <button class="take-icon diff" data-diff-for="diff_${takeId}" onclick="event.stopPropagation(); ttsTab.toggleDiffPanel('diff_${takeId}')" title="Compare transcription" ${take.transcription ? '' : 'disabled'}>
+                                        <span class="material-symbols-outlined">speaker_notes</span>
+                                    </button>
                                     <button class="take-icon play" onclick="event.stopPropagation(); ttsTab.playTakeAudio('${take.audio_url}', event)" title="Play">
                                         <span class="material-symbols-outlined">play_arrow</span>
                                     </button>
@@ -538,6 +545,7 @@ class TTSTab {
                                 </div>
                             </div>
                             <div id="transcription_bar_${chunk.id}_${take.audio_file}">${this.renderTranscriptionBar(take)}</div>
+                            <div class="take-diff" id="diff_${takeId}">${this.renderDiffPanel(take)}</div>
                             <div class="take-settings" id="${takeId}">
                                 ${isOutdated ? `
                                 <div class="setting-row warning-row outdated-warning">
@@ -597,7 +605,7 @@ class TTSTab {
                                     <span class="material-symbols-outlined">tune</span>
                                 </button>
                                 <button class="chunk-icon add" onclick="event.stopPropagation(); ttsTab.selectChunk(${chunk.id}); setTimeout(() => ttsTab.generateChunkAudio(${chunk.id}), 100)" title="Generate take">
-                                    <span class="material-symbols-outlined">add</span>
+                                    <span class="material-symbols-outlined">text_to_speech</span>
                                 </button>
                                 <span class="chunk-preview-text">${chunkPreview}</span>
                             </div>
@@ -801,26 +809,89 @@ class TTSTab {
         if (settingsEl) {
             const wasExpanded = settingsEl.classList.contains('expanded');
 
-            // Close all other settings panels
-            document.querySelectorAll('.take-settings.expanded').forEach(el => {
+            // Close all settings and diff panels
+            document.querySelectorAll('.take-settings.expanded, .take-diff.expanded').forEach(el => {
                 el.classList.remove('expanded');
             });
-
-            // Toggle the settings icons
-            document.querySelectorAll('.take-icon.settings.expanded').forEach(el => {
+            document.querySelectorAll('.take-icon.settings.expanded, .take-icon.diff.expanded').forEach(el => {
                 el.classList.remove('expanded');
             });
 
             // Toggle this one
             if (!wasExpanded) {
                 settingsEl.classList.add('expanded');
-                // Find and mark the corresponding settings button as expanded
                 const settingsBtn = document.querySelector(`[data-settings-for="${settingsId}"]`);
-                if (settingsBtn) {
-                    settingsBtn.classList.add('expanded');
-                }
+                if (settingsBtn) settingsBtn.classList.add('expanded');
             }
         }
+    }
+
+    toggleDiffPanel(panelId) {
+        const panelEl = document.getElementById(panelId);
+        if (panelEl) {
+            const wasExpanded = panelEl.classList.contains('expanded');
+
+            // Close all settings and diff panels
+            document.querySelectorAll('.take-settings.expanded, .take-diff.expanded').forEach(el => {
+                el.classList.remove('expanded');
+            });
+            document.querySelectorAll('.take-icon.settings.expanded, .take-icon.diff.expanded').forEach(el => {
+                el.classList.remove('expanded');
+            });
+
+            if (!wasExpanded) {
+                panelEl.classList.add('expanded');
+                const diffBtn = document.querySelector(`[data-diff-for="${panelId}"]`);
+                if (diffBtn) diffBtn.classList.add('expanded');
+            }
+        }
+    }
+
+    buildDiffHtml(original, transcription) {
+        const norm = t => t.toLowerCase().replace(/[^\w\s]/g, '').replace(/\s+/g, ' ').trim();
+        const origWords = norm(original).split(' ').filter(Boolean);
+        const transWords = transcription.split(/\s+/).filter(Boolean);
+        const transNorm = transWords.map(w => norm(w));
+
+        // LCS DP
+        const m = origWords.length, n = transNorm.length;
+        const dp = Array.from({length: m + 1}, () => new Array(n + 1).fill(0));
+        for (let i = 1; i <= m; i++)
+            for (let j = 1; j <= n; j++)
+                dp[i][j] = origWords[i-1] === transNorm[j-1]
+                    ? dp[i-1][j-1] + 1
+                    : Math.max(dp[i-1][j], dp[i][j-1]);
+
+        // Backtrack to mark matched positions in transcription
+        const matched = new Set();
+        let i = m, j = n;
+        while (i > 0 && j > 0) {
+            if (origWords[i-1] === transNorm[j-1]) { matched.add(j - 1); i--; j--; }
+            else if (dp[i-1][j] >= dp[i][j-1]) i--;
+            else j--;
+        }
+
+        return transWords.map((word, idx) => {
+            const e = word.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+            return matched.has(idx) ? `<span class="diff-match">${e}</span>` : `<span class="diff-diff">${e}</span>`;
+        }).join(' ');
+    }
+
+    renderDiffPanel(take) {
+        if (!take.transcription || !take.input_text) return '';
+        const score = take.similarity_score ?? 0;
+        const cls = score >= 85 ? 'score-high' : score >= 60 ? 'score-mid' : 'score-low';
+        const diffHtml = this.buildDiffHtml(take.input_text, take.transcription);
+        const orig = take.input_text.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+        return `<div class="diff-panel-header">
+                    <span class="diff-col-label">Original</span>
+                    <span class="diff-divider"></span>
+                    <span class="diff-col-label">Transcription <span class="score-badge ${cls}">${score}%</span></span>
+                </div>
+                <div class="diff-cols">
+                    <div class="diff-col diff-original">${orig}</div>
+                    <div class="diff-col diff-transcription">${diffHtml}</div>
+                </div>`;
     }
 
     async generateChunkAudio(chunkId) {
@@ -1676,13 +1747,29 @@ class TTSTab {
                     <span class="transcription-text" title="${escaped}">${escaped}</span>`;
             }
 
-            // Also persist in local chapter data so it survives UI-only refreshes
+            // Persist in local chapter data and update diff panel
             const chunk = this.currentChapter.chunks.find(c => c.id === chunkId);
             if (chunk) {
                 const entry = (chunk.generated_audios || []).find(a => a.audio_file === audioFile);
                 if (entry) {
                     entry.transcription = data.transcription;
                     entry.similarity_score = score;
+                    entry.input_text = entry.input_text || chunkText;
+
+                    // Find the diff panel for this take and populate it
+                    // The takeId pattern is take_<chunkId>_<index>; find by data-diff-for pointing to a div near the transcription bar
+                    const barEl = document.getElementById(rowId);
+                    if (barEl) {
+                        // The diff panel sibling immediately follows the transcription bar wrapper
+                        const diffEl = barEl.nextElementSibling;
+                        if (diffEl && diffEl.classList.contains('take-diff')) {
+                            diffEl.innerHTML = this.renderDiffPanel(entry);
+                            // Enable the speaker_notes button for this take
+                            const diffPanelId = diffEl.id;
+                            const btn = document.querySelector(`[data-diff-for="${diffPanelId}"]`);
+                            if (btn) btn.removeAttribute('disabled');
+                        }
+                    }
                 }
             }
         } catch (err) {

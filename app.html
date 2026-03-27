@@ -985,6 +985,91 @@
             color: #64748b;
         }
 
+        /* Diff panel */
+        .take-diff {
+            display: none;
+            padding: 10px 16px 12px;
+            background: #f8fafc;
+            border-top: 1px solid #edf2f7;
+        }
+
+        .take-diff.expanded {
+            display: block;
+        }
+
+        .diff-panel-header {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            margin-bottom: 8px;
+        }
+
+        .diff-col-label {
+            font-size: 10px;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.4px;
+            color: #94a3b8;
+            display: flex;
+            align-items: center;
+            gap: 5px;
+            white-space: nowrap;
+        }
+
+        .diff-divider {
+            flex: 1;
+            height: 1px;
+            background: #e2e8f0;
+        }
+
+        .diff-cols {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 10px;
+        }
+
+        .diff-col {
+            font-size: 13px;
+            line-height: 1.65;
+            padding: 8px 10px;
+            background: white;
+            border-radius: 5px;
+            border: 1px solid #e2e8f0;
+            white-space: pre-wrap;
+            word-break: break-word;
+            max-height: 220px;
+            overflow-y: auto;
+        }
+
+        .diff-original {
+            color: #475569;
+        }
+
+        .diff-transcription {
+            color: #334155;
+        }
+
+        .diff-match {
+            color: #334155;
+        }
+
+        .diff-diff {
+            background: rgba(239, 68, 68, 0.13);
+            color: #b91c1c;
+            border-radius: 2px;
+            padding: 1px 2px;
+        }
+
+        .take-icon.diff.expanded {
+            background: rgba(99, 102, 241, 0.08);
+            color: #6366f1;
+        }
+
+        .take-icon.diff:disabled {
+            opacity: 0.3;
+            cursor: default;
+        }
+
         .setting-label {
             font-size: 11px;
             color: #64748b;

@@ -49,6 +49,197 @@ class GutenbergProcessor:
         self.output_dir = output_dir
         os.makedirs(output_dir, exist_ok=True)
 
+    def get_gutenberg_book_id(self, url: str) -> Optional[str]:
+        """Extract the numeric book ID from any Gutenberg URL."""
+        match = re.search(r'/(?:ebooks|epub)/(\d+)', url)
+        if match:
+            return match.group(1)
+        match = re.search(r'pg(\d+)', url)
+        if match:
+            return match.group(1)
+        return None
+
+    def download_epub(self, book_id: str) -> Optional[bytes]:
+        """Download the EPUB for a Gutenberg book ID, returning raw bytes or None."""
+        epub_url = f"https://www.gutenberg.org/cache/epub/{book_id}/pg{book_id}.epub"
+        try:
+            print(f"Trying EPUB: {epub_url}")
+            resp = requests.get(epub_url, timeout=60)
+            resp.raise_for_status()
+            return resp.content
+        except Exception as e:
+            print(f"EPUB download failed ({e}), will use text fallback")
+            return None
+
+    def extract_epub_chapters(self, epub_bytes: bytes) -> Tuple[str, List[Tuple[str, str]]]:
+        """
+        Parse an EPUB (ZIP archive) and return (title, [(chapter_title, chapter_text), ...]).
+        Uses the NCX/nav table of contents to determine chapter boundaries.
+        Requires beautifulsoup4.
+        """
+        import zipfile
+        import io
+
+        if not HAS_BS4:
+            raise ValueError("beautifulsoup4 is required for EPUB processing")
+
+        chapters: List[Tuple[str, str]] = []
+        title = ''
+
+        with zipfile.ZipFile(io.BytesIO(epub_bytes)) as zf:
+            names = set(zf.namelist())
+
+            # 1. Locate OPF via container.xml
+            opf_path = None
+            try:
+                container_xml = zf.read('META-INF/container.xml').decode('utf-8', errors='replace')
+                csoup = BeautifulSoup(container_xml, 'xml')
+                rf = csoup.find('rootfile')
+                if rf:
+                    opf_path = rf.get('full-path')
+            except Exception:
+                pass
+            if not opf_path:
+                opf_path = next((n for n in names if n.endswith('.opf')), None)
+            if not opf_path:
+                raise ValueError("Could not locate OPF file in EPUB")
+
+            opf_dir = os.path.dirname(opf_path)
+
+            # 2. Parse OPF for title, manifest, spine
+            opf_content = zf.read(opf_path).decode('utf-8', errors='replace')
+            opf_soup = BeautifulSoup(opf_content, 'xml')
+
+            title_tag = opf_soup.find('dc:title')
+            if title_tag:
+                raw = title_tag.get_text(strip=True)
+                title = re.sub(r'[^\w\s-]', '', raw)
+                title = re.sub(r'\s+', '_', title)[:50]
+
+            def opf_abs(href: str) -> str:
+                """Resolve an OPF-relative href to a zip path."""
+                if opf_dir:
+                    return opf_dir.rstrip('/') + '/' + href.lstrip('/')
+                return href
+
+            manifest: dict = {}
+            for item in opf_soup.find_all('item'):
+                iid = item.get('id', '')
+                href = item.get('href', '')
+                manifest[iid] = {
+                    'href': href,
+                    'path': opf_abs(href),
+                    'media_type': item.get('media-type', ''),
+                    'properties': item.get('properties', ''),
+                }
+
+            spine_ids = [
+                item.get('idref') for item in opf_soup.find_all('itemref')
+                if item.get('linear', 'yes').lower() != 'no'
+            ]
+
+            # 3. Build nav_map: zip-path-basename -> chapter title (from NCX or nav.xhtml)
+            nav_map: dict = {}
+
+            # Try NCX (EPUB 2)
+            ncx_item = opf_soup.find('item', attrs={'media-type': 'application/x-dtbncx+xml'})
+            if ncx_item:
+                ncx_info = manifest.get(ncx_item.get('id', ''), {})
+                ncx_path = ncx_info.get('path', '')
+                try:
+                    ncx_content = zf.read(ncx_path).decode('utf-8', errors='replace')
+                    ncx_soup = BeautifulSoup(ncx_content, 'xml')
+                    for pt in ncx_soup.find_all('navPoint'):
+                        lbl = pt.find('navLabel')
+                        ct = pt.find('content')
+                        if lbl and ct:
+                            src = ct.get('src', '').split('#')[0]
+                            ch_title = lbl.get_text(strip=True)
+                            nav_map[src] = ch_title
+                            nav_map[os.path.basename(src)] = ch_title
+                except Exception as ncx_err:
+                    print(f"NCX parse error: {ncx_err}")
+
+            # Try nav.xhtml (EPUB 3)
+            if not nav_map:
+                nav_item = next(
+                    (v for v in manifest.values() if 'nav' in v.get('properties', '')), None
+                )
+                if nav_item:
+                    try:
+                        nav_content = zf.read(nav_item['path']).decode('utf-8', errors='replace')
+                        nav_soup = BeautifulSoup(nav_content, 'html.parser')
+                        nav_el = (nav_soup.find('nav', attrs={'epub:type': 'toc'}) or
+                                  nav_soup.find('nav'))
+                        if nav_el:
+                            for a in nav_el.find_all('a'):
+                                src = a.get('href', '').split('#')[0]
+                                ch_title = a.get_text(strip=True)
+                                nav_map[src] = ch_title
+                                nav_map[os.path.basename(src)] = ch_title
+                    except Exception as nav_err:
+                        print(f"nav.xhtml parse error: {nav_err}")
+
+            # 4. Extract text for each spine item in order
+            skip_keywords = {'contents', 'table of contents', 'cover', 'copyright',
+                             'title page', 'half-title', 'dedication', 'epigraph',
+                             'preface', 'foreword', 'acknowledgement'}
+
+            for idref in spine_ids:
+                info = manifest.get(idref)
+                if not info or 'html' not in info.get('media_type', ''):
+                    continue
+
+                item_href = info['href']
+                item_path = info['path']
+
+                # Read HTML content
+                html_bytes = None
+                for attempt in [item_path, item_href]:
+                    if attempt in names:
+                        html_bytes = zf.read(attempt)
+                        break
+                if html_bytes is None:
+                    continue
+
+                html_content = html_bytes.decode('utf-8', errors='replace')
+                doc = BeautifulSoup(html_content, 'html.parser')
+                body = doc.find('body')
+                if not body:
+                    continue
+
+                # Resolve chapter title
+                basename = os.path.basename(item_href)
+                ch_title = nav_map.get(item_href) or nav_map.get(basename) or ''
+                if not ch_title:
+                    h_tag = body.find(['h1', 'h2', 'h3'])
+                    if h_tag:
+                        ch_title = h_tag.get_text(strip=True)
+
+                # Skip non-content pages
+                if ch_title and any(kw in ch_title.lower() for kw in skip_keywords):
+                    continue
+
+                # Extract paragraphs (skip div containers that wrap other blocks)
+                text_parts = []
+                for el in body.find_all(['p', 'div', 'blockquote']):
+                    if el.name == 'div' and el.find(['p', 'div', 'blockquote']):
+                        continue
+                    t = el.get_text(separator=' ', strip=True)
+                    if t and len(t) > 30:
+                        text_parts.append(t)
+
+                if not text_parts:
+                    continue
+
+                chapter_text = '\n\n'.join(text_parts)
+                if len(chapter_text) < 100:
+                    continue
+
+                chapters.append((ch_title or f"Chapter {len(chapters) + 1}", chapter_text))
+
+        return title, chapters
+
     def download_text(self, url: str) -> str:
         """
         Download text from a URL (supports .txt, .htm, .html files)
