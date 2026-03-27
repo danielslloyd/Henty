@@ -3580,15 +3580,20 @@ def add_gutenberg_url_to_project():
             return jsonify({'error': 'No project loaded'}), 400
 
         data = request.json
-        url = data.get('url')
+        url = data.get('url', '').strip()
 
         if not url:
             return jsonify({'error': 'url is required'}), 400
 
-        if 'gutenberg.org' not in url.lower():
-            return jsonify({'error': f'URL does not appear to be from Project Gutenberg: {url}'}), 400
+        # Accept a plain integer as a Gutenberg book ID
+        if re.match(r'^\d+$', url):
+            book_id = url
+            url = f"https://www.gutenberg.org/ebooks/{book_id}"
+            print(f"\n=== Plain integer ID detected; constructed URL: {url} ===")
+        elif 'gutenberg.org' not in url.lower():
+            return jsonify({'error': f'Input does not appear to be a Gutenberg URL or book ID: {url}'}), 400
 
-        print(f"\n=== Adding Gutenberg URL to project: {url} ===")
+        print(f"\n=== Adding Gutenberg content to project: {url} ===")
 
         processor = GutenbergProcessor(output_dir=converter.current_project_path)
 
@@ -3600,8 +3605,9 @@ def add_gutenberg_url_to_project():
 
         # Always download the canonical plain text for content
         plain_text_url = processor.get_plain_text_url(book_id)
-        print(f"Downloading plain text: {plain_text_url}")
+        print(f"DEBUG [A] Downloading plain text: {plain_text_url}")
         raw_content = processor.download_text(plain_text_url)
+        print(f"DEBUG [A] Plain text downloaded: {len(raw_content):,} characters")
 
         # Extract title and strip Gutenberg header/footer
         title = processor.extract_title(raw_content) or processor.extract_book_name(url)
@@ -3609,24 +3615,43 @@ def add_gutenberg_url_to_project():
         text = processor.strip_gutenberg_metadata(raw_content, title)
         text = processor.process_carriage_returns(text)
         text = text.replace('<<<SECTION_BREAK>>>', '\n\n')
-        print(f"Processed text: {len(text)} characters")
+        print(f"DEBUG [A] Processed text: {len(text):,} characters")
 
         raw_text_file = os.path.join(converter.current_project_path, 'raw_text.txt')
         with open(raw_text_file, 'w', encoding='utf-8') as f:
             f.write(text)
 
         detected_chapters = None
+        debug_info = {
+            'book_id': book_id,
+            'txt_url': plain_text_url,
+            'txt_chars': len(text),
+            'epub_downloaded': False,
+            'epub_bytes': 0,
+            'epub_titles': [],
+            'epub_titles_matched': 0,
+            'chapter_source': None,
+        }
 
         # Download EPUB for chapter titles, then split plain text at those positions
+        print(f"DEBUG [A] Downloading EPUB for book {book_id}")
         epub_bytes = processor.download_epub(book_id)
         if epub_bytes:
+            debug_info['epub_downloaded'] = True
+            debug_info['epub_bytes'] = len(epub_bytes)
+            print(f"DEBUG [A] EPUB downloaded: {len(epub_bytes):,} bytes")
             try:
+                print("DEBUG [B] Parsing EPUB chapter titles...")
                 chapter_titles = processor.get_epub_chapter_titles(epub_bytes)
-                print(f"EPUB titles found: {len(chapter_titles)}")
+                debug_info['epub_titles'] = chapter_titles
+                print(f"DEBUG [B] EPUB titles found: {len(chapter_titles)}: {chapter_titles}")
                 if chapter_titles:
+                    print("DEBUG [C] Matching EPUB titles in plain text...")
                     epub_splits = processor.split_text_by_chapter_titles(text, chapter_titles)
-                    print(f"Plain text split into {len(epub_splits)} chapters via EPUB")
+                    debug_info['epub_titles_matched'] = len(epub_splits)
+                    print(f"DEBUG [C] Plain text split into {len(epub_splits)} chapters via EPUB")
                     if epub_splits:
+                        debug_info['chapter_source'] = 'epub'
                         detected_chapters = [
                             {
                                 'id': str(uuid.uuid4()),
@@ -3638,13 +3663,18 @@ def add_gutenberg_url_to_project():
                         ]
             except Exception as epub_err:
                 print(f"EPUB chapter extraction failed ({epub_err}), falling back")
+                debug_info['epub_error'] = str(epub_err)
+        else:
+            print("DEBUG [A] EPUB download failed or returned nothing")
 
         # Fall back to plain-text chapter detection if EPUB didn't produce results
         if not detected_chapters:
             print("Falling back to plain-text chapter detection")
+            debug_info['chapter_source'] = 'plain-text-fallback'
             detected_chapters = converter.detect_chapters(text)
 
         print(f"Final chapter count: {len(detected_chapters)}")
+        debug_info['final_chapter_count'] = len(detected_chapters)
 
         # Generate XML content
         xml_content = converter.text_to_xml_content(text, detected_chapters)
@@ -3698,7 +3728,8 @@ def add_gutenberg_url_to_project():
             'url': url,
             'chapters': new_chapters,
             'chapter_count': len(new_chapters),
-            'content_xml': xml_content
+            'content_xml': xml_content,
+            'debug': debug_info,
         })
 
     except Exception as e:
