@@ -3526,37 +3526,65 @@ def add_gutenberg_url_to_project():
         # Use GutenbergProcessor to download and process the text
         processor = GutenbergProcessor(output_dir=converter.current_project_path)
 
-        # Download text
-        print(f"Downloading text from {url}...")
-        text = processor.download_text(url)
+        title = None
+        detected_chapters = None
 
-        # Extract title
-        title = processor.extract_title(text)
+        # --- Try EPUB first for clean chapter structure ---
+        book_id = processor.get_gutenberg_book_id(url)
+        if book_id:
+            epub_bytes = processor.download_epub(book_id)
+            if epub_bytes:
+                try:
+                    epub_title, epub_chapters_data = processor.extract_epub_chapters(epub_bytes)
+                    print(f"EPUB: found {len(epub_chapters_data)} chapters")
+                    if epub_title:
+                        title = epub_title
+                    if epub_chapters_data:
+                        detected_chapters = [
+                            {
+                                'id': str(uuid.uuid4()),
+                                'title': ch_title or f"Chapter {i + 1}",
+                                'order': i,
+                                'text': ch_text,
+                            }
+                            for i, (ch_title, ch_text) in enumerate(epub_chapters_data)
+                        ]
+                except Exception as epub_err:
+                    print(f"EPUB parsing failed ({epub_err}), falling back to plain text")
+
+        # --- Fall back to plain-text processing ---
+        if detected_chapters is None:
+            print(f"Downloading plain text from {url}...")
+            text = processor.download_text(url)
+
+            if not title:
+                title = processor.extract_title(text) or processor.extract_book_name(url)
+            print(f"Extracted title: {title}")
+
+            text = processor.strip_gutenberg_metadata(text, title)
+            text = processor.process_carriage_returns(text)
+            text = text.replace('<<<SECTION_BREAK>>>', '\n\n')
+            print(f"Processed text length: {len(text)} characters")
+
+            raw_text_file = os.path.join(converter.current_project_path, 'raw_text.txt')
+            with open(raw_text_file, 'w', encoding='utf-8') as f:
+                f.write(text)
+            print(f"Saved raw text to {raw_text_file}")
+
+            detected_chapters = converter.detect_chapters(text)
+            print(f"Detected {len(detected_chapters)} chapter(s) from plain text")
+        else:
+            # Save combined plain text from EPUB chapters for reference
+            text = '\n\n'.join(
+                f"{ch['title']}\n\n{ch['text']}" for ch in detected_chapters
+            )
+            raw_text_file = os.path.join(converter.current_project_path, 'raw_text.txt')
+            with open(raw_text_file, 'w', encoding='utf-8') as f:
+                f.write(text)
+
         if not title:
             title = processor.extract_book_name(url)
-        print(f"Extracted title: {title}")
-
-        # Strip Gutenberg metadata
-        text = processor.strip_gutenberg_metadata(text, title)
-
-        # Process carriage returns
-        text = processor.process_carriage_returns(text)
-
-        # Replace SECTION_BREAK markers with paragraph breaks
-        # This ensures they don't appear in the final text
-        text = text.replace('<<<SECTION_BREAK>>>', '\n\n')
-
-        print(f"Processed text length: {len(text)} characters")
-
-        # Save raw text to raw_text.txt in project directory
-        raw_text_file = os.path.join(converter.current_project_path, 'raw_text.txt')
-        with open(raw_text_file, 'w', encoding='utf-8') as f:
-            f.write(text)
-        print(f"Saved raw text to {raw_text_file}")
-
-        # Detect chapters in the processed text
-        detected_chapters = converter.detect_chapters(text)
-        print(f"Detected {len(detected_chapters)} chapter(s)")
+        print(f"Title: {title}, Chapters: {len(detected_chapters)}")
 
         # Generate XML content
         xml_content = converter.text_to_xml_content(text, detected_chapters)
