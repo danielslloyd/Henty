@@ -3975,7 +3975,7 @@ def get_recent_projects():
             # Try to read project.json if it exists
             if os.path.exists(project_file):
                 try:
-                    with open(project_file, 'r') as f:
+                    with open(project_file, 'r', encoding='utf-8', errors='replace') as f:
                         project_data = json.load(f)
 
                     recent_projects.append({
