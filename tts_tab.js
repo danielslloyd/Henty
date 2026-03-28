@@ -97,6 +97,9 @@ class TTSTab {
             currentChunkIndex: 0,
             audio: null
         };
+
+        // Flags: map of chapter_id -> chunk_id -> flag[]
+        this.flagsByChapter = {};
     }
 
     async init() {
@@ -239,12 +242,49 @@ class TTSTab {
                 this.currentChapterIndex = chapterIndex;
 
                 if (this.currentChapter) {
+                    await this.loadProjectFlags();
                     this.renderChapter();
                 }
             }
         } catch (error) {
             console.error('Error loading chapter:', error);
         }
+    }
+
+    async loadProjectFlags() {
+        try {
+            const response = await fetch(`${SERVER_URL}/api/project/flags`, {
+                headers: { 'X-API-Key': API_KEY }
+            });
+            if (!response.ok) return;
+            const data = await response.json();
+            // Index by chapter_id -> chunk_id -> flag[]
+            this.flagsByChapter = {};
+            for (const flag of (data.flags || [])) {
+                if (flag.resolved) continue;
+                if (!this.flagsByChapter[flag.chapter_id]) this.flagsByChapter[flag.chapter_id] = {};
+                const byChunk = this.flagsByChapter[flag.chapter_id];
+                if (!byChunk[flag.chunk_id]) byChunk[flag.chunk_id] = [];
+                byChunk[flag.chunk_id].push(flag);
+            }
+        } catch (e) {
+            console.warn('Could not load flags:', e);
+        }
+    }
+
+    getFlagsForChunk(chunkId) {
+        if (!this.currentChapter) return [];
+        return this.flagsByChapter[this.currentChapter.id]?.[chunkId] || [];
+    }
+
+    async resolveFlag(flagId) {
+        await fetch(`${SERVER_URL}/api/project/resolve-flag`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'X-API-Key': API_KEY },
+            body: JSON.stringify({ flag_id: flagId }),
+        });
+        await this.loadProjectFlags();
+        this.renderChapter();
     }
 
     renderChapter() {
@@ -413,6 +453,10 @@ class TTSTab {
                                 </button>
                                 ${isOutdated ? '<span class="material-symbols-outlined outdated-icon" title="Text changed since generation">edit_off</span>' : ''}
                                 <span class="chunk-preview-text">${chunkPreview}</span>
+                                ${(() => {
+                                    const flags = this.getFlagsForChunk(chunk.id);
+                                    return flags.length ? `<button class="chunk-flag-badge" onclick="event.stopPropagation(); ttsTab.toggleFlagPanel('flagpanel_${chunk.id}')" title="${flags.length} flag${flags.length > 1 ? 's' : ''}">🚩 ${flags.length}</button>` : '';
+                                })()}
                             </div>
                             <div class="take-icons">
                                 <button class="take-icon check-circle ${isBest ? 'best' : ''}"
@@ -478,6 +522,17 @@ class TTSTab {
                             </div>
                             ` : ''}
                         </div>
+                        ${(() => {
+                            const flags = this.getFlagsForChunk(chunk.id);
+                            if (!flags.length) return '';
+                            const rows = flags.map(f => `
+                                <div class="flag-panel-row">
+                                    <span class="flag-panel-time">${f.playback_seconds != null ? Math.floor(f.playback_seconds/60)+':'+String(Math.floor(f.playback_seconds%60)).padStart(2,'0') : ''}</span>
+                                    <span class="flag-panel-nick">${(f.chunk_nickname || 'Chunk '+f.chunk_id).substring(0,60)}</span>
+                                    <button class="flag-panel-resolve" onclick="event.stopPropagation(); ttsTab.resolveFlag('${f.id}')">Resolve</button>
+                                </div>`).join('');
+                            return `<div class="chunk-flag-panel" id="flagpanel_${chunk.id}">${rows}</div>`;
+                        })()}
                         <div class="take-settings" id="${chunkPreviewId}_settings">
                             <div class="setting-row">
                                 <span class="setting-label">Voice</span>
@@ -845,6 +900,15 @@ class TTSTab {
                 if (diffBtn) diffBtn.classList.add('expanded');
             }
         }
+    }
+
+    toggleFlagPanel(panelId) {
+        const panelEl = document.getElementById(panelId);
+        if (!panelEl) return;
+        const wasOpen = panelEl.classList.contains('open');
+        // Close all flag panels first
+        document.querySelectorAll('.chunk-flag-panel.open').forEach(el => el.classList.remove('open'));
+        if (!wasOpen) panelEl.classList.add('open');
     }
 
     buildDiffHtml(original, transcription) {
@@ -1464,6 +1528,10 @@ class TTSTab {
                 <a href="${SERVER_URL}${result.audio_url}" download="${result.audio_file}"
                    class="pane-btn" style="width: 100%; display: block; text-align: center; text-decoration: none; margin-bottom: 10px;">
                     Download
+                </a>
+                <a href="${SERVER_URL}/listen" target="_blank"
+                   class="pane-btn" style="width: 100%; display: block; text-align: center; text-decoration: none; margin-bottom: 10px; background: #334155;">
+                    🎧 Open Mobile Listener
                 </a>
                 <button class="pane-btn secondary" id="closeStitchModal"
                         style="width: 100%; background: #64748b;">

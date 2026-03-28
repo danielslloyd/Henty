@@ -16,7 +16,8 @@ class AuthManager:
         self.public_endpoints = {
             '/',
             '/api/status',
-            '/api/config'
+            '/api/config',
+            '/listen',
         }
 
     def require_api_key(self, f):

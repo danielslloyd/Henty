@@ -2938,6 +2938,7 @@ def stitch_project_best_takes():
 
         # Collect audio paths for best takes
         audio_paths = []
+        segment_entries = []  # parallel list for segment map generation
         audio_dir = os.path.join(converter.current_project_path, 'audio')
 
         for chunk in chunks:
@@ -2958,6 +2959,7 @@ def stitch_project_best_takes():
 
                 print(f"Chunk {chunk['id']}: Using common file: {common_file_path}")
                 audio_paths.append(common_file_path)
+                segment_entries.append({'type': 'common_file', 'chunk_id': chunk['id'], 'chunk_nickname': chunk.get('nickname', ''), 'take_timestamp': None, 'audio_path': common_file_path})
 
             elif chunk_type == 'pause':
                 # For pause chunks, generate silence
@@ -2965,6 +2967,7 @@ def stitch_project_best_takes():
                 print(f"Chunk {chunk['id']}: Generating {duration_ms}ms pause")
                 # We'll handle pause chunks in the stitching function
                 audio_paths.append(('pause', duration_ms))
+                segment_entries.append({'type': 'pause', 'chunk_id': chunk['id'], 'chunk_nickname': chunk.get('nickname', ''), 'take_timestamp': None, 'duration_ms': duration_ms})
 
             else:
                 # For text chunks, use generated audio
@@ -3007,6 +3010,7 @@ def stitch_project_best_takes():
                     return jsonify({'error': f'Audio file not found: {audio_file}'}), 400
 
                 audio_paths.append(audio_path)
+                segment_entries.append({'type': 'text', 'chunk_id': chunk['id'], 'chunk_nickname': chunk.get('nickname', ''), 'take_timestamp': best_audio.get('timestamp'), 'audio_path': audio_path})
 
         # Create stitched audio filename
         timestamp = int(time.time() * 1000)
@@ -3024,7 +3028,46 @@ def stitch_project_best_takes():
         converter.stitch_audio_files(audio_paths, stitched_path)
         print(f"Stitched audio saved to: {stitched_path}")
 
-        # Create metadata for stitched audio
+        # Build segment timing map (mirrors stitch_audio_files inter-chunk silence)
+        INTER_CHUNK_MS = 100
+        cursor_ms = 0
+        segments = []
+        for entry in segment_entries:
+            if entry['type'] == 'pause':
+                dur_ms = entry['duration_ms']
+            else:
+                try:
+                    seg = AudioSegment.from_file(entry['audio_path'])
+                    dur_ms = len(seg)
+                except Exception:
+                    dur_ms = 0
+            segments.append({
+                'chunk_id': entry['chunk_id'],
+                'chunk_nickname': entry.get('chunk_nickname', ''),
+                'take_timestamp': entry.get('take_timestamp'),
+                'type': entry['type'],
+                'start_seconds': round(cursor_ms / 1000, 3),
+                'end_seconds': round((cursor_ms + dur_ms) / 1000, 3),
+            })
+            cursor_ms += dur_ms + INTER_CHUNK_MS
+        total_duration_seconds = round(cursor_ms / 1000, 3)
+
+        # Save segment map JSON alongside stitched file
+        map_filename = f"{base_name}_map_{timestamp}.json"
+        map_path = os.path.join(audio_dir, map_filename)
+        segment_map = {
+            'chapter_id': chapter_id,
+            'chapter_title': chapter.get('title', ''),
+            'stitched_file': stitched_filename,
+            'total_duration_seconds': total_duration_seconds,
+            'created_at': datetime.now().isoformat(),
+            'segments': segments,
+        }
+        with open(map_path, 'w') as f:
+            json.dump(segment_map, f, indent=2)
+        print(f"Segment map saved: {map_filename} ({len(segments)} segments)")
+
+        # Create metadata for stitched audio (backward compat)
         stitched_metadata = {
             'audio_file': stitched_filename,
             'timestamp': timestamp,
@@ -3032,22 +3075,37 @@ def stitch_project_best_takes():
             'chunk_count': len(chunks),
             'text_file_id': chapter_id
         }
-
-        # Optionally save metadata to a JSON file
         metadata_filename = f"{base_name}_stitched_{timestamp}.json"
         metadata_path = os.path.join(audio_dir, metadata_filename)
         with open(metadata_path, 'w') as f:
             json.dump(stitched_metadata, f, indent=2)
 
-        # Return success with audio URL
+        # Update chapter's audio_output and persist project.json
         audio_url = f'/api/project/audio/{stitched_filename}'
+        map_url = f'/api/project/audio/{map_filename}'
+
+        if is_new_structure:
+            chapter['audio_output'] = {
+                'audio_url': audio_url,
+                'audio_file': stitched_filename,
+                'map_url': map_url,
+                'map_file': map_filename,
+                'total_duration_seconds': total_duration_seconds,
+                'segment_count': len(segments),
+                'stitched_at': datetime.now().isoformat(),
+            }
+            project_file = os.path.join(converter.current_project_path, 'project.json')
+            with open(project_file, 'w', encoding='utf-8') as f:
+                json.dump(converter.current_project_metadata, f, indent=2, ensure_ascii=False)
+            converter._invalidate_lookup_caches()
 
         return jsonify({
             'success': True,
             'audio_url': audio_url,
             'audio_file': stitched_filename,
             'audio_path': stitched_path,
-            'metadata': stitched_metadata
+            'metadata': stitched_metadata,
+            'segment_map': segment_map,
         })
 
     except Exception as e:
@@ -4730,3 +4788,173 @@ if __name__ == '__main__':
     print(f"\nReady for connections!")
 
     socketio.run(app, debug=config.DEBUG, port=config.PORT, host=config.HOST, allow_unsafe_werkzeug=True)
+
+
+# ── Mobile listener page ──────────────────────────────────────────────────────
+
+@app.route('/listen')
+def serve_listen_page():
+    """Serve the mobile podcast listener page (no auth required)."""
+    return send_from_directory(os.path.dirname(os.path.abspath(__file__)), 'listen.html')
+
+
+# ── Podcast / flag API ───────────────────────────────────────────────────────
+
+@app.route('/api/project/podcast-data', methods=['GET'])
+@auth_manager.require_api_key
+def get_podcast_data():
+    """Return project name + chapters that have stitched audio (with audio_output)."""
+    try:
+        if converter.current_project_path is None:
+            return jsonify({'error': 'No project loaded'}), 400
+
+        meta = converter.current_project_metadata
+        project_name = meta.get('name', 'Untitled Project')
+        chapters = meta.get('chapters', [])
+
+        ready = [
+            {
+                'id': ch['id'],
+                'title': ch.get('title', f"Chapter {i}"),
+                'order': ch.get('order', i),
+                'audio_output': ch['audio_output'],
+            }
+            for i, ch in enumerate(chapters)
+            if ch.get('audio_output')
+        ]
+        ready.sort(key=lambda c: c['order'])
+
+        return jsonify({'project_name': project_name, 'chapters': ready})
+
+    except Exception as e:
+        import traceback; traceback.print_exc()
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/project/flag-take', methods=['POST'])
+@auth_manager.require_api_key
+def flag_take():
+    """Record a flag at a playback position; look up which chunk/take it maps to."""
+    try:
+        import uuid as _uuid
+        from datetime import datetime as _dt
+
+        if converter.current_project_path is None:
+            return jsonify({'error': 'No project loaded'}), 400
+
+        data = request.json or {}
+        chapter_id = data.get('chapter_id')
+        playback_seconds = data.get('playback_seconds')
+        note = data.get('note', '')
+
+        if chapter_id is None or playback_seconds is None:
+            return jsonify({'error': 'chapter_id and playback_seconds are required'}), 400
+
+        # Find chapter
+        chapter_map, _, _ = converter.get_chapter_and_chunk_lookups()
+        chapter = chapter_map.get(chapter_id)
+        if not chapter:
+            return jsonify({'error': 'Chapter not found'}), 404
+
+        audio_output = chapter.get('audio_output')
+        if not audio_output or not audio_output.get('map_file'):
+            return jsonify({'error': 'Chapter has no segment map — stitch it first'}), 400
+
+        # Load segment map
+        map_path = os.path.join(converter.current_project_path, 'audio', audio_output['map_file'])
+        with open(map_path, 'r', encoding='utf-8') as f:
+            import json as _json
+            segment_map = _json.load(f)
+
+        # Find matching segment
+        matched = None
+        for seg in segment_map.get('segments', []):
+            if seg['start_seconds'] <= playback_seconds <= seg['end_seconds']:
+                matched = seg
+                break
+        # Allow slight overshoot on the last segment
+        if not matched and segment_map.get('segments'):
+            last = segment_map['segments'][-1]
+            if playback_seconds <= last['end_seconds'] + 1.0:
+                matched = last
+
+        if not matched:
+            return jsonify({'error': f'No segment found at {playback_seconds}s'}), 404
+
+        flag = {
+            'id': str(_uuid.uuid4()),
+            'created_at': _dt.now().isoformat(),
+            'chapter_id': chapter_id,
+            'chapter_title': chapter.get('title', ''),
+            'chunk_id': matched['chunk_id'],
+            'chunk_nickname': matched.get('chunk_nickname', ''),
+            'take_timestamp': matched.get('take_timestamp'),
+            'playback_seconds': round(playback_seconds, 2),
+            'note': note,
+            'resolved': False,
+        }
+
+        meta = converter.current_project_metadata
+        if 'flags' not in meta:
+            meta['flags'] = []
+        meta['flags'].append(flag)
+
+        project_file = os.path.join(converter.current_project_path, 'project.json')
+        with open(project_file, 'w', encoding='utf-8') as f:
+            import json as _json2
+            _json2.dump(meta, f, indent=2, ensure_ascii=False)
+
+        print(f"Flag saved: chapter={chapter_id} chunk={matched['chunk_id']} at {playback_seconds}s")
+        return jsonify({'success': True, 'flag': flag})
+
+    except Exception as e:
+        import traceback; traceback.print_exc()
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/project/flags', methods=['GET'])
+@auth_manager.require_api_key
+def get_flags():
+    """Return all flags for the current project."""
+    try:
+        if converter.current_project_path is None:
+            return jsonify({'error': 'No project loaded'}), 400
+
+        flags = converter.current_project_metadata.get('flags', [])
+        unresolved = sum(1 for f in flags if not f.get('resolved'))
+        return jsonify({'flags': flags, 'unresolved_count': unresolved})
+
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/project/resolve-flag', methods=['POST'])
+@auth_manager.require_api_key
+def resolve_flag():
+    """Mark a flag as resolved."""
+    try:
+        if converter.current_project_path is None:
+            return jsonify({'error': 'No project loaded'}), 400
+
+        flag_id = (request.json or {}).get('flag_id')
+        if not flag_id:
+            return jsonify({'error': 'flag_id is required'}), 400
+
+        meta = converter.current_project_metadata
+        flags = meta.get('flags', [])
+        for flag in flags:
+            if flag.get('id') == flag_id:
+                flag['resolved'] = True
+                break
+        else:
+            return jsonify({'error': 'Flag not found'}), 404
+
+        project_file = os.path.join(converter.current_project_path, 'project.json')
+        with open(project_file, 'w', encoding='utf-8') as f:
+            import json as _json
+            _json.dump(meta, f, indent=2, ensure_ascii=False)
+
+        return jsonify({'success': True})
+
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500

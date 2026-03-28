@@ -46,7 +46,27 @@ if %errorlevel% neq 0 (
     echo [OK] ffmpeg found
 )
 
-echo [INFO] Starting server on http://localhost:5000...
+REM Detect local network IP for mobile access
+set LOCAL_IP=
+for /f "tokens=2 delims=:" %%A in ('ipconfig ^| findstr /C:"IPv4 Address" ^| findstr /V "127.0.0.1"') do (
+    if not defined LOCAL_IP (
+        set RAW_IP=%%A
+        setlocal enabledelayedexpansion
+        set LOCAL_IP=!RAW_IP: =!
+        endlocal & set LOCAL_IP=%LOCAL_IP%
+    )
+)
+
+REM Detect Tailscale IP
+set TAILSCALE_IP=
+tailscale ip -4 >nul 2>&1
+if %errorlevel% equ 0 (
+    for /f "delims=" %%A in ('tailscale ip -4 2^>nul') do (
+        if not defined TAILSCALE_IP set TAILSCALE_IP=%%A
+    )
+)
+
+echo [INFO] Starting server...
 echo.
 
 REM Start the server in a new window
@@ -65,8 +85,23 @@ echo ================================================
 echo   Henty is ready!
 echo ================================================
 echo.
-echo App URL:      http://localhost:5000/app.html
-echo Server URL:   http://localhost:5000
+echo   Desktop:  http://localhost:5000/app.html
+echo.
+echo   Mobile listener (/listen page):
+if defined LOCAL_IP (
+    echo   Local WiFi:  http://%LOCAL_IP%:5000/listen
+) else (
+    echo   Local WiFi:  [could not detect local IP]
+)
+if defined TAILSCALE_IP (
+    echo   Tailscale:   http://%TAILSCALE_IP%:5000/listen
+    echo   [Tailscale active - works from any network]
+) else (
+    echo   Tailscale:   [not detected]
+    echo   Install Tailscale for remote access: https://tailscale.com/download
+)
+echo.
+echo ================================================
 echo.
 echo The server is running in a separate window.
 echo Close that window to stop the server.

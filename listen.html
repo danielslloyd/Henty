@@ -1,0 +1,406 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<title>Henty Listener</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+         background: #0f172a; color: #e2e8f0; min-height: 100vh; }
+
+  /* Auth screen */
+  #authScreen { display: flex; flex-direction: column; align-items: center;
+                justify-content: center; min-height: 100vh; padding: 24px; }
+  #authScreen h1 { font-size: 1.8rem; margin-bottom: 8px; color: #f1f5f9; }
+  #authScreen p  { color: #94a3b8; margin-bottom: 32px; text-align: center; font-size: 0.95rem; }
+  #authScreen input { width: 100%; max-width: 360px; padding: 14px 16px;
+                      border: 1.5px solid #334155; border-radius: 10px;
+                      background: #1e293b; color: #f1f5f9; font-size: 1rem;
+                      margin-bottom: 12px; }
+  #authScreen input:focus { outline: none; border-color: #6366f1; }
+  #authScreen button { width: 100%; max-width: 360px; padding: 14px;
+                       background: #6366f1; color: white; border: none;
+                       border-radius: 10px; font-size: 1rem; font-weight: 600;
+                       cursor: pointer; }
+  #authScreen button:active { background: #4f46e5; }
+
+  /* Main app */
+  #app { display: none; flex-direction: column; min-height: 100vh; }
+
+  header { background: #1e293b; padding: 16px 20px; border-bottom: 1px solid #334155;
+           display: flex; align-items: center; justify-content: space-between; }
+  header h1 { font-size: 1.1rem; font-weight: 700; color: #f1f5f9; }
+  #projectName { font-size: 0.8rem; color: #94a3b8; margin-top: 2px; }
+  .signout-btn { background: none; border: none; color: #64748b; font-size: 0.8rem;
+                 cursor: pointer; padding: 4px 8px; border-radius: 6px; }
+  .signout-btn:active { background: #1e293b; }
+
+  .section { padding: 16px 20px; }
+  label.field-label { display: block; font-size: 0.75rem; text-transform: uppercase;
+                      letter-spacing: 0.08em; color: #64748b; margin-bottom: 8px; }
+  select { width: 100%; padding: 12px 14px; background: #1e293b; color: #f1f5f9;
+           border: 1.5px solid #334155; border-radius: 10px; font-size: 0.95rem;
+           appearance: none; background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpath fill='%2394a3b8' d='M1 1l5 5 5-5'/%3E%3C/svg%3E");
+           background-repeat: no-repeat; background-position: right 14px center; }
+  select:focus { outline: none; border-color: #6366f1; }
+
+  /* Player */
+  #playerSection { background: #1e293b; border-radius: 16px; margin: 0 16px;
+                   padding: 20px; border: 1px solid #334155; }
+  #nowPlaying { font-size: 1rem; font-weight: 600; color: #f1f5f9; margin-bottom: 4px;
+                white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  #chunkInfo { font-size: 0.8rem; color: #94a3b8; margin-bottom: 16px;
+               min-height: 1.2em; }
+
+  .progress-row { display: flex; align-items: center; gap: 10px; margin-bottom: 12px; }
+  #progressBar { flex: 1; -webkit-appearance: none; appearance: none; height: 4px;
+                 border-radius: 2px; background: #334155; cursor: pointer; }
+  #progressBar::-webkit-slider-thumb { -webkit-appearance: none; width: 16px; height: 16px;
+    border-radius: 50%; background: #6366f1; cursor: pointer; }
+  .time-label { font-size: 0.78rem; color: #64748b; min-width: 38px; text-align: center; }
+
+  .controls-row { display: flex; align-items: center; justify-content: center; gap: 20px; }
+  .ctrl-btn { background: none; border: none; color: #94a3b8; cursor: pointer;
+              padding: 8px; border-radius: 50%; display: flex; align-items: center; }
+  .ctrl-btn:active { background: #334155; }
+  .play-btn { background: #6366f1 !important; color: white !important; width: 56px;
+              height: 56px; border-radius: 50%; display: flex; align-items: center;
+              justify-content: center; border: none; cursor: pointer; }
+  .play-btn:active { background: #4f46e5 !important; }
+  .play-btn svg, .ctrl-btn svg { width: 24px; height: 24px; fill: currentColor; }
+  .play-btn svg { width: 28px; height: 28px; }
+
+  /* Flag button */
+  #flagBtn { display: block; width: calc(100% - 32px); margin: 16px; padding: 18px;
+             background: #dc2626; color: white; border: none; border-radius: 14px;
+             font-size: 1.1rem; font-weight: 700; cursor: pointer;
+             transition: background 0.15s; letter-spacing: 0.01em; }
+  #flagBtn:active { background: #b91c1c; }
+  #flagBtn:disabled { background: #374151; color: #6b7280; cursor: default; }
+
+  /* Toast */
+  #toast { position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%);
+           background: #10b981; color: white; padding: 12px 24px; border-radius: 100px;
+           font-weight: 600; font-size: 0.9rem; opacity: 0; transition: opacity 0.2s;
+           pointer-events: none; white-space: nowrap; z-index: 999; }
+  #toast.show { opacity: 1; }
+  #toast.error { background: #ef4444; }
+
+  /* Flags list */
+  #flagsSection { padding: 16px 20px 32px; }
+  #flagsSection h2 { font-size: 0.85rem; text-transform: uppercase; letter-spacing: 0.08em;
+                     color: #64748b; margin-bottom: 12px; }
+  .flag-card { background: #1e293b; border: 1px solid #334155; border-radius: 12px;
+               padding: 14px 16px; margin-bottom: 10px; }
+  .flag-card.resolved { opacity: 0.45; }
+  .flag-meta { font-size: 0.75rem; color: #64748b; margin-bottom: 4px; }
+  .flag-title { font-size: 0.9rem; color: #e2e8f0; font-weight: 500; margin-bottom: 6px; }
+  .flag-note { font-size: 0.8rem; color: #94a3b8; font-style: italic; margin-bottom: 8px; }
+  .flag-actions { display: flex; gap: 8px; }
+  .resolve-btn { font-size: 0.75rem; padding: 5px 12px; background: none;
+                 border: 1px solid #334155; color: #94a3b8; border-radius: 6px;
+                 cursor: pointer; }
+  .resolve-btn:active { background: #334155; }
+  .resolved-badge { font-size: 0.72rem; color: #10b981; align-self: center; }
+
+  .empty-state { color: #475569; text-align: center; padding: 24px 0; font-size: 0.9rem; }
+
+  /* No project loaded */
+  #noProject { padding: 40px 20px; text-align: center; color: #475569; font-size: 0.95rem; }
+</style>
+</head>
+<body>
+
+<!-- Auth screen -->
+<div id="authScreen">
+  <h1>🎧 Henty</h1>
+  <p>Enter your API key to access<br>the mobile listener</p>
+  <input type="password" id="apiKeyInput" placeholder="API key" autocomplete="off"
+         onkeydown="if(event.key==='Enter') saveKey()">
+  <button onclick="saveKey()">Connect</button>
+</div>
+
+<!-- Main app -->
+<div id="app">
+  <header>
+    <div>
+      <h1>🎧 Henty Listener</h1>
+      <div id="projectName"></div>
+    </div>
+    <button class="signout-btn" onclick="signOut()">Sign out</button>
+  </header>
+
+  <div class="section">
+    <label class="field-label">Chapter</label>
+    <select id="chapterSelect" onchange="loadChapter(this.value)">
+      <option value="">— select a chapter —</option>
+    </select>
+  </div>
+
+  <div id="playerSection" style="display:none">
+    <div id="nowPlaying"></div>
+    <div id="chunkInfo"></div>
+    <div class="progress-row">
+      <span class="time-label" id="timeElapsed">0:00</span>
+      <input type="range" id="progressBar" min="0" max="100" value="0" step="0.1"
+             oninput="seek(this.value)" onchange="seek(this.value)">
+      <span class="time-label" id="timeTotal">0:00</span>
+    </div>
+    <div class="controls-row">
+      <button class="ctrl-btn" onclick="skip(-15)" title="Back 15s">
+        <svg viewBox="0 0 24 24"><path d="M12 5V1L7 6l5 5V7c3.31 0 6 2.69 6 6s-2.69 6-6 6-6-2.69-6-6H4c0 4.42 3.58 8 8 8s8-3.58 8-8-3.58-8-8-8zm-1 11v-4.5l-1.5 1.5-.71-.71L11 10.79V16h-2z"/><text x="7.5" y="16" font-size="6" fill="currentColor" font-family="sans-serif">15</text></svg>
+      </button>
+      <button class="play-btn" id="playBtn" onclick="togglePlay()">
+        <svg id="playIcon" viewBox="0 0 24 24"><path d="M8 5v14l11-7z"/></svg>
+      </button>
+      <button class="ctrl-btn" onclick="skip(15)" title="Forward 15s">
+        <svg viewBox="0 0 24 24"><path d="M18 13c0 3.31-2.69 6-6 6s-6-2.69-6-6 2.69-6 6-6v4l5-5-5-5v4c-4.42 0-8 3.58-8 8s3.58 8 8 8 8-3.58 8-8h-2zm-5 0v-4.5l1.5 1.5.71-.71L13 7.79V13h2z"/><text x="9" y="16" font-size="6" fill="currentColor" font-family="sans-serif">15</text></svg>
+      </button>
+    </div>
+  </div>
+
+  <button id="flagBtn" onclick="flagMoment()" disabled>🚩 Flag this moment</button>
+
+  <div id="flagsSection">
+    <h2>Flags</h2>
+    <div id="flagsList"><div class="empty-state">No flags yet</div></div>
+  </div>
+</div>
+
+<div id="toast"></div>
+
+<script>
+// ── State ────────────────────────────────────────────────────────────────────
+let apiKey = localStorage.getItem('henty_api_key') || '';
+let audio = null;
+let segmentMap = null;      // {segments: [{chunk_id, chunk_nickname, start_seconds, end_seconds, take_timestamp}]}
+let currentChapterId = null;
+let chapterAudioOutput = null;
+let isPlaying = false;
+
+const BASE = window.location.origin;
+
+// ── Auth ─────────────────────────────────────────────────────────────────────
+function saveKey() {
+  const k = document.getElementById('apiKeyInput').value.trim();
+  if (!k) return;
+  localStorage.setItem('henty_api_key', k);
+  apiKey = k;
+  boot();
+}
+function signOut() {
+  localStorage.removeItem('henty_api_key');
+  location.reload();
+}
+
+// ── API helpers ───────────────────────────────────────────────────────────────
+async function api(path, opts = {}) {
+  const res = await fetch(BASE + path, {
+    ...opts,
+    headers: { 'X-API-Key': apiKey, 'Content-Type': 'application/json', ...(opts.headers || {}) },
+  });
+  if (res.status === 401 || res.status === 403) {
+    showToast('Invalid API key', true);
+    throw new Error('auth');
+  }
+  return res.json();
+}
+
+// ── Boot ──────────────────────────────────────────────────────────────────────
+async function boot() {
+  if (!apiKey) {
+    document.getElementById('authScreen').style.display = 'flex';
+    document.getElementById('app').style.display = 'none';
+    return;
+  }
+  document.getElementById('authScreen').style.display = 'none';
+  document.getElementById('app').style.display = 'flex';
+
+  try {
+    const data = await api('/api/project/podcast-data');
+    if (data.error) { showToast(data.error, true); return; }
+
+    document.getElementById('projectName').textContent = data.project_name || '';
+
+    const sel = document.getElementById('chapterSelect');
+    sel.innerHTML = '<option value="">— select a chapter —</option>';
+    if (!data.chapters.length) {
+      sel.innerHTML += '<option disabled>No stitched chapters yet — stitch one first</option>';
+    } else {
+      data.chapters.forEach(ch => {
+        const opt = document.createElement('option');
+        opt.value = ch.id;
+        const dur = ch.audio_output?.total_duration_seconds;
+        opt.textContent = ch.title + (dur ? `  (${fmtTime(dur)})` : '');
+        sel.appendChild(opt);
+      });
+    }
+    loadFlags();
+  } catch(e) {
+    if (e.message !== 'auth') showToast('Could not connect to server', true);
+  }
+}
+
+// ── Chapter / audio ───────────────────────────────────────────────────────────
+async function loadChapter(chapterId) {
+  if (!chapterId) return;
+  currentChapterId = chapterId;
+  segmentMap = null;
+
+  // Fetch fresh podcast-data to get audio_output
+  const data = await api('/api/project/podcast-data');
+  const ch = data.chapters.find(c => c.id === chapterId);
+  if (!ch || !ch.audio_output) { showToast('Chapter has no audio — stitch it first', true); return; }
+  chapterAudioOutput = ch.audio_output;
+
+  // Load segment map
+  try {
+    const mapRes = await fetch(BASE + ch.audio_output.map_url, { headers: { 'X-API-Key': apiKey } });
+    segmentMap = await mapRes.json();
+  } catch(e) { console.warn('Could not load segment map', e); }
+
+  // Set up audio element
+  if (audio) { audio.pause(); audio.src = ''; }
+  audio = new Audio(BASE + ch.audio_output.audio_url + '?api_key=' + encodeURIComponent(apiKey));
+  audio.preload = 'metadata';
+
+  audio.addEventListener('loadedmetadata', () => {
+    document.getElementById('timeTotal').textContent = fmtTime(audio.duration);
+    document.getElementById('progressBar').max = audio.duration;
+  });
+  audio.addEventListener('timeupdate', onTimeUpdate);
+  audio.addEventListener('ended', () => setPlaying(false));
+  audio.addEventListener('error', () => showToast('Audio error — check server', true));
+
+  document.getElementById('nowPlaying').textContent = ch.title;
+  document.getElementById('chunkInfo').textContent = '';
+  document.getElementById('playerSection').style.display = 'block';
+  document.getElementById('flagBtn').disabled = false;
+  document.getElementById('progressBar').value = 0;
+  document.getElementById('timeElapsed').textContent = '0:00';
+}
+
+function onTimeUpdate() {
+  const t = audio.currentTime;
+  document.getElementById('timeElapsed').textContent = fmtTime(t);
+  document.getElementById('progressBar').value = t;
+
+  // Update chunk info
+  if (segmentMap) {
+    const seg = segmentMap.segments?.find(s => s.start_seconds <= t && t <= s.end_seconds);
+    if (seg) {
+      document.getElementById('chunkInfo').textContent =
+        seg.chunk_nickname ? `"${seg.chunk_nickname.substring(0, 60)}${seg.chunk_nickname.length > 60 ? '…' : ''}"` : '';
+    }
+  }
+}
+
+function togglePlay() {
+  if (!audio) return;
+  if (isPlaying) { audio.pause(); setPlaying(false); }
+  else { audio.play(); setPlaying(true); }
+}
+function setPlaying(v) {
+  isPlaying = v;
+  document.getElementById('playIcon').innerHTML = v
+    ? '<path d="M6 19h4V5H6v14zm8-14v14h4V5h-4z"/>'  // pause icon
+    : '<path d="M8 5v14l11-7z"/>';                    // play icon
+}
+function seek(val) {
+  if (audio) audio.currentTime = parseFloat(val);
+}
+function skip(sec) {
+  if (audio) audio.currentTime = Math.max(0, Math.min(audio.duration || 0, audio.currentTime + sec));
+}
+
+// ── Flagging ──────────────────────────────────────────────────────────────────
+async function flagMoment() {
+  if (!audio || !currentChapterId) return;
+  const t = audio.currentTime;
+
+  try {
+    const result = await api('/api/project/flag-take', {
+      method: 'POST',
+      body: JSON.stringify({ chapter_id: currentChapterId, playback_seconds: t }),
+    });
+    if (result.error) { showToast('Error: ' + result.error, true); return; }
+    showToast('🚩 Flagged at ' + fmtTime(t));
+    loadFlags();
+  } catch(e) {
+    if (e.message !== 'auth') showToast('Flag failed', true);
+  }
+}
+
+// ── Flags list ────────────────────────────────────────────────────────────────
+async function loadFlags() {
+  try {
+    const data = await api('/api/project/flags');
+    renderFlags(data.flags || []);
+  } catch(e) { /* silent */ }
+}
+
+function renderFlags(flags) {
+  const el = document.getElementById('flagsList');
+  if (!flags.length) { el.innerHTML = '<div class="empty-state">No flags yet</div>'; return; }
+
+  // Show unresolved first, then resolved
+  const sorted = [...flags].sort((a, b) => {
+    if (a.resolved !== b.resolved) return a.resolved ? 1 : -1;
+    return new Date(b.created_at) - new Date(a.created_at);
+  });
+
+  el.innerHTML = sorted.map(f => `
+    <div class="flag-card ${f.resolved ? 'resolved' : ''}" id="flag-${f.id}">
+      <div class="flag-meta">${f.chapter_title || ''} · ${fmtTime(f.playback_seconds)} · ${fmtDate(f.created_at)}</div>
+      <div class="flag-title">${esc(f.chunk_nickname || `Chunk ${f.chunk_id}`)}</div>
+      ${f.note ? `<div class="flag-note">"${esc(f.note)}"</div>` : ''}
+      <div class="flag-actions">
+        ${f.resolved
+          ? '<span class="resolved-badge">✓ Resolved</span>'
+          : `<button class="resolve-btn" onclick="resolveFlag('${f.id}')">Mark resolved</button>`}
+      </div>
+    </div>
+  `).join('');
+}
+
+async function resolveFlag(flagId) {
+  try {
+    await api('/api/project/resolve-flag', { method: 'POST', body: JSON.stringify({ flag_id: flagId }) });
+    showToast('Flag resolved');
+    loadFlags();
+  } catch(e) { /* silent */ }
+}
+
+// ── Utilities ─────────────────────────────────────────────────────────────────
+function fmtTime(s) {
+  if (!isFinite(s)) return '0:00';
+  const m = Math.floor(s / 60), ss = Math.floor(s % 60);
+  return m + ':' + String(ss).padStart(2, '0');
+}
+function fmtDate(iso) {
+  try { return new Date(iso).toLocaleDateString(undefined, { month:'short', day:'numeric', hour:'2-digit', minute:'2-digit' }); }
+  catch(e) { return ''; }
+}
+function esc(s) {
+  return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+function showToast(msg, isError = false) {
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.className = 'show' + (isError ? ' error' : '');
+  clearTimeout(t._timer);
+  t._timer = setTimeout(() => { t.className = ''; }, 2800);
+}
+
+// Audio URLs include ?api_key= so the browser's <audio> element can fetch without
+// custom headers. Flask checks X-API-Key header OR api_key query param.
+
+// ── Start ─────────────────────────────────────────────────────────────────────
+boot();
+</script>
+</body>
+</html>
