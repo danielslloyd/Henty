@@ -4785,6 +4785,17 @@ if __name__ == '__main__':
         print(f"Authentication: DISABLED (not recommended for remote access)")
     print(f"WebSocket support: {'ENABLED' if config.ENABLE_WEBSOCKET else 'DISABLED'}")
     print(f"\nAllowed CORS origins: {', '.join(config.ALLOWED_ORIGINS)}")
+    # Debug: confirm build identity so we can verify the right code is running
+    try:
+        import subprocess as _sp
+        _sha = _sp.check_output(['git', 'rev-parse', '--short', 'HEAD'],
+                                cwd=os.path.dirname(os.path.abspath(__file__)),
+                                stderr=_sp.DEVNULL).decode().strip()
+    except Exception:
+        _sha = 'unknown'
+    _listen_registered = any(r.rule == '/listen' for r in app.url_map.iter_rules())
+    print(f"\n[BUILD] git commit : {_sha}")
+    print(f"[BUILD] /listen route registered: {_listen_registered}")
     print(f"\nReady for connections!")
 
     socketio.run(app, debug=config.DEBUG, port=config.PORT, host=config.HOST, allow_unsafe_werkzeug=True)
