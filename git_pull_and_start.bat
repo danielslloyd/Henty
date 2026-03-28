@@ -46,16 +46,9 @@ if %errorlevel% neq 0 (
     echo [OK] ffmpeg found
 )
 
-REM Detect local network IP for mobile access
+REM Detect local network IP for mobile access (PowerShell is reliable across locales)
 set LOCAL_IP=
-for /f "tokens=2 delims=:" %%A in ('ipconfig ^| findstr /C:"IPv4 Address" ^| findstr /V "127.0.0.1"') do (
-    if not defined LOCAL_IP (
-        set RAW_IP=%%A
-        setlocal enabledelayedexpansion
-        set LOCAL_IP=!RAW_IP: =!
-        endlocal & set LOCAL_IP=%LOCAL_IP%
-    )
-)
+for /f "delims=" %%A in ('powershell -NoProfile -Command "(Get-NetIPAddress -AddressFamily IPv4 | Where-Object { $_.IPAddress -notlike '127.*' -and $_.PrefixOrigin -ne 'WellKnown' } | Sort-Object InterfaceIndex | Select-Object -First 1).IPAddress" 2^>nul') do set LOCAL_IP=%%A
 
 REM Detect public IP (curl ships with Windows 10+)
 set PUBLIC_IP=
