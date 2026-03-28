@@ -4774,34 +4774,7 @@ def serve_css(filename):
         return send_file(css_file, mimetype='text/css')
     return jsonify({'error': 'File not found'}), 404
 
-if __name__ == '__main__':
-    print(f"Starting Text to Audio Converter API...")
-    print(f"Using device: {converter.device}")
-    print(f"Server address: http://{config.HOST}:{config.PORT}")
-    if config.REQUIRE_AUTH:
-        print(f"Authentication: ENABLED")
-        print(f"API Key required for protected endpoints")
-    else:
-        print(f"Authentication: DISABLED (not recommended for remote access)")
-    print(f"WebSocket support: {'ENABLED' if config.ENABLE_WEBSOCKET else 'DISABLED'}")
-    print(f"\nAllowed CORS origins: {', '.join(config.ALLOWED_ORIGINS)}")
-    # Debug: confirm build identity so we can verify the right code is running
-    try:
-        import subprocess as _sp
-        _sha = _sp.check_output(['git', 'rev-parse', '--short', 'HEAD'],
-                                cwd=os.path.dirname(os.path.abspath(__file__)),
-                                stderr=_sp.DEVNULL).decode().strip()
-    except Exception:
-        _sha = 'unknown'
-    _listen_registered = any(r.rule == '/listen' for r in app.url_map.iter_rules())
-    print(f"\n[BUILD] git commit : {_sha}")
-    print(f"[BUILD] /listen route registered: {_listen_registered}")
-    print(f"\nReady for connections!")
-
-    socketio.run(app, debug=config.DEBUG, port=config.PORT, host=config.HOST, allow_unsafe_werkzeug=True)
-
-
-# ── Mobile listener page ──────────────────────────────────────────────────────
+# ── Mobile listener page ─────────────────────────────────────────────────────
 
 @app.route('/listen')
 def serve_listen_page():
@@ -4809,7 +4782,7 @@ def serve_listen_page():
     return send_from_directory(os.path.dirname(os.path.abspath(__file__)), 'listen.html')
 
 
-# ── Podcast / flag API ───────────────────────────────────────────────────────
+# ── Podcast / flag API ────────────────────────────────────────────────────────
 
 @app.route('/api/project/podcast-data', methods=['GET'])
 @auth_manager.require_api_key
@@ -4861,7 +4834,6 @@ def flag_take():
         if chapter_id is None or playback_seconds is None:
             return jsonify({'error': 'chapter_id and playback_seconds are required'}), 400
 
-        # Find chapter
         chapter_map, _, _ = converter.get_chapter_and_chunk_lookups()
         chapter = chapter_map.get(chapter_id)
         if not chapter:
@@ -4871,19 +4843,15 @@ def flag_take():
         if not audio_output or not audio_output.get('map_file'):
             return jsonify({'error': 'Chapter has no segment map — stitch it first'}), 400
 
-        # Load segment map
         map_path = os.path.join(converter.current_project_path, 'audio', audio_output['map_file'])
         with open(map_path, 'r', encoding='utf-8') as f:
-            import json as _json
-            segment_map = _json.load(f)
+            segment_map = json.load(f)
 
-        # Find matching segment
         matched = None
         for seg in segment_map.get('segments', []):
             if seg['start_seconds'] <= playback_seconds <= seg['end_seconds']:
                 matched = seg
                 break
-        # Allow slight overshoot on the last segment
         if not matched and segment_map.get('segments'):
             last = segment_map['segments'][-1]
             if playback_seconds <= last['end_seconds'] + 1.0:
@@ -4912,8 +4880,7 @@ def flag_take():
 
         project_file = os.path.join(converter.current_project_path, 'project.json')
         with open(project_file, 'w', encoding='utf-8') as f:
-            import json as _json2
-            _json2.dump(meta, f, indent=2, ensure_ascii=False)
+            json.dump(meta, f, indent=2, ensure_ascii=False)
 
         print(f"Flag saved: chapter={chapter_id} chunk={matched['chunk_id']} at {playback_seconds}s")
         return jsonify({'success': True, 'flag': flag})
@@ -4962,10 +4929,36 @@ def resolve_flag():
 
         project_file = os.path.join(converter.current_project_path, 'project.json')
         with open(project_file, 'w', encoding='utf-8') as f:
-            import json as _json
-            _json.dump(meta, f, indent=2, ensure_ascii=False)
+            json.dump(meta, f, indent=2, ensure_ascii=False)
 
         return jsonify({'success': True})
 
     except Exception as e:
         return jsonify({'error': str(e)}), 500
+
+
+if __name__ == '__main__':
+    print(f"Starting Text to Audio Converter API...")
+    print(f"Using device: {converter.device}")
+    print(f"Server address: http://{config.HOST}:{config.PORT}")
+    if config.REQUIRE_AUTH:
+        print(f"Authentication: ENABLED")
+        print(f"API Key required for protected endpoints")
+    else:
+        print(f"Authentication: DISABLED (not recommended for remote access)")
+    print(f"WebSocket support: {'ENABLED' if config.ENABLE_WEBSOCKET else 'DISABLED'}")
+    print(f"\nAllowed CORS origins: {', '.join(config.ALLOWED_ORIGINS)}")
+    # Debug: confirm build identity so we can verify the right code is running
+    try:
+        import subprocess as _sp
+        _sha = _sp.check_output(['git', 'rev-parse', '--short', 'HEAD'],
+                                cwd=os.path.dirname(os.path.abspath(__file__)),
+                                stderr=_sp.DEVNULL).decode().strip()
+    except Exception:
+        _sha = 'unknown'
+    _listen_registered = any(r.rule == '/listen' for r in app.url_map.iter_rules())
+    print(f"\n[BUILD] git commit : {_sha}")
+    print(f"[BUILD] /listen route registered: {_listen_registered}")
+    print(f"\nReady for connections!")
+
+    socketio.run(app, debug=config.DEBUG, port=config.PORT, host=config.HOST, allow_unsafe_werkzeug=True)
