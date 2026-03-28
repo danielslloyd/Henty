@@ -4779,7 +4779,7 @@ def serve_css(filename):
 @app.route('/listen')
 def serve_listen_page():
     """Serve the mobile podcast listener page (no auth required)."""
-    return send_from_directory(os.path.dirname(os.path.abspath(__file__)), 'listen.html')
+    return send_file('listen.html')
 
 
 # ── Podcast / flag API ────────────────────────────────────────────────────────
