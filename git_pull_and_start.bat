@@ -46,7 +46,22 @@ if %errorlevel% neq 0 (
     echo [OK] ffmpeg found
 )
 
-echo [INFO] Starting server on http://localhost:5000...
+REM Detect local network IP for mobile access
+set LOCAL_IP=
+for /f "tokens=2 delims=:" %%A in ('ipconfig ^| findstr /C:"IPv4 Address" ^| findstr /V "127.0.0.1"') do (
+    if not defined LOCAL_IP (
+        set RAW_IP=%%A
+        setlocal enabledelayedexpansion
+        set LOCAL_IP=!RAW_IP: =!
+        endlocal & set LOCAL_IP=%LOCAL_IP%
+    )
+)
+
+REM Detect public IP (curl ships with Windows 10+)
+set PUBLIC_IP=
+for /f "delims=" %%A in ('curl -s --max-time 4 https://ifconfig.me 2^>nul') do set PUBLIC_IP=%%A
+
+echo [INFO] Starting server...
 echo.
 
 REM Start the server in a new window
@@ -65,8 +80,22 @@ echo ================================================
 echo   Henty is ready!
 echo ================================================
 echo.
-echo App URL:      http://localhost:5000/app.html
-echo Server URL:   http://localhost:5000
+echo   Desktop:  http://localhost:5000/app.html
+echo.
+echo   Mobile listener (/listen page):
+if defined LOCAL_IP (
+    echo   Local WiFi:  http://%LOCAL_IP%:5000/listen
+) else (
+    echo   Local WiFi:  [could not detect local IP]
+)
+if defined PUBLIC_IP (
+    echo   External:    http://%PUBLIC_IP%:5000/listen
+    echo   [Requires port 5000 forwarded on your router]
+) else (
+    echo   External:    [could not detect public IP]
+)
+echo.
+echo ================================================
 echo.
 echo The server is running in a separate window.
 echo Close that window to stop the server.

@@ -807,6 +807,63 @@
             color: #dc2626;
         }
 
+        /* Flag badge on chunk preview row */
+        .chunk-flag-badge {
+            font-size: 11px;
+            font-weight: 700;
+            padding: 2px 7px;
+            border-radius: 10px;
+            background: rgba(239, 68, 68, 0.15);
+            color: #ef4444;
+            border: none;
+            cursor: pointer;
+            flex-shrink: 0;
+            white-space: nowrap;
+        }
+        .chunk-flag-badge:hover { background: rgba(239, 68, 68, 0.28); }
+
+        /* Flag panel (inline, below the take row) */
+        .chunk-flag-panel {
+            display: none;
+            background: rgba(239, 68, 68, 0.07);
+            border-top: 1px solid rgba(239, 68, 68, 0.18);
+            padding: 10px 16px;
+        }
+        .chunk-flag-panel.open { display: block; }
+        .flag-panel-row {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            padding: 5px 0;
+            border-bottom: 1px solid rgba(255,255,255,0.05);
+            font-size: 12px;
+        }
+        .flag-panel-row:last-child { border-bottom: none; }
+        .flag-panel-time {
+            color: #ef4444;
+            font-weight: 700;
+            min-width: 36px;
+            flex-shrink: 0;
+        }
+        .flag-panel-nick {
+            flex: 1;
+            color: #94a3b8;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+        .flag-panel-resolve {
+            font-size: 11px;
+            padding: 3px 10px;
+            background: none;
+            border: 1px solid rgba(148,163,184,0.3);
+            color: #94a3b8;
+            border-radius: 6px;
+            cursor: pointer;
+            flex-shrink: 0;
+        }
+        .flag-panel-resolve:hover { background: rgba(255,255,255,0.05); color: #e2e8f0; }
+
         .chunk-icon {
             background: none;
             border: none;
@@ -1495,7 +1552,7 @@
                         </label>
                     </div>
                     <div id="urlSourceInput">
-                        <input type="url" id="gutenbergUrl" placeholder="Enter Gutenberg URL" value="">
+                        <input type="text" id="gutenbergUrl" placeholder="Enter Gutenberg URL or book ID (e.g. 120)" value="">
                     </div>
                     <div id="fileSourceInput" style="display: none;">
                         <input type="file" id="textFile" accept=".txt,.html,.htm" style="padding: 8px;">

@@ -81,19 +81,24 @@ class GutenbergProcessor:
     def get_epub_chapter_titles(self, epub_bytes: bytes) -> List[str]:
         """
         Extract ordered chapter titles from an EPUB's NCX or nav.xhtml.
+        Prefers HTML heading text (h1/h2/h3) over NCX labels since headings
+        more closely match plain-text chapter headings.
         Returns a flat list of title strings (front/back matter skipped).
         """
         import zipfile, io
         if not HAS_BS4:
+            print("DEBUG [EPUB]: beautifulsoup4 not available, skipping EPUB parsing")
             return []
 
         skip_kw = {'contents', 'table of contents', 'cover', 'copyright',
                    'title page', 'half-title', 'dedication', 'epigraph',
                    'acknowledgement', 'index', 'bibliography', 'about the'}
         titles: List[str] = []
+        print(f"DEBUG [EPUB]: Processing EPUB ({len(epub_bytes):,} bytes)")
 
         with zipfile.ZipFile(io.BytesIO(epub_bytes)) as zf:
             names = set(zf.namelist())
+            print(f"DEBUG [EPUB]: {len(names)} files in archive")
 
             # Locate OPF
             opf_path = None
@@ -102,11 +107,13 @@ class GutenbergProcessor:
                 rf = BeautifulSoup(c, 'xml').find('rootfile')
                 if rf:
                     opf_path = rf.get('full-path')
-            except Exception:
-                pass
+            except Exception as e:
+                print(f"DEBUG [EPUB]: container.xml error: {e}")
             opf_path = opf_path or next((n for n in names if n.endswith('.opf')), None)
             if not opf_path:
+                print("DEBUG [EPUB]: No OPF file found")
                 return []
+            print(f"DEBUG [EPUB]: OPF at '{opf_path}'")
 
             opf_dir = os.path.dirname(opf_path)
             opf_soup = BeautifulSoup(
@@ -114,21 +121,54 @@ class GutenbergProcessor:
             )
 
             def abs_path(href: str) -> str:
-                return (opf_dir.rstrip('/') + '/' + href.lstrip('/')) if opf_dir else href
+                """Resolve href (strip fragment) relative to OPF directory."""
+                href = href.split('#')[0]
+                if opf_dir:
+                    return opf_dir.rstrip('/') + '/' + href.lstrip('/')
+                return href
 
             manifest = {
                 item.get('id', ''): {
                     'path': abs_path(item.get('href', '')),
+                    'href': item.get('href', ''),
                     'media_type': item.get('media-type', ''),
                     'properties': item.get('properties', ''),
                 }
                 for item in opf_soup.find_all('item')
             }
 
-            def _add(t: str) -> None:
-                t = t.strip()
-                if t and not any(kw in t.lower() for kw in skip_kw):
-                    titles.append(t)
+            def get_html_heading(file_path: str) -> str:
+                """Return first h1/h2/h3 text from an HTML file inside the EPUB."""
+                try:
+                    if file_path not in names:
+                        return ''
+                    html = zf.read(file_path).decode('utf-8', errors='replace')
+                    soup = BeautifulSoup(html, 'html.parser')
+                    for tag in ['h1', 'h2', 'h3']:
+                        h = soup.find(tag)
+                        if h:
+                            text = h.get_text(strip=True)
+                            if text:
+                                return text
+                except Exception as e:
+                    print(f"DEBUG [EPUB]: heading error in '{file_path}': {e}")
+                return ''
+
+            def should_skip(label: str) -> bool:
+                return any(kw in label.lower() for kw in skip_kw)
+
+            def add_entry(ncx_label: str, html_file: str = '') -> None:
+                ncx_label = ncx_label.strip()
+                if not ncx_label or should_skip(ncx_label):
+                    return
+                if html_file:
+                    heading = get_html_heading(html_file)
+                    if heading and not should_skip(heading):
+                        print(f"DEBUG [EPUB]: title '{heading}' (HTML heading; NCX='{ncx_label}')")
+                        titles.append(heading)
+                        return
+                print(f"DEBUG [EPUB]: title '{ncx_label}' (NCX label; no HTML heading found)")
+                titles.append(ncx_label)
 
             # Try NCX (EPUB 2)
             ncx_item = opf_soup.find('item', attrs={'media-type': 'application/x-dtbncx+xml'})
@@ -138,14 +178,20 @@ class GutenbergProcessor:
                     ncx_soup = BeautifulSoup(
                         zf.read(ncx_path).decode('utf-8', errors='replace'), 'xml'
                     )
-                    for pt in ncx_soup.find_all('navPoint'):
+                    nav_points = ncx_soup.find_all('navPoint')
+                    print(f"DEBUG [EPUB]: {len(nav_points)} NCX navPoints")
+                    for pt in nav_points:
                         lbl = pt.find('navLabel')
-                        if lbl:
-                            _add(lbl.get_text(strip=True))
+                        content = pt.find('content')
+                        label_text = lbl.get_text(strip=True) if lbl else ''
+                        src = content.get('src', '') if content else ''
+                        html_file = abs_path(src) if src else ''
+                        add_entry(label_text, html_file)
                     if titles:
+                        print(f"DEBUG [EPUB]: {len(titles)} titles extracted via NCX")
                         return titles
                 except Exception as e:
-                    print(f"NCX parse error: {e}")
+                    print(f"DEBUG [EPUB]: NCX parse error: {e}")
 
             # Try nav.xhtml (EPUB 3)
             nav_item = next(
@@ -161,9 +207,13 @@ class GutenbergProcessor:
                               or nav_soup.find('nav'))
                     if nav_el:
                         for a in nav_el.find_all('a'):
-                            _add(a.get_text(strip=True))
+                            label_text = a.get_text(strip=True)
+                            href = a.get('href', '')
+                            html_file = abs_path(href) if href else ''
+                            add_entry(label_text, html_file)
+                    print(f"DEBUG [EPUB]: {len(titles)} titles extracted via nav.xhtml")
                 except Exception as e:
-                    print(f"nav.xhtml parse error: {e}")
+                    print(f"DEBUG [EPUB]: nav.xhtml parse error: {e}")
 
         return titles
 
@@ -172,21 +222,81 @@ class GutenbergProcessor:
     ) -> List[Tuple[str, str]]:
         """
         Split stripped plain text at positions matching EPUB chapter titles.
-        Each title is searched as a standalone line (case-insensitive, punctuation-tolerant).
+        Tries multiple strategies per title: exact → normalized → chapter prefix.
         Returns [(title, chapter_text), ...] for titles that matched.
         """
-        splits: List[Tuple[int, int, str]] = []  # (match_start, content_start, title)
+
+        def normalize(s: str) -> str:
+            """Lowercase, strip punctuation, collapse whitespace."""
+            s = s.lower()
+            s = re.sub(r'[^\w\s]', ' ', s)
+            return re.sub(r'\s+', ' ', s).strip()
+
+        def try_exact(title: str) -> Optional[re.Match]:
+            """Case-insensitive standalone-line match with optional trailing punct."""
+            escaped = re.escape(title)
+            pattern = r'(?m)^[ \t]*' + escaped + r'[.!?]?[ \t]*$'
+            return re.search(pattern, text, re.IGNORECASE)
+
+        def try_normalized(title: str) -> Optional[re.Match]:
+            """Normalize title and match with flexible whitespace between words."""
+            words = normalize(title).split()
+            if not words:
+                return None
+            pattern = r'(?m)^[ \t]*' + r'[\s.]*'.join(re.escape(w) for w in words) + r'[.!?]?[ \t]*$'
+            return re.search(pattern, text, re.IGNORECASE)
+
+        def try_chapter_prefix(title: str) -> Optional[re.Match]:
+            """
+            If title starts with 'Chapter/Part/Section/Book N', try matching
+            just that prefix as a standalone line (handles subtitles in NCX).
+            """
+            m = re.match(
+                r'^((?:chapter|part|section|book|volume)\s+(?:\d+|[ivxlcdmIVXLCDM]+))',
+                title, re.IGNORECASE
+            )
+            if m:
+                escaped = re.escape(m.group(1))
+                pattern = r'(?m)^[ \t]*' + escaped + r'[.!?]?[ \t]*$'
+                return re.search(pattern, text, re.IGNORECASE)
+            return None
+
+        print(f"\nDEBUG [SPLIT]: Matching {len(chapter_titles)} titles in text ({len(text):,} chars)")
+
+        splits: List[Tuple[int, int, str]] = []
+        used_positions: set = set()
 
         for title in chapter_titles:
-            # Build a loose regex: escape, then allow optional punctuation between words
-            escaped = re.escape(title)
-            # allow optional trailing period / roman numeral variations
-            pattern = r'(?:^|\n)[ \t]*(' + escaped + r'\.?)[ \t]*(?:\n|$)'
-            m = re.search(pattern, text, re.IGNORECASE)
-            if m:
-                splits.append((m.start(), m.end(), title))
+            match = None
+            strategy = None
+
+            match = try_exact(title)
+            if match:
+                strategy = "exact"
+
+            if not match:
+                match = try_normalized(title)
+                if match:
+                    strategy = "normalized"
+
+            if not match:
+                match = try_chapter_prefix(title)
+                if match:
+                    strategy = "chapter-prefix"
+
+            if match:
+                pos = match.start()
+                if pos not in used_positions:
+                    used_positions.add(pos)
+                    splits.append((pos, match.end(), title))
+                    print(f"DEBUG [SPLIT]: ✓ '{title}' → {strategy}, pos={pos}")
+                else:
+                    print(f"DEBUG [SPLIT]: ✗ '{title}' → pos={pos} already claimed (duplicate)")
+            else:
+                print(f"DEBUG [SPLIT]: ✗ '{title}' → NOT FOUND in plain text")
 
         if not splits:
+            print("DEBUG [SPLIT]: 0 titles matched → caller should fall back to detect_chapters()")
             return []
 
         splits.sort(key=lambda x: x[0])
@@ -198,6 +308,7 @@ class GutenbergProcessor:
             if chapter_text:
                 chapters.append((title, chapter_text))
 
+        print(f"DEBUG [SPLIT]: {len(chapters)} non-empty chapters generated")
         return chapters
 
     def download_text(self, url: str) -> str:
