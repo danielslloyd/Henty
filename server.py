@@ -2939,6 +2939,7 @@ def stitch_project_best_takes():
         # Collect audio paths for best takes
         audio_paths = []
         segment_entries = []  # parallel list for segment map generation
+        skipped_chunks = []   # chunks with missing/invalid audio (warnings)
         audio_dir = os.path.join(converter.current_project_path, 'audio')
 
         for chunk in chunks:
@@ -2948,14 +2949,20 @@ def stitch_project_best_takes():
                 # For common_file chunks, use the common file directly
                 common_file_path = chunk.get('common_file_path')
                 if not common_file_path:
-                    return jsonify({'error': f'Chunk {chunk["id"]} is missing common_file_path'}), 400
+                    msg = f'Chunk {chunk["id"]} is missing common_file_path'
+                    print(f'WARNING: {msg} — skipping')
+                    skipped_chunks.append({'chunk_id': chunk['id'], 'reason': msg})
+                    continue
 
                 # Resolve relative path
                 if not os.path.isabs(common_file_path):
                     common_file_path = os.path.join(os.getcwd(), common_file_path)
 
                 if not os.path.exists(common_file_path):
-                    return jsonify({'error': f'Common file not found: {common_file_path}'}), 400
+                    msg = f'Common file not found: {common_file_path}'
+                    print(f'WARNING: {msg} — skipping chunk {chunk["id"]}')
+                    skipped_chunks.append({'chunk_id': chunk['id'], 'reason': msg})
+                    continue
 
                 print(f"Chunk {chunk['id']}: Using common file: {common_file_path}")
                 audio_paths.append(common_file_path)
@@ -2974,7 +2981,10 @@ def stitch_project_best_takes():
                 generated_audios = chunk.get('generated_audios', [])
 
                 if not generated_audios:
-                    return jsonify({'error': f'No audio generated for chunk {chunk["id"]}'}), 400
+                    msg = f'No audio generated for chunk {chunk["id"]}'
+                    print(f'WARNING: {msg} — skipping')
+                    skipped_chunks.append({'chunk_id': chunk['id'], 'reason': msg})
+                    continue
 
                 # Find best take
                 best_audio = None
@@ -2998,8 +3008,10 @@ def stitch_project_best_takes():
                     # Extract filename from URL like '/api/audio/filename.wav'
                     audio_file = best_audio['audio_url'].split('/')[-1]
                 else:
-                    print(f"ERROR: audio object missing 'audio_file' or 'audio_url' key. Audio object: {best_audio}")
-                    return jsonify({'error': f'Chunk {chunk["id"]} has invalid audio metadata'}), 400
+                    msg = f'Chunk {chunk["id"]} has invalid audio metadata (no audio_file or audio_url)'
+                    print(f'WARNING: {msg} — skipping. Audio object: {best_audio}')
+                    skipped_chunks.append({'chunk_id': chunk['id'], 'reason': msg})
+                    continue
                 audio_path = os.path.join(audio_dir, audio_file)
 
                 print(f"Chunk {chunk['id']}: Selected audio file: {audio_file}")
@@ -3007,10 +3019,20 @@ def stitch_project_best_takes():
                 print(f"Chunk {chunk['id']}: File exists: {os.path.exists(audio_path)}")
 
                 if not os.path.exists(audio_path):
-                    return jsonify({'error': f'Audio file not found: {audio_file}'}), 400
+                    msg = f'Audio file not found for chunk {chunk["id"]}: {audio_file}'
+                    print(f'WARNING: {msg} — skipping')
+                    skipped_chunks.append({'chunk_id': chunk['id'], 'reason': msg})
+                    continue
 
                 audio_paths.append(audio_path)
                 segment_entries.append({'type': 'text', 'chunk_id': chunk['id'], 'chunk_nickname': chunk.get('nickname', ''), 'take_timestamp': best_audio.get('timestamp'), 'audio_path': audio_path})
+
+        if not audio_paths:
+            skip_reasons = '; '.join(s['reason'] for s in skipped_chunks)
+            return jsonify({'error': f'No audio available to stitch. Skipped chunks: {skip_reasons}'}), 400
+
+        if skipped_chunks:
+            print(f"WARNING: Stitching with {len(audio_paths)} segments; skipped {len(skipped_chunks)} chunk(s): {[s['chunk_id'] for s in skipped_chunks]}")
 
         # Create stitched audio filename
         timestamp = int(time.time() * 1000)
@@ -3099,14 +3121,19 @@ def stitch_project_best_takes():
                 json.dump(converter.current_project_metadata, f, indent=2, ensure_ascii=False)
             converter._invalidate_lookup_caches()
 
-        return jsonify({
+        response_data = {
             'success': True,
             'audio_url': audio_url,
             'audio_file': stitched_filename,
             'audio_path': stitched_path,
             'metadata': stitched_metadata,
             'segment_map': segment_map,
-        })
+            'segments_included': len(audio_paths),
+            'segments_skipped': len(skipped_chunks),
+        }
+        if skipped_chunks:
+            response_data['warnings'] = [s['reason'] for s in skipped_chunks]
+        return jsonify(response_data)
 
     except Exception as e:
         import traceback
