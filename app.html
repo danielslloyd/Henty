@@ -1469,6 +1469,26 @@
                 </div>
             </div>
             <div class="pane-content" style="padding: 15px; display: flex; flex-direction: column;">
+                <!-- Chapter Parsing Method Selector -->
+                <div id="parsingMethodPanel" style="background: #f0f4ff; border: 1px solid #c7d2fe; border-radius: 8px; padding: 12px; margin-bottom: 10px;">
+                    <div style="display: flex; align-items: center; gap: 10px; flex-wrap: wrap;">
+                        <label style="font-size: 13px; font-weight: 600; color: #3730a3; white-space: nowrap;">Parsing Method:</label>
+                        <select id="parsingMethodSelect" style="flex: 1; min-width: 200px; padding: 6px 10px; border: 1px solid #a5b4fc; border-radius: 6px; font-size: 13px; background: white;">
+                            <option value="epub_toc">1. EPUB Table of Contents</option>
+                            <option value="epub_spine_html">2. EPUB Spine + HTML Headings</option>
+                            <option value="regex_headings">3. Regex Heading Detection</option>
+                            <option value="blank_line_sections">4. Blank-Line Section Breaks</option>
+                            <option value="hybrid_epub_regex" selected>5. Hybrid EPUB + Regex</option>
+                        </select>
+                        <button class="pane-btn" onclick="gutenbergTab.reparseChapters()" style="background: #4f46e5; white-space: nowrap;">Re-Parse Chapters</button>
+                        <button class="pane-btn" onclick="gutenbergTab.toggleParseLog()" style="background: #6366f1; white-space: nowrap;" id="toggleLogBtn">Show Log</button>
+                    </div>
+                    <div id="parsingMethodDesc" style="font-size: 12px; color: #4338ca; margin-top: 6px;"></div>
+                </div>
+                <!-- Verbose Parse Log (collapsible) -->
+                <div id="parseLogPanel" style="display: none; background: #1e1e2e; color: #cdd6f4; border-radius: 8px; padding: 10px; margin-bottom: 10px; max-height: 300px; overflow-y: auto; font-family: 'Consolas', 'Monaco', monospace; font-size: 12px; line-height: 1.6;">
+                    <div id="parseLogContent" style="white-space: pre-wrap;">No parse log yet. Click "Re-Parse Chapters" to generate one.</div>
+                </div>
                 <div class="xml-tips">
                     <strong>Editing:</strong>
                     <button class="xml-btn" onclick="gutenbergTab.insertChapterBreak()">+ Chapter</button>
