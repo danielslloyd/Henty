@@ -26,7 +26,7 @@ Selectable via the UI dropdown in the Markdown pane, or via `POST /api/project/r
 | Method | Key | Description |
 |--------|-----|-------------|
 | EPUB TOC | `epub_toc` | Uses NCX/nav chapter titles from the EPUB to locate chapter boundaries in the plain text |
-| EPUB Spine + HTML | `epub_spine_html` | Walks the EPUB spine order reading h1-h3 headings and body text from each content file |
+| EPUB Spine + HTML | `epub_spine_html` | Walks the EPUB spine order reading h1-h3 headings from each content file, then uses those headings to split the plain text |
 | Regex Headings | `regex_headings` | Scans plain text for "Chapter N", Roman numerals, "Part N", ALL-CAPS headings, etc. |
 | Blank-Line Sections | `blank_line_sections` | Splits on 3+ consecutive blank lines (common Gutenberg section separator) |
 | Hybrid EPUB + Regex | `hybrid_epub_regex` | Tries EPUB TOC first; fills gaps and validates with regex heading detection |

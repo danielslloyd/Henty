@@ -1000,6 +1000,22 @@ class TTSTab {
     }
 
     async generateChunkAudio(chunkId) {
+        // Auto-save editor if it has unsaved changes (ensures pronunciation edits are committed)
+        if (typeof gutenbergTab !== 'undefined') {
+            const editor = document.getElementById('pseudoXmlEditor');
+            if (editor) {
+                const editorText = editor.textContent || editor.innerText;
+                if (editorText !== gutenbergTab.markdownContent && editorText.length > 0 && !gutenbergTab.cleanViewActive) {
+                    console.log('[TTS TAB] Auto-saving editor changes before generation...');
+                    await gutenbergTab.saveCode();
+                    // Reload chapter to pick up saved changes
+                    if (this.currentChapterIndex !== null) {
+                        await this.loadChapter(this.currentChapterIndex);
+                    }
+                }
+            }
+        }
+
         const chunk = this.currentChapter.chunks.find(c => c.id === chunkId);
         if (!chunk) {
             console.error('Chunk not found:', chunkId);

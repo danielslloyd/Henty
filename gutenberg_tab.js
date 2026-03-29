@@ -117,8 +117,10 @@ class GutenbergTab {
         }
 
         if (this.cleanViewActive) {
-            // Clean view: strip {display|spoken} → display text only
-            const cleanText = this.markdownContent.replace(/\{([^|}]+)\|[^}]*\}/g, '$1');
+            // Clean view: strip {display|spoken} → display text only, hide </chunk> tags
+            let cleanText = this.markdownContent;
+            cleanText = cleanText.replace(/\{([^|}]+)\|[^}]*\}/g, '$1');
+            cleanText = cleanText.replace(/<\/chunk>/g, '');
             const escaped = cleanText
                 .replace(/&/g, '&amp;')
                 .replace(/</g, '&lt;')
@@ -126,7 +128,7 @@ class GutenbergTab {
             editor.innerHTML = escaped;
             editor.contentEditable = 'false';
         } else {
-            // Markup view: highlight {display|spoken} patterns with color
+            // Markup view: highlight {display|spoken} and </chunk> tags with color
             let escaped = this.markdownContent
                 .replace(/&/g, '&amp;')
                 .replace(/</g, '&lt;')
@@ -136,6 +138,12 @@ class GutenbergTab {
             escaped = escaped.replace(
                 /\{([^|}]+)\|([^}]*)\}/g,
                 '<span style="background:#ddd6fe;border-radius:3px;padding:0 2px">{$1|<span style="color:#7c3aed;font-weight:600">$2</span>}</span>'
+            );
+
+            // Highlight </chunk> tags
+            escaped = escaped.replace(
+                /&lt;\/chunk&gt;/g,
+                '<span style="background:#fde68a;color:#92400e;border-radius:3px;padding:0 3px;font-size:0.85em;">&lt;/chunk&gt;</span>'
             );
 
             editor.innerHTML = escaped;

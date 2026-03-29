@@ -460,9 +460,10 @@ class GutenbergProcessor:
 
     def _method_epub_spine_html(self, text: str, epub_bytes: Optional[bytes],
                                 log: list) -> List[Tuple[str, str]]:
-        """Walk the EPUB spine, extract heading + body from each HTML file."""
+        """Walk the EPUB spine to get chapter titles/order, then cut the plain text at matching positions."""
         import zipfile, io
         log.append("[M2-EPUB_SPINE] Starting EPUB Spine + HTML method")
+        log.append("[M2-EPUB_SPINE] Strategy: extract headings from EPUB HTML, use them to split plain text")
 
         if not epub_bytes:
             log.append("[M2-EPUB_SPINE] No EPUB data — returning empty")
@@ -476,7 +477,8 @@ class GutenbergProcessor:
                     'acknowledgement', 'index', 'bibliography', 'about the',
                     'project gutenberg'}
 
-        chapters: List[Tuple[str, str]] = []
+        # Step 1: Walk the EPUB spine and collect headings from each HTML file
+        headings: List[str] = []
 
         with zipfile.ZipFile(io.BytesIO(epub_bytes)) as zf:
             names = set(zf.namelist())
@@ -531,27 +533,30 @@ class GutenbergProcessor:
                         heading = h.get_text(strip=True)
                         break
 
-                # Extract body text
-                body_parts = []
-                for p in soup.find_all(['p', 'div']):
-                    t = p.get_text(separator=' ', strip=True)
-                    if t:
-                        body_parts.append(t)
-                body = '\n\n'.join(body_parts)
+                # Check if this spine item has meaningful body content
+                body_len = len(soup.get_text(strip=True))
 
-                if not body or len(body) < 20:
-                    log.append(f"[M2-EPUB_SPINE]   spine[{idx}] \"{heading or '(no heading)'}\" — body too short ({len(body)} chars), skipping")
+                if not heading or body_len < 50:
+                    log.append(f"[M2-EPUB_SPINE]   spine[{idx}] \"{heading or '(no heading)'}\" — too short ({body_len} chars), skipping")
                     continue
 
-                if heading and any(kw in heading.lower() for kw in skip_kw):
+                if any(kw in heading.lower() for kw in skip_kw):
                     log.append(f"[M2-EPUB_SPINE]   spine[{idx}] \"{heading}\" — skip keyword match, skipping")
                     continue
 
-                title = heading or f"Section {len(chapters) + 1}"
-                chapters.append((title, body))
-                log.append(f"[M2-EPUB_SPINE]   spine[{idx}] \"{title}\" — {len(body):,} chars OK")
+                headings.append(heading)
+                log.append(f"[M2-EPUB_SPINE]   spine[{idx}] heading: \"{heading}\"")
 
-        log.append(f"[M2-EPUB_SPINE] Extracted {len(chapters)} chapters from EPUB spine")
+        log.append(f"[M2-EPUB_SPINE] Collected {len(headings)} headings from EPUB spine")
+
+        if not headings:
+            log.append("[M2-EPUB_SPINE] No headings found — returning empty")
+            return []
+
+        # Step 2: Use these headings to split the plain text (same logic as epub_toc)
+        log.append("[M2-EPUB_SPINE] Matching headings against plain text...")
+        chapters = self.split_text_by_chapter_titles(text, headings)
+        log.append(f"[M2-EPUB_SPINE] Matched {len(chapters)} of {len(headings)} headings in plain text")
         return chapters
 
     # ---------- Method 3: Regex Heading Detection ---------------------- #

@@ -4797,6 +4797,14 @@ def parse_markdown_to_chapters(markdown_content, existing_chapters):
         # Get content after the header line
         content = section[header_match.end():].strip()
 
+        # Move any </chunk> that falls inside a {display|spoken} annotation
+        # to after the closing brace, so pronunciation markup never gets split
+        content = re.sub(
+            r'(\{[^}]*)</chunk>([^}]*\})',
+            r'\1\2</chunk>',
+            content
+        )
+
         # Parse chunks from content by splitting on </chunk>
         raw_chunks = content.split('</chunk>')
 
