@@ -3910,16 +3910,21 @@ def reparse_chapters():
                         if book_id:
                             break
             if book_id:
-                print(f"[REPARSE] source.epub not cached — downloading EPUB for book {book_id}...")
+                epub_url = processor.get_epub_url(book_id)
+                print(f"[REPARSE] source.epub not cached — downloading from: {epub_url}")
                 epub_bytes = processor.download_epub(book_id)
                 if epub_bytes:
                     with open(epub_cache, 'wb') as ef:
                         ef.write(epub_bytes)
                     print(f"[REPARSE] EPUB downloaded and cached: {len(epub_bytes):,} bytes")
                 else:
-                    print(f"[REPARSE] EPUB download failed for book {book_id}")
+                    print(f"[REPARSE] EPUB download FAILED from: {epub_url}")
             else:
-                print("[REPARSE] No Gutenberg book ID found — cannot auto-download EPUB")
+                print("[REPARSE] No Gutenberg book ID found in project metadata or chapter source_url fields — cannot auto-download EPUB")
+                print(f"[REPARSE] Project metadata keys: {list(converter.current_project_metadata.keys())}")
+                # Show what source_urls exist
+                for i, ch in enumerate(converter.current_project_metadata.get('chapters', [])[:3]):
+                    print(f"[REPARSE]   chapter[{i}] source_url={ch.get('source_url', '(none)')}")
 
         # Run the selected parsing method with verbose logging
         log_lines: list = []
