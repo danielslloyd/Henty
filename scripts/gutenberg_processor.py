@@ -261,8 +261,60 @@ class GutenbergProcessor:
                 return re.search(pattern, text, re.IGNORECASE)
             return None
 
+        def try_split_heading(title: str) -> Optional[re.Match]:
+            """
+            Handle EPUB titles like "Chapter I: The King Maker" where the plain text
+            has the chapter number on one line and the subtitle on the next, e.g.:
+                CHAPTER I.
+                THE KING MAKER
+            Tries to match the chapter-number line and validates the subtitle follows
+            within a few lines.
+            """
+            # Parse "Chapter N: Subtitle" or "Chapter N—Subtitle"
+            m = re.match(
+                r'^((?:chapter|part|section|book|volume)\s+(?:\d+|[ivxlcdmIVXLCDM]+))'
+                r'[\s:.\-—]+(.+)$',
+                title, re.IGNORECASE
+            )
+            if not m:
+                return None
+            prefix, subtitle = m.group(1).strip(), m.group(2).strip()
+            escaped_prefix = re.escape(prefix)
+            escaped_subtitle = re.escape(subtitle)
+            # Match chapter-number line followed within ~5 lines by subtitle
+            pattern = (
+                r'(?m)^[ \t]*' + escaped_prefix + r'[.!?]?[ \t]*\n'
+                r'(?:[ \t]*\n){0,4}'                 # up to 4 blank lines
+                r'[ \t]*' + escaped_subtitle + r'[.!?]?[ \t]*$'
+            )
+            return re.search(pattern, text, re.IGNORECASE)
+
+        def try_subtitle_only(title: str) -> Optional[re.Match]:
+            """
+            For titles that look like 'Chapter I: The King Maker', try matching
+            just the subtitle part as a standalone ALL-CAPS line.
+            Common in G.A. Henty plain texts where subtitle is its own line.
+            """
+            m = re.match(
+                r'^(?:chapter|part|section|book|volume)\s+(?:\d+|[ivxlcdmIVXLCDM]+)'
+                r'[\s:.\-—]+(.+)$',
+                title, re.IGNORECASE
+            )
+            if not m:
+                return None
+            subtitle = m.group(1).strip()
+            # Only try if subtitle is reasonably short (not a whole sentence)
+            if len(subtitle) > 60:
+                return None
+            escaped = re.escape(subtitle)
+            pattern = r'(?m)^[ \t]*' + escaped + r'[.!?]?[ \t]*$'
+            return re.search(pattern, text, re.IGNORECASE)
+
         print(f"\nDEBUG [SPLIT]: Matching {len(chapter_titles)} titles in text ({len(text):,} chars)")
-        print(f"DEBUG [SPLIT]: First 300 chars of plain text: {repr(text[:300])}")
+        # Show first 10 lines of plain text for orientation
+        first_lines = text[:500].split('\n')
+        for i, line in enumerate(first_lines[:10]):
+            print(f"DEBUG [SPLIT]: text line {i}: {repr(line[:80])}")
 
         splits: List[Tuple[int, int, str]] = []
         used_positions: set = set()
@@ -285,6 +337,16 @@ class GutenbergProcessor:
                 if match:
                     strategy = "chapter-prefix"
 
+            if not match:
+                match = try_split_heading(title)
+                if match:
+                    strategy = "split-heading"
+
+            if not match:
+                match = try_subtitle_only(title)
+                if match:
+                    strategy = "subtitle-only"
+
             if match:
                 pos = match.start()
                 snippet = repr(text[max(0, pos-20):pos+60])
@@ -295,15 +357,19 @@ class GutenbergProcessor:
                 else:
                     print(f"DEBUG [SPLIT]: ✗ '{title}' → pos={pos} already claimed (duplicate)")
             else:
-                # Show what a nearby line looks like to help diagnose mismatch
+                # Show nearby lines to diagnose mismatches
                 norm_title = normalize(title)
-                first_word = norm_title.split()[0] if norm_title.split() else ''
-                sample = ''
-                if first_word:
-                    m2 = re.search(r'(?m)^.*' + re.escape(first_word) + r'.*$', text, re.IGNORECASE)
-                    if m2:
-                        sample = f'; nearest line with first word: {repr(m2.group(0)[:80])}'
-                print(f"DEBUG [SPLIT]: ✗ '{title}' → NOT FOUND{sample}")
+                words = norm_title.split()
+                print(f"DEBUG [SPLIT]: ✗ '{title}' → NOT FOUND (tried exact/normalized/prefix/split/subtitle)")
+                # Show up to 3 lines containing the first significant word
+                for word in words[:3]:
+                    if len(word) < 3:
+                        continue
+                    for m2 in list(re.finditer(r'(?m)^.*' + re.escape(word) + r'.*$', text, re.IGNORECASE))[:2]:
+                        ctx_start = max(0, m2.start() - 40)
+                        ctx_end = min(len(text), m2.end() + 40)
+                        print(f"DEBUG [SPLIT]:   near '{word}': {repr(text[ctx_start:ctx_end])}")
+                    break
 
         if not splits:
             print("DEBUG [SPLIT]: 0 titles matched → caller should fall back to detect_chapters()")

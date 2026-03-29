@@ -3825,6 +3825,8 @@ def add_gutenberg_url_to_project():
         # Store/update XML content
         converter.current_project_metadata['content_xml'] = xml_content
         converter.current_project_metadata['original_filename'] = f"{title}.txt"
+        converter.current_project_metadata['gutenberg_book_id'] = book_id
+        converter.current_project_metadata['gutenberg_source_url'] = url
         converter.current_project_metadata['last_modified'] = datetime.now().isoformat()
         converter.current_project_metadata['version'] = '3.0'
 
@@ -3887,14 +3889,37 @@ def reparse_chapters():
         with open(raw_text_file, 'r', encoding='utf-8') as f:
             text = f.read()
 
-        # Try to load cached EPUB
+        processor = GutenbergProcessor(output_dir=converter.current_project_path)
+
+        # Try to load cached EPUB; if missing, auto-download using stored book ID
         epub_cache = os.path.join(converter.current_project_path, 'source.epub')
         epub_bytes = None
         if os.path.exists(epub_cache):
             with open(epub_cache, 'rb') as f:
                 epub_bytes = f.read()
-
-        processor = GutenbergProcessor(output_dir=converter.current_project_path)
+            print(f"[REPARSE] Loaded cached EPUB: {len(epub_bytes):,} bytes")
+        else:
+            # Try to find book ID from project metadata or chapter source URLs
+            book_id = converter.current_project_metadata.get('gutenberg_book_id')
+            if not book_id:
+                # Fall back to scanning chapter source URLs
+                for ch in converter.current_project_metadata.get('chapters', []):
+                    src_url = ch.get('source_url', '')
+                    if src_url:
+                        book_id = processor.get_gutenberg_book_id(src_url)
+                        if book_id:
+                            break
+            if book_id:
+                print(f"[REPARSE] source.epub not cached — downloading EPUB for book {book_id}...")
+                epub_bytes = processor.download_epub(book_id)
+                if epub_bytes:
+                    with open(epub_cache, 'wb') as ef:
+                        ef.write(epub_bytes)
+                    print(f"[REPARSE] EPUB downloaded and cached: {len(epub_bytes):,} bytes")
+                else:
+                    print(f"[REPARSE] EPUB download failed for book {book_id}")
+            else:
+                print("[REPARSE] No Gutenberg book ID found — cannot auto-download EPUB")
 
         # Run the selected parsing method with verbose logging
         log_lines: list = []
