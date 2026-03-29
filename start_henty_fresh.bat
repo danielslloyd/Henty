@@ -1,12 +1,16 @@
 @echo off
-REM Henty Launcher Script for Windows
-REM Checks dependencies (Python, ffmpeg), then starts the server and opens the app
+REM Henty Launcher Script for Windows (Fresh Start)
+REM Kills any running instances, checks dependencies, then starts the server and opens the app
 
 echo.
 echo ================================================
 echo   Henty Audiobook Creation Suite
 echo ================================================
 echo.
+
+REM Kill any previously running Henty server instances
+echo [INFO] Stopping any previously running Henty server...
+taskkill /FI "WINDOWTITLE eq Henty Server*" /T /F 2>nul
 
 REM Check if Python is available
 python --version >nul 2>&1
