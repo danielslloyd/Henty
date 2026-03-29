@@ -104,7 +104,7 @@ class GutenbergProcessor:
             opf_path = None
             try:
                 c = zf.read('META-INF/container.xml').decode('utf-8', errors='replace')
-                rf = BeautifulSoup(c, 'xml').find('rootfile')
+                rf = BeautifulSoup(c, 'html.parser').find('rootfile')
                 if rf:
                     opf_path = rf.get('full-path')
             except Exception as e:
@@ -117,7 +117,7 @@ class GutenbergProcessor:
 
             opf_dir = os.path.dirname(opf_path)
             opf_soup = BeautifulSoup(
-                zf.read(opf_path).decode('utf-8', errors='replace'), 'xml'
+                zf.read(opf_path).decode('utf-8', errors='replace'), 'html.parser'
             )
 
             def abs_path(href: str) -> str:
@@ -176,7 +176,7 @@ class GutenbergProcessor:
                 ncx_path = manifest.get(ncx_item.get('id', ''), {}).get('path', '')
                 try:
                     ncx_soup = BeautifulSoup(
-                        zf.read(ncx_path).decode('utf-8', errors='replace'), 'xml'
+                        zf.read(ncx_path).decode('utf-8', errors='replace'), 'html.parser'
                     )
                     nav_points = ncx_soup.find_all('navPoint')
                     print(f"DEBUG [EPUB]: {len(nav_points)} NCX navPoints")
@@ -486,7 +486,7 @@ class GutenbergProcessor:
             opf_path = None
             try:
                 c = zf.read('META-INF/container.xml').decode('utf-8', errors='replace')
-                rf = BeautifulSoup(c, 'xml').find('rootfile')
+                rf = BeautifulSoup(c, 'html.parser').find('rootfile')
                 if rf:
                     opf_path = rf.get('full-path')
             except Exception:
@@ -497,7 +497,7 @@ class GutenbergProcessor:
                 return []
 
             opf_dir = os.path.dirname(opf_path)
-            opf_soup = BeautifulSoup(zf.read(opf_path).decode('utf-8', errors='replace'), 'xml')
+            opf_soup = BeautifulSoup(zf.read(opf_path).decode('utf-8', errors='replace'), 'html.parser')
 
             def abs_path(href):
                 href = href.split('#')[0]
