@@ -435,7 +435,7 @@ class TTSTab {
                           data-chunk-id="${chunk.id}"
                           onclick="ttsTab.selectChunk(${chunk.id})"
                           onmouseenter="ttsTab.highlightChunk(${chunk.id})"
-                          onmouseleave="ttsTab.unhighlightChunk(${chunk.id})">${chunk.text}</span>`;
+                          onmouseleave="ttsTab.unhighlightChunk(${chunk.id})">${chunk.text.replace(/\{([^|}]+)\|[^}]*\}/g, '$1')}</span>`;
 
             // Add space between chunks
             if (index < chunks.length - 1) {
@@ -462,7 +462,8 @@ class TTSTab {
         let html = '';
 
         const audioList = chunk.generated_audios || [];
-        const chunkPreview = chunk.text.substring(0, 48) + (chunk.text.length > 48 ? '...' : '');
+        const chunkDisplayText = chunk.text.replace(/\{([^|}]+)\|[^}]*\}/g, '$1');
+        const chunkPreview = chunkDisplayText.substring(0, 48) + (chunkDisplayText.length > 48 ? '...' : '');
         const chunkPreviewId = `chunk_preview_${chunk.id}`;
 
         if (audioList.length > 0) {

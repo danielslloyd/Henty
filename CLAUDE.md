@@ -49,6 +49,25 @@ The verbose log is displayed in a collapsible panel in the UI (color-coded by st
 - `server.py` — Flask backend, all API endpoints, `TextToAudioConverter` class
 - `scripts/gutenberg_processor.py` — `GutenbergProcessor` with EPUB/text parsing
 
+### Pronunciation Markup — `{display|spoken}`
+Inline annotations for TTS pronunciation overrides. The display text is shown to the reader; the spoken text is sent to the TTS engine.
+
+**Syntax:** `{display_text|spoken_text}`
+
+**Examples:**
+```
+{Beauchamp|BEE-chum}
+{St.|Saint}
+{Leicestershire|Lester-sher}
+```
+
+**Pipeline:**
+- **Editor** (`gutenberg_tab.js`): In markup view, `{display|spoken}` highlighted with purple background. Clean View toggle strips annotations to show display text only. "+ Pronunciation" toolbar button inserts template at cursor.
+- **Server** (`server.py`): `process_pronunciation_markup()` replaces `{display|spoken}` → spoken text before TTS generation. Called at all TTS generation points.
+- **Reader** (`reader_tab.js`): `processChunkText()` strips `{display|spoken}` → display text for reader view.
+- **TTS tab** (`tts_tab.js`): Chunk previews strip markup to show display text.
+- **Storage**: Full markup stored in `project.json` chunk text. Clean view is purely client-side rendering.
+
 ## Development Notes
 - No build system; edit files directly
 - The EPUB is cached as `source.epub` in the project directory for re-parsing

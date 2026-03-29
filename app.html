@@ -1494,6 +1494,10 @@
                     <button class="xml-btn" onclick="gutenbergTab.insertChapterBreak()">+ Chapter</button>
                     <button class="xml-btn" onclick="gutenbergTab.insertChunkBreak()">+ Chunk Break</button>
                     <button class="xml-btn" onclick="gutenbergTab.insertPause()">+ Pause</button>
+                    <button class="xml-btn" onclick="gutenbergTab.insertPronunciation()" style="background:#7c3aed;color:white;" title="Insert {display|spoken} pronunciation override">+ Pronunciation</button>
+                    <span style="margin-left: auto;">
+                        <button class="xml-btn" id="cleanViewToggle" onclick="gutenbergTab.toggleCleanView()" title="Toggle between clean text and markup view">Clean View</button>
+                    </span>
                 </div>
                 <div class="xml-editor" id="pseudoXmlEditor" contenteditable="true" spellcheck="false" data-placeholder="Load or process text to see markdown structure..."></div>
             </div>

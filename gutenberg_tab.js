@@ -19,6 +19,7 @@ class GutenbergTab {
         this.chapters = [];
         this.defaultGutenbergUrl = '';
         this.parsingMethods = {};
+        this.cleanViewActive = false;
     }
 
     async init() {
@@ -110,22 +111,36 @@ class GutenbergTab {
     displayMarkdown() {
         const editor = document.getElementById('pseudoXmlEditor');
 
-        console.log('[DISPLAY MARKDOWN] Called');
-        console.log('[DISPLAY MARKDOWN] markdownContent length:', this.markdownContent.length);
-
         if (!this.markdownContent) {
             editor.innerHTML = '<div class="xml-empty-state">No content. Load a Project Gutenberg text or upload a file to begin.</div>';
             return;
         }
 
-        // For markdown, we display as plain text (no HTML escaping needed in contenteditable)
-        // But we do need to escape for innerHTML
-        const escaped = this.markdownContent
-            .replace(/&/g, '&amp;')
-            .replace(/</g, '&lt;')
-            .replace(/>/g, '&gt;');
+        if (this.cleanViewActive) {
+            // Clean view: strip {display|spoken} → display text only
+            const cleanText = this.markdownContent.replace(/\{([^|}]+)\|[^}]*\}/g, '$1');
+            const escaped = cleanText
+                .replace(/&/g, '&amp;')
+                .replace(/</g, '&lt;')
+                .replace(/>/g, '&gt;');
+            editor.innerHTML = escaped;
+            editor.contentEditable = 'false';
+        } else {
+            // Markup view: highlight {display|spoken} patterns with color
+            let escaped = this.markdownContent
+                .replace(/&/g, '&amp;')
+                .replace(/</g, '&lt;')
+                .replace(/>/g, '&gt;');
 
-        editor.innerHTML = escaped;
+            // Highlight pronunciation markup: {display|spoken}
+            escaped = escaped.replace(
+                /\{([^|}]+)\|([^}]*)\}/g,
+                '<span style="background:#ddd6fe;border-radius:3px;padding:0 2px">{$1|<span style="color:#7c3aed;font-weight:600">$2</span>}</span>'
+            );
+
+            editor.innerHTML = escaped;
+            editor.contentEditable = 'true';
+        }
     }
 
     /**
@@ -264,6 +279,49 @@ class GutenbergTab {
         const insertText = '\n\n[pause:1.0]\n\n</chunk>\n\n';
         document.execCommand('insertText', false, insertText);
         editor.focus();
+    }
+
+    // Insert a pronunciation override at cursor: {display|spoken}
+    insertPronunciation() {
+        if (this.cleanViewActive) {
+            showToast('Switch to Markup View to insert pronunciation markers', 'error');
+            return;
+        }
+        const editor = document.getElementById('pseudoXmlEditor');
+        // Get selected text to pre-fill the display portion
+        const selection = window.getSelection();
+        const selectedText = selection.toString();
+        if (selectedText) {
+            // Replace selection with markup template
+            document.execCommand('insertText', false, `{${selectedText}|}`);
+        } else {
+            document.execCommand('insertText', false, '{|}');
+        }
+        editor.focus();
+    }
+
+    // Toggle between clean view (annotations hidden) and markup view
+    toggleCleanView() {
+        const editor = document.getElementById('pseudoXmlEditor');
+        const btn = document.getElementById('cleanViewToggle');
+
+        if (!this.cleanViewActive) {
+            // Switching TO clean view: save current editor content first
+            this.markdownContent = editor.textContent || editor.innerText;
+            this.cleanViewActive = true;
+            if (btn) {
+                btn.textContent = 'Markup View';
+                btn.style.background = '#7c3aed';
+            }
+        } else {
+            // Switching back TO markup view: restore full markup
+            this.cleanViewActive = false;
+            if (btn) {
+                btn.textContent = 'Clean View';
+                btn.style.background = '';
+            }
+        }
+        this.displayMarkdown();
     }
 
     async validateChunks() {

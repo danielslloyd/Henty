@@ -21,6 +21,9 @@ class ReaderTab {
 
         let processed = text;
 
+        // Strip pronunciation markup: {display|spoken} → display text only
+        processed = processed.replace(/\{([^|}]+)\|[^}]*\}/g, '$1');
+
         // Handle legacy <p> tags if present
         if (processed.includes('<p>') || processed.includes('</p>')) {
             processed = processed.replace(/<\/p>/gi, '\n\n');

@@ -818,6 +818,23 @@ class TextToAudioConverter:
         cleaned = re.sub(r'<[^>]+>', '', text)
         return cleaned
 
+    def process_pronunciation_markup(self, text):
+        """Replace {display|spoken} pronunciation markup with the spoken form for TTS.
+        If no pipe is present inside braces, returns the text unchanged.
+        """
+        def replacer(m):
+            parts = m.group(1).split('|', 1)
+            if len(parts) == 2:
+                return parts[1]  # spoken form
+            return m.group(0)    # no pipe = not a pronunciation marker, leave as-is
+        return re.sub(r'\{([^}]+)\}', replacer, text)
+
+    def extract_display_text(self, text):
+        """Replace {display|spoken} pronunciation markup with just the display form.
+        Used for reader display and clean editor view.
+        """
+        return re.sub(r'\{([^|}]+)\|[^}]*\}', r'\1', text)
+
     def text_to_xml_content(self, text, chapters=None):
         """
         Convert text (with optional detected chapters) to XML-embedded-in-JSON format.
@@ -2687,9 +2704,14 @@ def generate_project_chunk_audio():
         audio_filename = f"chunk{chunk_id}_{timestamp}.wav"
         audio_path = os.path.join(converter.audio_dir, audio_filename)
 
+        # Process pronunciation markup: {display|spoken} → spoken form for TTS
+        tts_text = converter.process_pronunciation_markup(chunk_text)
+        if tts_text != chunk_text:
+            print(f"[TTS] Pronunciation markup applied: {len(chunk_text)} → {len(tts_text)} chars")
+
         # Generate the audio (returns dict with path and duration)
         generation_result = converter.generate_audio(
-            text=chunk_text,
+            text=tts_text,
             output_path=audio_path,
             audio_prompt_path=audio_prompt_path,
             language_id=language_id,
@@ -3334,9 +3356,10 @@ def generate_chunk():
         print(f"Chunk text length: {len(chunk_text)} characters")
         print(f"Parameters - Language: {language_id}, Exaggeration: {exaggeration}, CFG Weight: {cfg_weight}")
 
-        # Strip XML tags from chunk text before TTS processing
-        clean_text = converter.strip_xml_tags(chunk_text)
-        print(f"Clean text length (after stripping XML tags): {len(clean_text)} characters")
+        # Process pronunciation markup and strip XML tags before TTS processing
+        clean_text = converter.process_pronunciation_markup(chunk_text)
+        clean_text = converter.strip_xml_tags(clean_text)
+        print(f"Clean text length (after pronunciation + XML strip): {len(clean_text)} characters")
 
         # Generate audio filename with timestamp and chunk ID
         base_name = os.path.splitext(os.path.basename(filename))[0]
@@ -3978,8 +4001,9 @@ def generate_all_chapter_chunks():
                 continue
 
             try:
-                # Strip XML tags from chunk text
-                clean_text = converter.strip_xml_tags(chunk['text'])
+                # Process pronunciation markup and strip XML tags
+                clean_text = converter.process_pronunciation_markup(chunk['text'])
+                clean_text = converter.strip_xml_tags(clean_text)
 
                 # Generate filename
                 timestamp = int(time.time() * 1000)
