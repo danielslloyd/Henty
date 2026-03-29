@@ -262,6 +262,7 @@ class GutenbergProcessor:
             return None
 
         print(f"\nDEBUG [SPLIT]: Matching {len(chapter_titles)} titles in text ({len(text):,} chars)")
+        print(f"DEBUG [SPLIT]: First 300 chars of plain text: {repr(text[:300])}")
 
         splits: List[Tuple[int, int, str]] = []
         used_positions: set = set()
@@ -286,14 +287,23 @@ class GutenbergProcessor:
 
             if match:
                 pos = match.start()
+                snippet = repr(text[max(0, pos-20):pos+60])
                 if pos not in used_positions:
                     used_positions.add(pos)
                     splits.append((pos, match.end(), title))
-                    print(f"DEBUG [SPLIT]: ✓ '{title}' → {strategy}, pos={pos}")
+                    print(f"DEBUG [SPLIT]: ✓ '{title}' → {strategy}, pos={pos}, text={snippet}")
                 else:
                     print(f"DEBUG [SPLIT]: ✗ '{title}' → pos={pos} already claimed (duplicate)")
             else:
-                print(f"DEBUG [SPLIT]: ✗ '{title}' → NOT FOUND in plain text")
+                # Show what a nearby line looks like to help diagnose mismatch
+                norm_title = normalize(title)
+                first_word = norm_title.split()[0] if norm_title.split() else ''
+                sample = ''
+                if first_word:
+                    m2 = re.search(r'(?m)^.*' + re.escape(first_word) + r'.*$', text, re.IGNORECASE)
+                    if m2:
+                        sample = f'; nearest line with first word: {repr(m2.group(0)[:80])}'
+                print(f"DEBUG [SPLIT]: ✗ '{title}' → NOT FOUND{sample}")
 
         if not splits:
             print("DEBUG [SPLIT]: 0 titles matched → caller should fall back to detect_chapters()")

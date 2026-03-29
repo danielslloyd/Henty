@@ -367,9 +367,49 @@ class TTSTab {
         }
     }
 
-    updateProjectDefault(key, value) {
+    async updateProjectDefault(key, value) {
         this.projectDefaults[key] = value;
         console.log('[TTS TAB] Updated project default:', key, '=', value);
+
+        // Update all visible per-chunk DOM controls for this setting
+        if (key === 'exaggeration') {
+            document.querySelectorAll('[id^="exaggeration_chunk_"]').forEach(el => {
+                el.value = value;
+                const chunkId = el.id.replace('exaggeration_chunk_', '');
+                const span = document.getElementById(`exag_val_chunk_preview_${chunkId}`);
+                if (span) span.textContent = value;
+            });
+        } else if (key === 'cfg_weight') {
+            document.querySelectorAll('[id^="cfg_weight_chunk_"]').forEach(el => {
+                el.value = value;
+                const chunkId = el.id.replace('cfg_weight_chunk_', '');
+                const span = document.getElementById(`cfg_val_chunk_preview_${chunkId}`);
+                if (span) span.textContent = value;
+            });
+        } else if (key === 'voice_sample') {
+            document.querySelectorAll('[id^="voice_chunk_"]').forEach(el => {
+                el.value = value;
+            });
+        }
+
+        // Persist to server
+        try {
+            const resp = await fetch(`${SERVER_URL}/api/project/update-defaults`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', 'X-API-Key': API_KEY },
+                body: JSON.stringify({
+                    exaggeration: this.projectDefaults.exaggeration,
+                    cfg_weight: this.projectDefaults.cfg_weight,
+                    voice_sample: this.projectDefaults.voice_sample,
+                    temperature: this.projectDefaults.temperature,
+                    seed: this.projectDefaults.seed || 0,
+                    ref_vad_trimming: this.projectDefaults.ref_vad_trimming || false
+                })
+            });
+            if (!resp.ok) console.warn('[TTS TAB] Failed to persist project default:', key);
+        } catch (e) {
+            console.warn('[TTS TAB] Error persisting project default:', e);
+        }
     }
 
     renderChunkBubbles() {
@@ -1502,7 +1542,8 @@ class TTSTab {
                 this.showStitchedAudioModal(result);
                 this.showStatus('Stitching complete!', 'success');
             } else {
-                throw new Error('Failed to stitch audio');
+                const errBody = await response.json().catch(() => ({}));
+                throw new Error(errBody.error || `Server error ${response.status}`);
             }
         } catch (error) {
             console.error('Error stitching:', error);
@@ -1815,7 +1856,7 @@ class TTSTab {
                     <span class="transcription-text" title="${escaped}">${escaped}</span>`;
             }
 
-            // Persist in local chapter data and update diff panel
+            // Persist in local chapter data then re-render the chunk row
             const chunk = this.currentChapter.chunks.find(c => c.id === chunkId);
             if (chunk) {
                 const entry = (chunk.generated_audios || []).find(a => a.audio_file === audioFile);
@@ -1823,50 +1864,38 @@ class TTSTab {
                     entry.transcription = data.transcription;
                     entry.similarity_score = score;
                     entry.input_text = entry.input_text || chunkText;
-
-                    // Find the diff panel for this take and populate it
-                    // The takeId pattern is take_<chunkId>_<index>; find by data-diff-for pointing to a div near the transcription bar
-                    const barEl = document.getElementById(rowId);
-                    if (barEl) {
-                        // The diff panel sibling immediately follows the transcription bar wrapper
-                        const diffEl = barEl.nextElementSibling;
-                        if (diffEl && diffEl.classList.contains('take-diff')) {
-                            diffEl.innerHTML = this.renderDiffPanel(entry);
-                            // Enable the speaker_notes button for this take
-                            const diffPanelId = diffEl.id;
-                            const btn = document.querySelector(`[data-diff-for="${diffPanelId}"]`);
-                            if (btn) btn.removeAttribute('disabled');
-                        }
-                    }
+                }
+                // Re-render the whole chunk row so score badge + diff panel are current
+                const oldRows = document.querySelectorAll(`.chunk-take-row[data-chunk-id="${chunkId}"]`);
+                if (oldRows.length > 0) {
+                    const tempContainer = document.createElement('div');
+                    tempContainer.innerHTML = this.renderSingleChunk(chunk, 0);
+                    const newRows = tempContainer.querySelectorAll(`.chunk-take-row[data-chunk-id="${chunkId}"]`);
+                    const parent = oldRows[0].parentNode;
+                    newRows.forEach(newRow => parent.insertBefore(newRow, oldRows[0]));
+                    oldRows.forEach(row => row.remove());
                 }
             }
         } catch (err) {
             console.error('[TTS TAB] Transcription failed:', err);
             const errMsg = err.message || 'Transcription failed';
 
-            // Show error badge in the bar
-            const barEl = document.getElementById(rowId);
-            if (barEl) {
-                barEl.className = 'take-transcription';
-                barEl.innerHTML = `<span class="score-badge score-low">ERR</span>
-                    <span class="transcription-text" style="color:#dc2626">${errMsg}</span>`;
-
-                // Populate diff panel with original text + error message side by side
-                const diffEl = barEl.nextElementSibling;
-                if (diffEl && diffEl.classList.contains('take-diff')) {
-                    const orig = chunkText.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
-                    diffEl.innerHTML = `<div class="diff-panel-header">
-                        <span class="diff-col-label">Original</span>
-                        <span class="diff-divider"></span>
-                        <span class="diff-col-label">Transcription Error <span class="score-badge score-low">ERR</span></span>
-                    </div>
-                    <div class="diff-cols">
-                        <div class="diff-col diff-original">${orig}</div>
-                        <div class="diff-col diff-transcription" style="color:#dc2626;font-style:italic">${errMsg}</div>
-                    </div>`;
-                    const diffPanelId = diffEl.id;
-                    const btn = document.querySelector(`[data-diff-for="${diffPanelId}"]`);
-                    if (btn) btn.removeAttribute('disabled');
+            // Store error on take entry and re-render the chunk row
+            const errChunk = this.currentChapter?.chunks.find(c => c.id === chunkId);
+            if (errChunk) {
+                const errEntry = (errChunk.generated_audios || []).find(a => a.audio_file === audioFile);
+                if (errEntry) {
+                    errEntry.transcription_error = errMsg;
+                    errEntry.similarity_score = undefined;
+                }
+                const oldRows = document.querySelectorAll(`.chunk-take-row[data-chunk-id="${chunkId}"]`);
+                if (oldRows.length > 0) {
+                    const tempContainer = document.createElement('div');
+                    tempContainer.innerHTML = this.renderSingleChunk(errChunk, 0);
+                    const newRows = tempContainer.querySelectorAll(`.chunk-take-row[data-chunk-id="${chunkId}"]`);
+                    const parent = oldRows[0].parentNode;
+                    newRows.forEach(newRow => parent.insertBefore(newRow, oldRows[0]));
+                    oldRows.forEach(row => row.remove());
                 }
             }
         }
