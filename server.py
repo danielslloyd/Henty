@@ -818,6 +818,23 @@ class TextToAudioConverter:
         cleaned = re.sub(r'<[^>]+>', '', text)
         return cleaned
 
+    def process_pronunciation_markup(self, text):
+        """Replace {display|spoken} pronunciation markup with the spoken form for TTS.
+        If no pipe is present inside braces, returns the text unchanged.
+        """
+        def replacer(m):
+            parts = m.group(1).split('|', 1)
+            if len(parts) == 2:
+                return parts[1]  # spoken form
+            return m.group(0)    # no pipe = not a pronunciation marker, leave as-is
+        return re.sub(r'\{([^}]+)\}', replacer, text)
+
+    def extract_display_text(self, text):
+        """Replace {display|spoken} pronunciation markup with just the display form.
+        Used for reader display and clean editor view.
+        """
+        return re.sub(r'\{([^|}]+)\|[^}]*\}', r'\1', text)
+
     def text_to_xml_content(self, text, chapters=None):
         """
         Convert text (with optional detected chapters) to XML-embedded-in-JSON format.
@@ -2687,9 +2704,14 @@ def generate_project_chunk_audio():
         audio_filename = f"chunk{chunk_id}_{timestamp}.wav"
         audio_path = os.path.join(converter.audio_dir, audio_filename)
 
+        # Process pronunciation markup: {display|spoken} → spoken form for TTS
+        tts_text = converter.process_pronunciation_markup(chunk_text)
+        if tts_text != chunk_text:
+            print(f"[TTS] Pronunciation markup applied: {len(chunk_text)} → {len(tts_text)} chars")
+
         # Generate the audio (returns dict with path and duration)
         generation_result = converter.generate_audio(
-            text=chunk_text,
+            text=tts_text,
             output_path=audio_path,
             audio_prompt_path=audio_prompt_path,
             language_id=language_id,
@@ -3361,9 +3383,10 @@ def generate_chunk():
         print(f"Chunk text length: {len(chunk_text)} characters")
         print(f"Parameters - Language: {language_id}, Exaggeration: {exaggeration}, CFG Weight: {cfg_weight}")
 
-        # Strip XML tags from chunk text before TTS processing
-        clean_text = converter.strip_xml_tags(chunk_text)
-        print(f"Clean text length (after stripping XML tags): {len(clean_text)} characters")
+        # Process pronunciation markup and strip XML tags before TTS processing
+        clean_text = converter.process_pronunciation_markup(chunk_text)
+        clean_text = converter.strip_xml_tags(clean_text)
+        print(f"Clean text length (after pronunciation + XML strip): {len(clean_text)} characters")
 
         # Generate audio filename with timestamp and chunk ID
         base_name = os.path.splitext(os.path.basename(filename))[0]
@@ -3722,6 +3745,11 @@ def add_gutenberg_url_to_project():
         print(f"DEBUG [A] Downloading EPUB for book {book_id}")
         epub_bytes = processor.download_epub(book_id)
         if epub_bytes:
+            # Cache the EPUB so reparse-chapters can reuse it
+            epub_cache = os.path.join(converter.current_project_path, 'source.epub')
+            with open(epub_cache, 'wb') as ef:
+                ef.write(epub_bytes)
+            print(f"DEBUG [A] EPUB cached to {epub_cache}")
             debug_info['epub_downloaded'] = True
             debug_info['epub_bytes'] = len(epub_bytes)
             print(f"DEBUG [A] EPUB downloaded: {len(epub_bytes):,} bytes")
@@ -3823,6 +3851,121 @@ def add_gutenberg_url_to_project():
         print(traceback.format_exc())
         return jsonify({'error': str(e)}), 500
 
+
+@app.route('/api/project/parsing-methods', methods=['GET'])
+@auth_manager.require_api_key
+def list_parsing_methods():
+    """Return the available chapter-parsing methods and their descriptions."""
+    from scripts.gutenberg_processor import GutenbergProcessor
+    return jsonify({'methods': GutenbergProcessor.PARSING_METHODS})
+
+
+@app.route('/api/project/reparse-chapters', methods=['POST'])
+@auth_manager.require_api_key
+def reparse_chapters():
+    """Re-parse chapters from the stored raw text + cached EPUB using a chosen method.
+
+    Expects JSON: { "method": "<method_key>" }
+    Returns the new chapter list and verbose log lines.
+    """
+    try:
+        import json
+        from datetime import datetime
+        import uuid
+
+        if converter.current_project_path is None:
+            return jsonify({'error': 'No project loaded'}), 400
+
+        data = request.json
+        method = data.get('method', 'epub_toc')
+
+        # Load stored raw text
+        raw_text_file = os.path.join(converter.current_project_path, 'raw_text.txt')
+        if not os.path.exists(raw_text_file):
+            return jsonify({'error': 'No raw text found. Load a Gutenberg text first.'}), 400
+
+        with open(raw_text_file, 'r', encoding='utf-8') as f:
+            text = f.read()
+
+        # Try to load cached EPUB
+        epub_cache = os.path.join(converter.current_project_path, 'source.epub')
+        epub_bytes = None
+        if os.path.exists(epub_cache):
+            with open(epub_cache, 'rb') as f:
+                epub_bytes = f.read()
+
+        processor = GutenbergProcessor(output_dir=converter.current_project_path)
+
+        # Run the selected parsing method with verbose logging
+        log_lines: list = []
+        parsed = processor.parse_chapters(text, epub_bytes, method, log=log_lines)
+
+        # Print log to server console too
+        for line in log_lines:
+            print(line)
+
+        if not parsed:
+            log_lines.append(f"[REPARSE] Method '{method}' returned 0 chapters")
+            return jsonify({
+                'success': False,
+                'error': f"Method '{method}' produced no chapters. Try a different method.",
+                'log': log_lines,
+                'chapters': [],
+            })
+
+        # Build chapter structures
+        new_chapters = []
+        for i, (ch_title, ch_text) in enumerate(parsed):
+            chunks = converter.smart_chunk_text(ch_text)
+            for chunk in chunks:
+                chunk['dirty'] = False
+                chunk['generated_audios'] = []
+
+            chapter_entry = {
+                'id': str(uuid.uuid4()),
+                'title': ch_title or f"Chapter {i + 1}",
+                'order': i,
+                'chunks': chunks,
+                'audio_output': None,
+                'added_at': datetime.now().isoformat(),
+                'source': f'gutenberg_{method}',
+            }
+            new_chapters.append(chapter_entry)
+
+        # Replace chapters in project metadata
+        converter.current_project_metadata['chapters'] = new_chapters
+
+        # Regenerate XML
+        xml_content = converter.text_to_xml_content(text, [
+            {'id': ch['id'], 'title': ch['title'], 'text': ch_text, 'order': ch['order'],
+             'non_voiced': False}
+            for ch, (_, ch_text) in zip(new_chapters, parsed)
+        ])
+        converter.current_project_metadata['content_xml'] = xml_content
+        converter.current_project_metadata['last_modified'] = datetime.now().isoformat()
+
+        # Save
+        project_file = os.path.join(converter.current_project_path, 'project.json')
+        with open(project_file, 'w', encoding='utf-8') as f:
+            json.dump(converter.current_project_metadata, f, indent=2, ensure_ascii=False)
+
+        log_lines.append(f"[REPARSE] Saved {len(new_chapters)} chapters (method={method})")
+
+        return jsonify({
+            'success': True,
+            'method': method,
+            'chapter_count': len(new_chapters),
+            'chapters': new_chapters,
+            'log': log_lines,
+        })
+
+    except Exception as e:
+        import traceback
+        print(f"Error reparsing chapters: {str(e)}")
+        print(traceback.format_exc())
+        return jsonify({'error': str(e), 'log': [f"[REPARSE] EXCEPTION: {str(e)}"]}), 500
+
+
 @app.route('/api/project/chapter/generate-all', methods=['POST'])
 @auth_manager.require_api_key
 def generate_all_chapter_chunks():
@@ -3885,8 +4028,9 @@ def generate_all_chapter_chunks():
                 continue
 
             try:
-                # Strip XML tags from chunk text
-                clean_text = converter.strip_xml_tags(chunk['text'])
+                # Process pronunciation markup and strip XML tags
+                clean_text = converter.process_pronunciation_markup(chunk['text'])
+                clean_text = converter.strip_xml_tags(clean_text)
 
                 # Generate filename
                 timestamp = int(time.time() * 1000)

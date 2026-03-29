@@ -18,6 +18,8 @@ class GutenbergTab {
         this.markdownContent = '';
         this.chapters = [];
         this.defaultGutenbergUrl = '';
+        this.parsingMethods = {};
+        this.cleanViewActive = false;
     }
 
     async init() {
@@ -27,6 +29,8 @@ class GutenbergTab {
         await this.loadRawText();
         // Load markdown content from project
         await this.loadMarkdown();
+        // Initialize parsing method selector
+        await this.initParsingMethods();
     }
 
     async loadDefaultUrl() {
@@ -107,22 +111,36 @@ class GutenbergTab {
     displayMarkdown() {
         const editor = document.getElementById('pseudoXmlEditor');
 
-        console.log('[DISPLAY MARKDOWN] Called');
-        console.log('[DISPLAY MARKDOWN] markdownContent length:', this.markdownContent.length);
-
         if (!this.markdownContent) {
             editor.innerHTML = '<div class="xml-empty-state">No content. Load a Project Gutenberg text or upload a file to begin.</div>';
             return;
         }
 
-        // For markdown, we display as plain text (no HTML escaping needed in contenteditable)
-        // But we do need to escape for innerHTML
-        const escaped = this.markdownContent
-            .replace(/&/g, '&amp;')
-            .replace(/</g, '&lt;')
-            .replace(/>/g, '&gt;');
+        if (this.cleanViewActive) {
+            // Clean view: strip {display|spoken} → display text only
+            const cleanText = this.markdownContent.replace(/\{([^|}]+)\|[^}]*\}/g, '$1');
+            const escaped = cleanText
+                .replace(/&/g, '&amp;')
+                .replace(/</g, '&lt;')
+                .replace(/>/g, '&gt;');
+            editor.innerHTML = escaped;
+            editor.contentEditable = 'false';
+        } else {
+            // Markup view: highlight {display|spoken} patterns with color
+            let escaped = this.markdownContent
+                .replace(/&/g, '&amp;')
+                .replace(/</g, '&lt;')
+                .replace(/>/g, '&gt;');
 
-        editor.innerHTML = escaped;
+            // Highlight pronunciation markup: {display|spoken}
+            escaped = escaped.replace(
+                /\{([^|}]+)\|([^}]*)\}/g,
+                '<span style="background:#ddd6fe;border-radius:3px;padding:0 2px">{$1|<span style="color:#7c3aed;font-weight:600">$2</span>}</span>'
+            );
+
+            editor.innerHTML = escaped;
+            editor.contentEditable = 'true';
+        }
     }
 
     /**
@@ -263,6 +281,49 @@ class GutenbergTab {
         editor.focus();
     }
 
+    // Insert a pronunciation override at cursor: {display|spoken}
+    insertPronunciation() {
+        if (this.cleanViewActive) {
+            showToast('Switch to Markup View to insert pronunciation markers', 'error');
+            return;
+        }
+        const editor = document.getElementById('pseudoXmlEditor');
+        // Get selected text to pre-fill the display portion
+        const selection = window.getSelection();
+        const selectedText = selection.toString();
+        if (selectedText) {
+            // Replace selection with markup template
+            document.execCommand('insertText', false, `{${selectedText}|}`);
+        } else {
+            document.execCommand('insertText', false, '{|}');
+        }
+        editor.focus();
+    }
+
+    // Toggle between clean view (annotations hidden) and markup view
+    toggleCleanView() {
+        const editor = document.getElementById('pseudoXmlEditor');
+        const btn = document.getElementById('cleanViewToggle');
+
+        if (!this.cleanViewActive) {
+            // Switching TO clean view: save current editor content first
+            this.markdownContent = editor.textContent || editor.innerText;
+            this.cleanViewActive = true;
+            if (btn) {
+                btn.textContent = 'Markup View';
+                btn.style.background = '#7c3aed';
+            }
+        } else {
+            // Switching back TO markup view: restore full markup
+            this.cleanViewActive = false;
+            if (btn) {
+                btn.textContent = 'Clean View';
+                btn.style.background = '';
+            }
+        }
+        this.displayMarkdown();
+    }
+
     async validateChunks() {
         try {
             const response = await fetch(`${SERVER_URL}/api/project/validate-chunks`, {
@@ -342,21 +403,36 @@ class GutenbergTab {
                 console.log('[GUTENBERG] Success! Result:', result);
                 console.log('[GUTENBERG] Chapters received:', result.chapters?.length || 0);
 
+                // Show debug info in parse log
+                if (result.debug) {
+                    const d = result.debug;
+                    const logLines = [
+                        `[LOAD] Book ID: ${d.book_id}`,
+                        `[LOAD] Plain text URL: ${d.txt_url}`,
+                        `[LOAD] Plain text: ${d.txt_chars?.toLocaleString()} chars`,
+                        `[LOAD] EPUB downloaded: ${d.epub_downloaded} (${d.epub_bytes?.toLocaleString()} bytes)`,
+                        `[LOAD] EPUB titles found: ${d.epub_titles?.length || 0}`,
+                    ];
+                    if (d.epub_titles?.length) {
+                        d.epub_titles.forEach((t, i) => logLines.push(`[LOAD]   title[${i}]: "${t}"`));
+                    }
+                    logLines.push(`[LOAD] Titles matched in text: ${d.epub_titles_matched || 0}`);
+                    logLines.push(`[LOAD] Chapter source: ${d.chapter_source || 'unknown'}`);
+                    logLines.push(`[LOAD] Final chapters: ${d.final_chapter_count || result.chapters?.length || 0}`);
+                    if (d.epub_error) {
+                        logLines.push(`[LOAD] EPUB error: ${d.epub_error}`);
+                    }
+                    logLines.push(`[LOAD] Use "Re-Parse Chapters" with different methods to try alternative parsing.`);
+                    this.appendToLog(logLines);
+                }
+
                 // Reload both raw text and markdown
-                console.log('[GUTENBERG] Reloading raw text...');
                 await this.loadRawText();
-                console.log('[GUTENBERG] Raw text loaded. Length:', this.rawText.length);
-
-                console.log('[GUTENBERG] Reloading markdown...');
                 await this.loadMarkdown();
-                console.log('[GUTENBERG] Markdown loaded. Count:', this.chapters.length);
-
-                console.log('[GUTENBERG] Displaying content...');
                 this.displayRawText();
                 this.displayMarkdown();
-                console.log('[GUTENBERG] Complete!');
 
-                alert(`Successfully loaded! ${result.chapters?.length || 0} chapters created.`);
+                showToast(`Loaded! ${result.chapters?.length || 0} chapters created. Try different parsing methods if needed.`, 'success');
             } else {
                 const error = await response.json();
                 throw new Error(error.error || 'Failed to load Gutenberg text');
@@ -468,6 +544,153 @@ class GutenbergTab {
         } catch (error) {
             console.error('Error processing text:', error);
             alert('Error processing text: ' + error.message);
+        }
+    }
+
+    // ----------------------------------------------------------------
+    // Chapter Parsing Method Selector & Verbose Log
+    // ----------------------------------------------------------------
+
+    async initParsingMethods() {
+        // Load method descriptions from server
+        try {
+            const response = await fetch(`${SERVER_URL}/api/project/parsing-methods`, {
+                headers: { 'X-API-Key': API_KEY }
+            });
+            if (response.ok) {
+                const data = await response.json();
+                this.parsingMethods = data.methods || {};
+                console.log('[GUTENBERG] Parsing methods loaded:', Object.keys(this.parsingMethods));
+                this.updateMethodDescription();
+            }
+        } catch (error) {
+            console.error('[GUTENBERG] Error loading parsing methods:', error);
+        }
+
+        // Listen for dropdown changes
+        const select = document.getElementById('parsingMethodSelect');
+        if (select) {
+            select.addEventListener('change', () => this.updateMethodDescription());
+        }
+    }
+
+    updateMethodDescription() {
+        const select = document.getElementById('parsingMethodSelect');
+        const descDiv = document.getElementById('parsingMethodDesc');
+        if (!select || !descDiv) return;
+
+        const method = select.value;
+        const desc = this.parsingMethods?.[method] || '';
+        descDiv.textContent = desc;
+    }
+
+    toggleParseLog() {
+        const panel = document.getElementById('parseLogPanel');
+        const btn = document.getElementById('toggleLogBtn');
+        if (!panel) return;
+
+        if (panel.style.display === 'none') {
+            panel.style.display = 'block';
+            if (btn) btn.textContent = 'Hide Log';
+        } else {
+            panel.style.display = 'none';
+            if (btn) btn.textContent = 'Show Log';
+        }
+    }
+
+    appendToLog(lines) {
+        const logContent = document.getElementById('parseLogContent');
+        if (!logContent) return;
+
+        // Color-code log lines
+        const colored = lines.map(line => {
+            if (line.includes('ERROR') || line.includes('EXCEPTION')) {
+                return `<span style="color: #f38ba8;">${this.escapeHtml(line)}</span>`;
+            } else if (line.includes('✓') || line.includes('OK')) {
+                return `<span style="color: #a6e3a1;">${this.escapeHtml(line)}</span>`;
+            } else if (line.includes('✗') || line.includes('NOT FOUND')) {
+                return `<span style="color: #fab387;">${this.escapeHtml(line)}</span>`;
+            } else if (line.includes('[PARSE]')) {
+                return `<span style="color: #89b4fa;">${this.escapeHtml(line)}</span>`;
+            } else {
+                return this.escapeHtml(line);
+            }
+        }).join('\n');
+
+        logContent.innerHTML = colored;
+
+        // Auto-show log panel
+        const panel = document.getElementById('parseLogPanel');
+        const btn = document.getElementById('toggleLogBtn');
+        if (panel) panel.style.display = 'block';
+        if (btn) btn.textContent = 'Hide Log';
+
+        // Scroll to bottom
+        if (panel) panel.scrollTop = panel.scrollHeight;
+    }
+
+    escapeHtml(text) {
+        return text.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+    }
+
+    async reparseChapters() {
+        const select = document.getElementById('parsingMethodSelect');
+        if (!select) return;
+
+        const method = select.value;
+        console.log(`[GUTENBERG] Re-parsing chapters with method: ${method}`);
+
+        // Show loading state
+        const logContent = document.getElementById('parseLogContent');
+        if (logContent) logContent.innerHTML = `<span style="color: #cba6f7;">Re-parsing with method "${method}"...</span>`;
+        const panel = document.getElementById('parseLogPanel');
+        const btn = document.getElementById('toggleLogBtn');
+        if (panel) panel.style.display = 'block';
+        if (btn) btn.textContent = 'Hide Log';
+
+        try {
+            const response = await fetch(`${SERVER_URL}/api/project/reparse-chapters`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-API-Key': API_KEY
+                },
+                body: JSON.stringify({ method })
+            });
+
+            const result = await response.json();
+
+            // Display log lines
+            if (result.log && result.log.length > 0) {
+                this.appendToLog(result.log);
+            }
+
+            if (result.success) {
+                console.log(`[GUTENBERG] Re-parsed: ${result.chapter_count} chapters with method ${method}`);
+
+                // Reload markdown view
+                await this.loadMarkdown();
+
+                // Refresh TTS tab
+                if (typeof ttsTab !== 'undefined' && ttsTab.refreshChapters) {
+                    await ttsTab.refreshChapters();
+                }
+
+                // Refresh Reader tab
+                if (typeof readerTab !== 'undefined' && readerTab.refresh) {
+                    await readerTab.refresh();
+                }
+
+                showToast(`Re-parsed: ${result.chapter_count} chapters (${method})`, 'success');
+            } else {
+                const errMsg = result.error || 'Unknown error';
+                console.error('[GUTENBERG] Re-parse failed:', errMsg);
+                showToast('Re-parse failed: ' + errMsg, 'error');
+            }
+        } catch (error) {
+            console.error('[GUTENBERG] Re-parse error:', error);
+            this.appendToLog([`[REPARSE] Network/JS error: ${error.message}`]);
+            showToast('Error re-parsing: ' + error.message, 'error');
         }
     }
 

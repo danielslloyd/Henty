@@ -321,6 +321,341 @@ class GutenbergProcessor:
         print(f"DEBUG [SPLIT]: {len(chapters)} non-empty chapters generated")
         return chapters
 
+    # ------------------------------------------------------------------ #
+    #  Five Chapter Parsing Methods (selectable by user)                  #
+    # ------------------------------------------------------------------ #
+
+    PARSING_METHODS = {
+        'epub_toc': 'EPUB Table of Contents — uses NCX/nav chapter titles from the EPUB to locate chapter boundaries in the plain text',
+        'epub_spine_html': 'EPUB Spine + HTML Headings — walks the EPUB spine order reading h1-h3 headings and body text from each content file',
+        'regex_headings': 'Regex Heading Detection — scans plain text for "Chapter N", Roman numerals, "Part N", ALL-CAPS headings, etc.',
+        'blank_line_sections': 'Blank-Line Section Breaks — splits on 3+ consecutive blank lines (common Gutenberg section separator)',
+        'hybrid_epub_regex': 'Hybrid EPUB + Regex — tries EPUB TOC first; fills gaps and validates with regex heading detection',
+    }
+
+    def parse_chapters(self, text: str, epub_bytes: Optional[bytes],
+                       method: str, log: Optional[list] = None) -> List[Tuple[str, str]]:
+        """
+        Unified entry point.  Dispatches to one of five methods.
+        *log* is an accumulator list — each call appends verbose log strings.
+        Returns [(title, chapter_body), ...].
+        """
+        if log is None:
+            log = []
+
+        log.append(f"[PARSE] Method selected: {method}")
+        log.append(f"[PARSE] Text length: {len(text):,} chars")
+        log.append(f"[PARSE] EPUB available: {epub_bytes is not None} ({len(epub_bytes):,} bytes)" if epub_bytes else "[PARSE] EPUB available: False")
+
+        dispatch = {
+            'epub_toc':          self._method_epub_toc,
+            'epub_spine_html':   self._method_epub_spine_html,
+            'regex_headings':    self._method_regex_headings,
+            'blank_line_sections': self._method_blank_line_sections,
+            'hybrid_epub_regex': self._method_hybrid_epub_regex,
+        }
+
+        fn = dispatch.get(method)
+        if fn is None:
+            log.append(f"[PARSE] ERROR: Unknown method '{method}', falling back to regex_headings")
+            fn = self._method_regex_headings
+
+        result = fn(text, epub_bytes, log)
+        log.append(f"[PARSE] Final result: {len(result)} chapters")
+        for i, (title, body) in enumerate(result):
+            log.append(f"[PARSE]   ch{i}: \"{title}\" — {len(body):,} chars, first 80: {repr(body[:80])}")
+        return result
+
+    # ---------- Method 1: EPUB TOC ------------------------------------ #
+
+    def _method_epub_toc(self, text: str, epub_bytes: Optional[bytes],
+                         log: list) -> List[Tuple[str, str]]:
+        """Use EPUB NCX/nav titles and match them in the plain text."""
+        log.append("[M1-EPUB_TOC] Starting EPUB TOC method")
+
+        if not epub_bytes:
+            log.append("[M1-EPUB_TOC] No EPUB data — returning empty (try another method)")
+            return []
+
+        titles = self.get_epub_chapter_titles(epub_bytes)
+        log.append(f"[M1-EPUB_TOC] EPUB titles extracted: {len(titles)}")
+        for i, t in enumerate(titles):
+            log.append(f"[M1-EPUB_TOC]   title[{i}]: {repr(t)}")
+
+        if not titles:
+            log.append("[M1-EPUB_TOC] No titles found in EPUB — returning empty")
+            return []
+
+        chapters = self.split_text_by_chapter_titles(text, titles)
+        log.append(f"[M1-EPUB_TOC] Matched {len(chapters)} of {len(titles)} titles in plain text")
+        return chapters
+
+    # ---------- Method 2: EPUB Spine + HTML Headings ------------------- #
+
+    def _method_epub_spine_html(self, text: str, epub_bytes: Optional[bytes],
+                                log: list) -> List[Tuple[str, str]]:
+        """Walk the EPUB spine, extract heading + body from each HTML file."""
+        import zipfile, io
+        log.append("[M2-EPUB_SPINE] Starting EPUB Spine + HTML method")
+
+        if not epub_bytes:
+            log.append("[M2-EPUB_SPINE] No EPUB data — returning empty")
+            return []
+        if not HAS_BS4:
+            log.append("[M2-EPUB_SPINE] beautifulsoup4 not available — returning empty")
+            return []
+
+        skip_kw = {'contents', 'table of contents', 'cover', 'copyright',
+                    'title page', 'half-title', 'dedication', 'epigraph',
+                    'acknowledgement', 'index', 'bibliography', 'about the',
+                    'project gutenberg'}
+
+        chapters: List[Tuple[str, str]] = []
+
+        with zipfile.ZipFile(io.BytesIO(epub_bytes)) as zf:
+            names = set(zf.namelist())
+            log.append(f"[M2-EPUB_SPINE] {len(names)} files in EPUB zip")
+
+            # Locate OPF
+            opf_path = None
+            try:
+                c = zf.read('META-INF/container.xml').decode('utf-8', errors='replace')
+                rf = BeautifulSoup(c, 'xml').find('rootfile')
+                if rf:
+                    opf_path = rf.get('full-path')
+            except Exception:
+                pass
+            opf_path = opf_path or next((n for n in names if n.endswith('.opf')), None)
+            if not opf_path:
+                log.append("[M2-EPUB_SPINE] No OPF — returning empty")
+                return []
+
+            opf_dir = os.path.dirname(opf_path)
+            opf_soup = BeautifulSoup(zf.read(opf_path).decode('utf-8', errors='replace'), 'xml')
+
+            def abs_path(href):
+                href = href.split('#')[0]
+                if opf_dir:
+                    return opf_dir.rstrip('/') + '/' + href.lstrip('/')
+                return href
+
+            # Build manifest lookup
+            manifest = {}
+            for item in opf_soup.find_all('item'):
+                manifest[item.get('id', '')] = abs_path(item.get('href', ''))
+
+            # Read spine order
+            spine_ids = [ref.get('idref', '') for ref in opf_soup.find_all('itemref')]
+            log.append(f"[M2-EPUB_SPINE] Spine has {len(spine_ids)} items")
+
+            for idx, idref in enumerate(spine_ids):
+                fpath = manifest.get(idref, '')
+                if not fpath or fpath not in names:
+                    log.append(f"[M2-EPUB_SPINE]   spine[{idx}] id={idref} — file not found, skipping")
+                    continue
+
+                html = zf.read(fpath).decode('utf-8', errors='replace')
+                soup = BeautifulSoup(html, 'html.parser')
+
+                # Extract heading
+                heading = ''
+                for tag in ['h1', 'h2', 'h3']:
+                    h = soup.find(tag)
+                    if h:
+                        heading = h.get_text(strip=True)
+                        break
+
+                # Extract body text
+                body_parts = []
+                for p in soup.find_all(['p', 'div']):
+                    t = p.get_text(separator=' ', strip=True)
+                    if t:
+                        body_parts.append(t)
+                body = '\n\n'.join(body_parts)
+
+                if not body or len(body) < 20:
+                    log.append(f"[M2-EPUB_SPINE]   spine[{idx}] \"{heading or '(no heading)'}\" — body too short ({len(body)} chars), skipping")
+                    continue
+
+                if heading and any(kw in heading.lower() for kw in skip_kw):
+                    log.append(f"[M2-EPUB_SPINE]   spine[{idx}] \"{heading}\" — skip keyword match, skipping")
+                    continue
+
+                title = heading or f"Section {len(chapters) + 1}"
+                chapters.append((title, body))
+                log.append(f"[M2-EPUB_SPINE]   spine[{idx}] \"{title}\" — {len(body):,} chars OK")
+
+        log.append(f"[M2-EPUB_SPINE] Extracted {len(chapters)} chapters from EPUB spine")
+        return chapters
+
+    # ---------- Method 3: Regex Heading Detection ---------------------- #
+
+    def _method_regex_headings(self, text: str, epub_bytes: Optional[bytes],
+                               log: list) -> List[Tuple[str, str]]:
+        """Scan plain text for common chapter heading patterns."""
+        log.append("[M3-REGEX] Starting regex heading detection")
+
+        patterns = [
+            (r'(?m)^[ \t]*(CHAPTER\s+(?:[IVXLCDM]+|\d+|ONE|TWO|THREE|FOUR|FIVE|SIX|SEVEN|EIGHT|NINE|TEN|ELEVEN|TWELVE|THIRTEEN|FOURTEEN|FIFTEEN|SIXTEEN|SEVENTEEN|EIGHTEEN|NINETEEN|TWENTY)[^\n]*)', 'CHAPTER_KEYWORD'),
+            (r'(?m)^[ \t]*(Chapter\s+(?:[IVXLCDM]+|\d+|One|Two|Three|Four|Five|Six|Seven|Eight|Nine|Ten|Eleven|Twelve|Thirteen|Fourteen|Fifteen|Sixteen|Seventeen|Eighteen|Nineteen|Twenty)[^\n]*)', 'Chapter_keyword'),
+            (r'(?m)^[ \t]*((?:Book|Part|Volume)\s+(?:[IVXLCDM]+|\d+|the\s+\w+)[^\n]*)', 'Book_Part_Volume'),
+            (r'(?m)^[ \t]*([A-Z][A-Z ]{4,60})[ \t]*$', 'ALL_CAPS_LINE'),
+            (r'(?m)^[ \t]*([IVXLCDM]{1,10})\.\s*$', 'Roman_numeral_dot'),
+        ]
+
+        all_matches = []
+        for pat, label in patterns:
+            matches = list(re.finditer(pat, text))
+            log.append(f"[M3-REGEX] Pattern '{label}': {len(matches)} matches")
+            for m in matches[:5]:  # log first 5
+                log.append(f"[M3-REGEX]   pos={m.start()} text={repr(m.group(1).strip()[:60])}")
+            if len(matches) > 5:
+                log.append(f"[M3-REGEX]   ... and {len(matches) - 5} more")
+            for m in matches:
+                all_matches.append((m.start(), m.end(), m.group(1).strip(), label))
+
+        # Deduplicate by position (keep first match at each position)
+        all_matches.sort(key=lambda x: x[0])
+        deduped = []
+        last_pos = -1
+        for pos, end, title, label in all_matches:
+            if pos > last_pos + 10:  # allow 10 char gap for near-duplicates
+                deduped.append((pos, end, title, label))
+                last_pos = pos
+
+        # Filter out ALL_CAPS lines that are likely not chapter headings
+        # (single words, very short, or too many matches indicating body text)
+        caps_count = sum(1 for _, _, _, lbl in deduped if lbl == 'ALL_CAPS_LINE')
+        other_count = len(deduped) - caps_count
+        if other_count > 2 and caps_count > other_count * 3:
+            log.append(f"[M3-REGEX] ALL_CAPS overrepresented ({caps_count} vs {other_count} others) — removing ALL_CAPS matches")
+            deduped = [(p, e, t, l) for p, e, t, l in deduped if l != 'ALL_CAPS_LINE']
+
+        log.append(f"[M3-REGEX] {len(deduped)} heading positions after dedup")
+
+        if not deduped:
+            log.append("[M3-REGEX] No headings found — returning entire text as one chapter")
+            return [('Complete Text', text)]
+
+        chapters: List[Tuple[str, str]] = []
+
+        # Pre-chapter text
+        if deduped[0][0] > 100:
+            pre = text[:deduped[0][0]].strip()
+            if pre:
+                chapters.append(('[Preface]', pre))
+                log.append(f"[M3-REGEX] Pre-chapter text: {len(pre):,} chars")
+
+        for i, (pos, end, title, label) in enumerate(deduped):
+            # Skip to after the title line
+            content_start = text.find('\n', end)
+            if content_start == -1:
+                content_start = end
+            else:
+                content_start += 1
+
+            content_end = deduped[i + 1][0] if i + 1 < len(deduped) else len(text)
+            body = text[content_start:content_end].strip()
+
+            if body:
+                chapters.append((title, body))
+
+        log.append(f"[M3-REGEX] Produced {len(chapters)} chapters")
+        return chapters
+
+    # ---------- Method 4: Blank-Line Section Breaks -------------------- #
+
+    def _method_blank_line_sections(self, text: str, epub_bytes: Optional[bytes],
+                                    log: list) -> List[Tuple[str, str]]:
+        """Split text wherever 3+ consecutive blank lines appear."""
+        log.append("[M4-BLANK_LINES] Starting blank-line section splitting")
+
+        # Try 4+ newlines first (Gutenberg standard), fall back to 3+
+        sections_4 = re.split(r'\n{4,}', text)
+        sections_4 = [s.strip() for s in sections_4 if s.strip()]
+        log.append(f"[M4-BLANK_LINES] Split on 4+ newlines: {len(sections_4)} sections")
+
+        sections_3 = re.split(r'\n{3,}', text)
+        sections_3 = [s.strip() for s in sections_3 if s.strip()]
+        log.append(f"[M4-BLANK_LINES] Split on 3+ newlines: {len(sections_3)} sections")
+
+        # Use 4+ unless it produces only 1 section
+        sections = sections_4 if len(sections_4) > 1 else sections_3
+        threshold = '4+' if len(sections_4) > 1 else '3+'
+        log.append(f"[M4-BLANK_LINES] Using {threshold} threshold: {len(sections)} sections")
+
+        if len(sections) <= 1:
+            log.append("[M4-BLANK_LINES] Only 1 section — returning as single chapter")
+            return [('Complete Text', text)]
+
+        chapters: List[Tuple[str, str]] = []
+        for i, section in enumerate(sections):
+            # Use first line as title (up to 80 chars)
+            lines = section.split('\n', 1)
+            first_line = lines[0].strip()[:80]
+            # If first line looks like a heading (short, possibly caps), use it
+            if len(first_line) < 80 and len(first_line) > 0:
+                title = first_line
+            else:
+                title = f"Section {i + 1}"
+            chapters.append((title, section))
+            log.append(f"[M4-BLANK_LINES]   section[{i}]: \"{title[:50]}\" — {len(section):,} chars")
+
+        log.append(f"[M4-BLANK_LINES] Produced {len(chapters)} chapters")
+        return chapters
+
+    # ---------- Method 5: Hybrid EPUB + Regex -------------------------- #
+
+    def _method_hybrid_epub_regex(self, text: str, epub_bytes: Optional[bytes],
+                                  log: list) -> List[Tuple[str, str]]:
+        """
+        Best-effort hybrid: try EPUB TOC first, validate/supplement with regex.
+        If EPUB produces chapters, verify that regex headings roughly align.
+        If EPUB misses chapters, use regex to fill gaps.
+        """
+        log.append("[M5-HYBRID] Starting hybrid EPUB + Regex method")
+
+        # Step 1: try EPUB TOC
+        epub_chapters = []
+        if epub_bytes:
+            epub_log = []
+            epub_chapters = self._method_epub_toc(text, epub_bytes, epub_log)
+            for line in epub_log:
+                log.append(line.replace('[M1-EPUB_TOC]', '[M5-HYBRID/epub]'))
+
+        # Step 2: get regex headings
+        regex_log = []
+        regex_chapters = self._method_regex_headings(text, epub_bytes, regex_log)
+        for line in regex_log:
+            log.append(line.replace('[M3-REGEX]', '[M5-HYBRID/regex]'))
+
+        log.append(f"[M5-HYBRID] EPUB produced {len(epub_chapters)} chapters, regex produced {len(regex_chapters)} chapters")
+
+        # Decision logic
+        if not epub_chapters and not regex_chapters:
+            log.append("[M5-HYBRID] Both methods returned nothing — single chapter fallback")
+            return [('Complete Text', text)]
+
+        if not epub_chapters:
+            log.append("[M5-HYBRID] EPUB returned nothing — using regex results")
+            return regex_chapters
+
+        if not regex_chapters or len(regex_chapters) <= 1:
+            log.append("[M5-HYBRID] Regex returned nothing useful — using EPUB results")
+            return epub_chapters
+
+        # Both returned results — pick the one with more granularity,
+        # but prefer EPUB if counts are close (EPUB titles are usually better)
+        epub_count = len(epub_chapters)
+        regex_count = len(regex_chapters)
+
+        if regex_count > epub_count * 1.5:
+            log.append(f"[M5-HYBRID] Regex found significantly more chapters ({regex_count} vs {epub_count}) — using regex")
+            return regex_chapters
+        else:
+            log.append(f"[M5-HYBRID] Using EPUB results ({epub_count} chapters; regex had {regex_count})")
+            return epub_chapters
+
     def download_text(self, url: str) -> str:
         """Download text from a URL (plain-text or HTML)."""
         response = requests.get(url, timeout=30)
