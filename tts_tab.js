@@ -1540,7 +1540,11 @@ class TTSTab {
             if (response.ok) {
                 const result = await response.json();
                 this.showStitchedAudioModal(result);
-                this.showStatus('Stitching complete!', 'success');
+                const skipped = result.segments_skipped || 0;
+                const status = skipped > 0
+                    ? `Stitching complete! (${skipped} chunk${skipped > 1 ? 's' : ''} skipped — see modal for details)`
+                    : 'Stitching complete!';
+                this.showStatus(status, skipped > 0 ? 'warning' : 'success');
             } else {
                 const errBody = await response.json().catch(() => ({}));
                 throw new Error(errBody.error || `Server error ${response.status}`);
@@ -1561,8 +1565,15 @@ class TTSTab {
                     Stitched Audio Ready!
                 </h3>
                 <p style="margin-bottom: 15px; color: #666;">
-                    Successfully combined ${result.metadata?.chunk_count || 'all'} chunks into one audio file.
+                    Stitched ${result.segments_included || result.metadata?.chunk_count || 'all'} segment(s) into one audio file${result.segments_skipped ? ` (${result.segments_skipped} skipped)` : ''}.
                 </p>
+                ${result.warnings && result.warnings.length > 0 ? `
+                <div style="background: #fef3c7; border: 1px solid #f59e0b; border-radius: 8px; padding: 10px 14px; margin-bottom: 15px;">
+                    <strong style="color: #92400e;">⚠ Skipped chunks (no audio yet):</strong>
+                    <ul style="margin: 6px 0 0 0; padding-left: 18px; color: #92400e; font-size: 13px;">
+                        ${result.warnings.map(w => `<li>${w}</li>`).join('')}
+                    </ul>
+                </div>` : ''}
                 <audio controls style="width: 100%; margin-bottom: 15px;">
                     <source src="${SERVER_URL}${result.audio_url}" type="audio/wav">
                 </audio>
