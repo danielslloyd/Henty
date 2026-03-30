@@ -3704,17 +3704,21 @@ def add_gutenberg_url_to_project():
         }
 
         # Download EPUB for chapter titles, then split plain text at those positions
-        print(f"DEBUG [A] Downloading EPUB for book {book_id}")
+        print(f"[INIT] Downloading EPUB for book {book_id}")
         epub_bytes = processor.download_epub(book_id)
         if epub_bytes:
             # Cache the EPUB so reparse-chapters can reuse it
             epub_cache = os.path.join(converter.current_project_path, 'source.epub')
-            with open(epub_cache, 'wb') as ef:
-                ef.write(epub_bytes)
-            print(f"DEBUG [A] EPUB cached to {epub_cache}")
-            debug_info['epub_downloaded'] = True
-            debug_info['epub_bytes'] = len(epub_bytes)
-            print(f"DEBUG [A] EPUB downloaded: {len(epub_bytes):,} bytes")
+            try:
+                with open(epub_cache, 'wb') as ef:
+                    ef.write(epub_bytes)
+                print(f"[INIT] EPUB cached: {epub_cache} ({len(epub_bytes):,} bytes)")
+                debug_info['epub_downloaded'] = True
+                debug_info['epub_bytes'] = len(epub_bytes)
+            except Exception as e:
+                print(f"[INIT] ERROR caching EPUB: {e}")
+        else:
+            print(f"[INIT] EPUB download returned None/empty")
             try:
                 print("DEBUG [B] Parsing EPUB chapter titles...")
                 chapter_titles = processor.get_epub_chapter_titles(epub_bytes)
