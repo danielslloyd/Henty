@@ -457,18 +457,19 @@ class GutenbergProcessor:
         log.append(f"[M1-EPUB_TOC] Matched {len(chapters)} of {len(titles)} titles in plain text")
         return chapters
 
-    # ---------- Method 2: EPUB Spine + HTML Headings ------------------- #
+    # ---------- Method 2: EPUB Spine + HTML content -------------------- #
 
     def _method_epub_spine(self, text: str, epub_bytes: Optional[bytes],
                            log: list) -> List[Tuple[str, str]]:
-        """Walk EPUB spine order and resolve NCX labels for each spine item, then match in plain text.
+        """Walk EPUB spine order, read each HTML content file to extract the chapter
+        heading and first paragraph body text, then locate those in the plain text.
 
-        No HTML content files are opened — only the OPF manifest/spine and NCX/nav are read.
-        This gives spine-ordered chapter titles without any HTML parsing.
+        Handles decorated initials (drop-cap images whose alt text replaces the
+        first letter/word) by trying body-text matches that skip word 0.
         """
         import zipfile, io
-        log.append("[M2-EPUB_SPINE] Starting EPUB Spine (TXT match) method")
-        log.append("[M2-EPUB_SPINE] Strategy: spine order + NCX labels only, no HTML content parsing")
+        log.append("[M2-EPUB_SPINE] Starting EPUB Spine method")
+        log.append("[M2-EPUB_SPINE] Strategy: extract heading + first paragraph from each HTML file, match in plain text")
 
         if not epub_bytes:
             log.append("[M2-EPUB_SPINE] No EPUB data — returning empty")
@@ -482,7 +483,9 @@ class GutenbergProcessor:
                    'acknowledgement', 'index', 'bibliography', 'about the',
                    'project gutenberg'}
 
-        titles: List[str] = []
+        # Collect (position_in_text, content_start, title) tuples
+        found: List[Tuple[int, int, str]] = []
+        used_positions: set = set()
 
         with zipfile.ZipFile(io.BytesIO(epub_bytes)) as zf:
             names = set(zf.namelist())
@@ -517,17 +520,13 @@ class GutenbergProcessor:
                 item.get('id', ''): abs_path(item.get('href', ''))
                 for item in opf_soup.find_all('item')
             }
-            # Reverse manifest: absolute path → id (for NCX lookup)
-            path_to_id = {v: k for k, v in manifest.items()}
 
             # Read spine order (list of manifest item IDs)
             spine_ids = [ref.get('idref', '') for ref in opf_soup.find_all('itemref')]
             log.append(f"[M2-EPUB_SPINE] Spine has {len(spine_ids)} items")
 
-            # Build NCX label map: absolute path (without fragment) → label
-            # from NCX navPoints (EPUB 2) and nav.xhtml (EPUB 3)
-            ncx_labels: dict = {}  # abs_path → label
-
+            # Build NCX label map as fallback: abs_path → label
+            ncx_labels: dict = {}
             ncx_item = opf_soup.find('item', attrs={'media-type': 'application/x-dtbncx+xml'})
             if ncx_item:
                 ncx_path = abs_path(ncx_item.get('href', ''))
@@ -542,11 +541,10 @@ class GutenbergProcessor:
                         src = content.get('src', '') if content else ''
                         if label_text and src:
                             ncx_labels[abs_path(src)] = label_text
-                    log.append(f"[M2-EPUB_SPINE] Built NCX label map: {len(ncx_labels)} entries")
+                    log.append(f"[M2-EPUB_SPINE] NCX label map: {len(ncx_labels)} entries (fallback)")
                 except Exception as e:
                     log.append(f"[M2-EPUB_SPINE] NCX parse error: {e}")
             else:
-                # Try nav.xhtml (EPUB 3)
                 nav_item = next(
                     (item for item in opf_soup.find_all('item')
                      if 'nav' in item.get('properties', '')), None
@@ -565,33 +563,166 @@ class GutenbergProcessor:
                                 href = a.get('href', '')
                                 if label_text and href:
                                     ncx_labels[abs_path(href)] = label_text
-                        log.append(f"[M2-EPUB_SPINE] Built nav.xhtml label map: {len(ncx_labels)} entries")
+                        log.append(f"[M2-EPUB_SPINE] nav.xhtml label map: {len(ncx_labels)} entries (fallback)")
                     except Exception as e:
                         log.append(f"[M2-EPUB_SPINE] nav.xhtml parse error: {e}")
 
-            # Walk spine in order; resolve NCX label for each item
+            # Walk spine: read each HTML file to extract heading + first paragraph
             for idx, idref in enumerate(spine_ids):
                 fpath = manifest.get(idref, '')
-                label = ncx_labels.get(fpath, '').strip()
-                if not label:
-                    log.append(f"[M2-EPUB_SPINE]   spine[{idx}] id={idref!r} path={fpath!r} — no NCX label, skipping")
+                if not fpath or fpath not in names:
+                    log.append(f"[M2-EPUB_SPINE]   spine[{idx}] id={idref!r} — file not in EPUB, skipping")
                     continue
-                if any(kw in label.lower() for kw in skip_kw):
-                    log.append(f"[M2-EPUB_SPINE]   spine[{idx}] \"{label}\" — skip keyword, skipping")
+
+                try:
+                    html_bytes = zf.read(fpath)
+                except Exception as e:
+                    log.append(f"[M2-EPUB_SPINE]   spine[{idx}] path={fpath!r} — read error: {e}")
                     continue
-                titles.append(label)
-                log.append(f"[M2-EPUB_SPINE]   spine[{idx}] \"{label}\"")
 
-        log.append(f"[M2-EPUB_SPINE] Collected {len(titles)} titles from spine/NCX")
+                soup = BeautifulSoup(html_bytes.decode('utf-8', errors='replace'), 'html.parser')
 
-        if not titles:
-            log.append("[M2-EPUB_SPINE] No titles found — returning empty")
+                # Remove all img tags — drop-cap images have alt text like "9037m"
+                # that corrupts the first word of a paragraph
+                for img in soup.find_all('img'):
+                    img.decompose()
+
+                # Extract heading from h1/h2/h3
+                heading = ''
+                heading_tag = soup.find(['h1', 'h2', 'h3'])
+                if heading_tag:
+                    heading = heading_tag.get_text(separator=' ', strip=True)
+
+                # Fall back to NCX label if no heading found in HTML
+                ncx_label = ncx_labels.get(fpath, '').strip()
+                if not heading:
+                    heading = ncx_label
+
+                # Skip front/back matter
+                check_text = heading.lower()
+                if any(kw in check_text for kw in skip_kw):
+                    log.append(f"[M2-EPUB_SPINE]   spine[{idx}] \"{heading}\" — front/back matter, skipping")
+                    continue
+
+                # Extract first substantial paragraph (> 20 chars, not just the heading text)
+                body_text = ''
+                for p in soup.find_all('p'):
+                    t = p.get_text(separator=' ', strip=True)
+                    if len(t) > 20 and t.lower() != heading.lower():
+                        body_text = t
+                        break
+
+                if not heading and not body_text:
+                    log.append(f"[M2-EPUB_SPINE]   spine[{idx}] path={fpath!r} — no heading or body text, skipping")
+                    continue
+
+                # Find this chapter's position in the plain text
+                result = self._find_chapter_position(text, heading, body_text, log, idx)
+                if result:
+                    pos, content_start = result
+                    if pos not in used_positions:
+                        used_positions.add(pos)
+                        title = heading or ncx_label or f"Chapter {idx + 1}"
+                        found.append((pos, content_start, title))
+                        log.append(f"[M2-EPUB_SPINE]   spine[{idx}] \"{title}\" → pos={pos}")
+                    else:
+                        log.append(f"[M2-EPUB_SPINE]   spine[{idx}] \"{heading}\" → pos={pos} already claimed, skipping")
+                else:
+                    log.append(f"[M2-EPUB_SPINE]   spine[{idx}] \"{heading}\" — not found in plain text")
+
+        log.append(f"[M2-EPUB_SPINE] Found {len(found)} chapter positions")
+
+        if not found:
+            log.append("[M2-EPUB_SPINE] No chapters found — returning empty")
             return []
 
-        log.append("[M2-EPUB_SPINE] Matching titles against plain text...")
-        chapters = self.split_text_by_chapter_titles(text, titles)
-        log.append(f"[M2-EPUB_SPINE] Matched {len(chapters)} of {len(titles)} titles in plain text")
+        found.sort(key=lambda x: x[0])
+        chapters: List[Tuple[str, str]] = []
+        for i, (pos, content_start, title) in enumerate(found):
+            next_start = found[i + 1][0] if i + 1 < len(found) else len(text)
+            chapter_text = text[content_start:next_start].strip()
+            if chapter_text:
+                chapters.append((title, chapter_text))
+
+        log.append(f"[M2-EPUB_SPINE] Built {len(chapters)} non-empty chapters")
         return chapters
+
+    def _find_chapter_position(
+        self, text: str, heading: str, body_text: str, log: list, idx: int = -1
+    ) -> Optional[Tuple[int, int]]:
+        """Locate a chapter in plain text using heading and/or body text.
+
+        Handles decorated initials (EPUB drop-cap images whose alt text replaces
+        the first letter/word, e.g. "9037m t was not" instead of "It was not")
+        by trying body-text phrases that skip word 0.
+
+        Returns (section_start, content_start) or None.
+        - section_start: position of the chapter heading block (used for ordering)
+        - content_start: same as section_start (chapter text includes its heading)
+        """
+        tag = f"[M2-FIND[{idx}]]"
+
+        # Strategy 1a: exact heading as standalone line
+        if heading:
+            escaped = re.escape(heading)
+            m = re.search(r'(?m)^[ \t]*' + escaped + r'[.!?]?[ \t]*$', text, re.IGNORECASE)
+            if m:
+                log.append(f"{tag} S1a (exact heading): '{heading}' at pos={m.start()}")
+                return (m.start(), m.start())
+
+            # Strategy 1b: normalized heading (flexible whitespace/punctuation)
+            words = re.sub(r'[^\w\s]', ' ', heading.lower()).split()
+            if words:
+                pattern = r'(?m)^[ \t]*' + r'[\s.]*'.join(re.escape(w) for w in words) + r'[.!?]?[ \t]*$'
+                m = re.search(pattern, text, re.IGNORECASE)
+                if m:
+                    log.append(f"{tag} S1b (normalized heading): '{heading}' at pos={m.start()}")
+                    return (m.start(), m.start())
+
+        # Strategy 2: body text words[1:7] — skip word 0 (handles decorated initials)
+        if body_text:
+            words = body_text.split()
+            if len(words) >= 3:
+                phrase = ' '.join(words[1:min(7, len(words))])
+                m = re.search(re.escape(phrase), text, re.IGNORECASE)
+                if m:
+                    log.append(f"{tag} S2 (body words[1:7]): '{phrase[:40]}...' at pos={m.start()}")
+                    start = self._backtrack_to_section_start(text, m.start())
+                    return (start, start)
+
+            # Strategy 3: body text words[0:6] — try without skipping first word
+            phrase = ' '.join(words[0:min(6, len(words))])
+            m = re.search(re.escape(phrase), text, re.IGNORECASE)
+            if m:
+                log.append(f"{tag} S3 (body words[0:6]): '{phrase[:40]}...' at pos={m.start()}")
+                start = self._backtrack_to_section_start(text, m.start())
+                return (start, start)
+
+        log.append(f"{tag} No match: heading={heading!r}, body[:50]={body_text[:50]!r}")
+        return None
+
+    def _backtrack_to_section_start(self, text: str, body_pos: int) -> int:
+        """Given the position of body paragraph text, return the position of the
+        chapter heading block that precedes it.
+
+        Scans backward within 600 characters for the first occurrence of 2+
+        consecutive blank lines (Gutenberg chapter separator). Content starts
+        right after that separator (at the heading line).
+        """
+        window_start = max(0, body_pos - 600)
+        window = text[window_start:body_pos]
+
+        # Find the first occurrence of 2+ consecutive blank lines (chapter separator)
+        m = re.search(r'([ \t]*\n){3,}', window)
+        if m:
+            return window_start + m.end()
+
+        # Fallback: any two consecutive newlines
+        m = re.search(r'\n[ \t]*\n', window)
+        if m:
+            return window_start + m.end()
+
+        return body_pos
 
     # ---------- Method 3: Regex Heading Detection ---------------------- #
 

@@ -413,136 +413,26 @@ class TextToAudioConverter:
 
     def smart_chunk_text(self, text, max_chunk_size=None):
         """
-        Smart text chunking that respects paragraph breaks, quotations, and sentence boundaries.
-        Returns a list of dicts with chunk metadata.
+        Chunk text by splitting on every line break.
+        Each non-empty line becomes one chunk.
         """
-        if max_chunk_size is None:
-            max_chunk_size = config.MAX_CHUNK_SIZE
-        if len(text) <= max_chunk_size:
-            # Text is short enough, return as single chunk
-            return [{
-                'id': 0,
-                'text': text,
-                'nickname': text[:50].strip() + ('...' if len(text) > 50 else ''),
-                'start_pos': 0,
-                'end_pos': len(text)
-            }]
-
         chunks = []
         chunk_id = 0
-        current_pos = 0
+        pos = 0
 
-        # Split by double newlines (paragraphs) first
-        paragraphs = re.split(r'\n\s*\n', text)
-        current_chunk = ""
-        chunk_start = 0
-
-        for para in paragraphs:
-            para = para.strip()
-            if not para:
-                continue
-
-            # Check if adding this paragraph would exceed the limit
-            if len(current_chunk) + len(para) + 2 <= max_chunk_size:
-                if current_chunk:
-                    current_chunk += "\n\n" + para
-                else:
-                    current_chunk = para
-                    chunk_start = current_pos
-            else:
-                # Current paragraph is too large, need to finalize current chunk
-                if current_chunk:
-                    # Save current chunk
-                    nickname = current_chunk[:50].strip() + '...'
-                    chunks.append({
-                        'id': chunk_id,
-                        'text': current_chunk,
-                        'nickname': nickname,
-                        'start_pos': chunk_start,
-                        'end_pos': chunk_start + len(current_chunk)
-                    })
-                    chunk_id += 1
-
-                # Handle large paragraph that needs to be split
-                if len(para) > max_chunk_size:
-                    # Common abbreviations that should not end a sentence
-                    abbrev_pattern = r'\b(?:Mr|Mrs|Ms|Dr|Prof|Sr|Jr|St|Ave|Blvd|Rd|etc|vs|i\.e|e\.g|Vol|No|Fig|viz|al|Co|Corp|Inc|Ltd)\.'
-
-                    # Temporarily replace abbreviations with placeholders
-                    import uuid
-                    placeholder_map = {}
-                    temp_para = para
-                    for match in re.finditer(abbrev_pattern, para, re.IGNORECASE):
-                        placeholder = f"<<ABBREV{len(placeholder_map)}>>"
-                        placeholder_map[placeholder] = match.group(0)
-                        temp_para = temp_para.replace(match.group(0), placeholder, 1)
-
-                    # Split by sentences (now without false positives from abbreviations)
-                    sentences = re.split(r'([.!?]+\s+|[.!?]+$)', temp_para)
-                    sentence_chunk = ""
-                    sentence_start = current_pos
-
-                    for i in range(0, len(sentences), 2):
-                        sentence = sentences[i]
-                        punctuation = sentences[i + 1] if i + 1 < len(sentences) else ''
-                        full_sentence = sentence + punctuation
-
-                        # Restore abbreviations
-                        for placeholder, orig in placeholder_map.items():
-                            full_sentence = full_sentence.replace(placeholder, orig)
-
-                        if len(sentence_chunk) + len(full_sentence) <= max_chunk_size:
-                            if not sentence_chunk:
-                                sentence_start = current_pos
-                            sentence_chunk += full_sentence
-                        else:
-                            if sentence_chunk:
-                                nickname = sentence_chunk[:50].strip() + '...'
-                                chunks.append({
-                                    'id': chunk_id,
-                                    'text': sentence_chunk.strip(),
-                                    'nickname': nickname,
-                                    'start_pos': sentence_start,
-                                    'end_pos': sentence_start + len(sentence_chunk)
-                                })
-                                chunk_id += 1
-
-                            # Start new chunk
-                            sentence_chunk = full_sentence
-                            sentence_start = current_pos
-
-                        current_pos += len(full_sentence)
-
-                    # Add remaining sentences
-                    if sentence_chunk:
-                        nickname = sentence_chunk[:50].strip() + '...'
-                        chunks.append({
-                            'id': chunk_id,
-                            'text': sentence_chunk.strip(),
-                            'nickname': nickname,
-                            'start_pos': sentence_start,
-                            'end_pos': sentence_start + len(sentence_chunk)
-                        })
-                        chunk_id += 1
-
-                    current_chunk = ""
-                else:
-                    # Paragraph fits in a new chunk
-                    current_chunk = para
-                    chunk_start = current_pos
-
-            current_pos += len(para) + 2  # +2 for \n\n
-
-        # Add final chunk if any
-        if current_chunk:
-            nickname = current_chunk[:50].strip() + ('...' if len(current_chunk) > 50 else '')
-            chunks.append({
-                'id': chunk_id,
-                'text': current_chunk,
-                'nickname': nickname,
-                'start_pos': chunk_start,
-                'end_pos': chunk_start + len(current_chunk)
-            })
+        for line in text.split('\n'):
+            stripped = line.strip()
+            if stripped:
+                nickname = stripped[:50] + ('...' if len(stripped) > 50 else '')
+                chunks.append({
+                    'id': chunk_id,
+                    'text': stripped,
+                    'nickname': nickname,
+                    'start_pos': pos,
+                    'end_pos': pos + len(line)
+                })
+                chunk_id += 1
+            pos += len(line) + 1  # +1 for \n
 
         return chunks
 
