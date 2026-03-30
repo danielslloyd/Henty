@@ -3717,13 +3717,11 @@ def add_gutenberg_url_to_project():
                 debug_info['epub_bytes'] = len(epub_bytes)
             except Exception as e:
                 print(f"[INIT] ERROR caching EPUB: {e}")
-        else:
-            print(f"[INIT] EPUB download returned None/empty")
             try:
                 print("DEBUG [B] Parsing EPUB chapter titles...")
                 chapter_titles = processor.get_epub_chapter_titles(epub_bytes)
                 debug_info['epub_titles'] = chapter_titles
-                print(f"DEBUG [B] EPUB titles found: {len(chapter_titles)}: {chapter_titles}")
+                print(f"DEBUG [B] EPUB titles found: {len(chapter_titles)}")
                 if chapter_titles:
                     print("DEBUG [C] Matching EPUB titles in plain text...")
                     epub_splits = processor.split_text_by_chapter_titles(text, chapter_titles)
@@ -3744,7 +3742,7 @@ def add_gutenberg_url_to_project():
                 print(f"EPUB chapter extraction failed ({epub_err}), falling back")
                 debug_info['epub_error'] = str(epub_err)
         else:
-            print("DEBUG [A] EPUB download failed or returned nothing")
+            print(f"[INIT] EPUB download returned None/empty")
 
         # Fall back to plain-text chapter detection if EPUB didn't produce results
         if not detected_chapters:
