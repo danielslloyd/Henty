@@ -736,6 +736,266 @@ class GutenbergProcessor:
 
         return body_pos
 
+    # ------------------------------------------------------------------ #
+    #  Interactive Parsing Helpers (Step Wizard)                          #
+    # ------------------------------------------------------------------ #
+
+    def get_spine_preview(self, epub_bytes: Optional[bytes], num_words: int = 50) -> List[dict]:
+        """Extract heading and first N body-text words from each EPUB spine file.
+
+        Returns [{idx, file, heading, ncx_label, body_preview}, ...] for
+        content files only (front/back matter excluded).
+        """
+        import zipfile, io
+        if not epub_bytes or not HAS_BS4:
+            return []
+
+        skip_kw = {'contents', 'table of contents', 'cover', 'copyright',
+                   'title page', 'half-title', 'dedication', 'epigraph',
+                   'acknowledgement', 'index', 'bibliography', 'about the',
+                   'project gutenberg'}
+        results = []
+
+        with zipfile.ZipFile(io.BytesIO(epub_bytes)) as zf:
+            names = set(zf.namelist())
+            opf_path = None
+            try:
+                c = zf.read('META-INF/container.xml').decode('utf-8', errors='replace')
+                rf = BeautifulSoup(c, 'html.parser').find('rootfile')
+                if rf:
+                    opf_path = rf.get('full-path')
+            except Exception:
+                pass
+            opf_path = opf_path or next((n for n in names if n.endswith('.opf')), None)
+            if not opf_path:
+                return []
+
+            opf_dir = os.path.dirname(opf_path)
+            opf_soup = BeautifulSoup(zf.read(opf_path).decode('utf-8', errors='replace'), 'html.parser')
+
+            def abs_path(href: str) -> str:
+                href = href.split('#')[0]
+                if opf_dir:
+                    return opf_dir.rstrip('/') + '/' + href.lstrip('/')
+                return href
+
+            manifest = {
+                item.get('id', ''): abs_path(item.get('href', ''))
+                for item in opf_soup.find_all('item')
+            }
+            spine_ids = [ref.get('idref', '') for ref in opf_soup.find_all('itemref')]
+
+            # NCX labels as fallback titles
+            ncx_labels: dict = {}
+            ncx_item = opf_soup.find('item', attrs={'media-type': 'application/x-dtbncx+xml'})
+            if ncx_item:
+                try:
+                    ncx_soup = BeautifulSoup(
+                        zf.read(abs_path(ncx_item.get('href', ''))).decode('utf-8', errors='replace'),
+                        'html.parser'
+                    )
+                    for pt in ncx_soup.find_all('navPoint'):
+                        lbl = pt.find('navLabel')
+                        content = pt.find('content')
+                        if lbl and content:
+                            ncx_labels[abs_path(content.get('src', ''))] = lbl.get_text(strip=True)
+                except Exception:
+                    pass
+            else:
+                nav_item = next(
+                    (it for it in opf_soup.find_all('item') if 'nav' in it.get('properties', '')), None
+                )
+                if nav_item:
+                    try:
+                        nav_soup = BeautifulSoup(
+                            zf.read(abs_path(nav_item.get('href', ''))).decode('utf-8', errors='replace'),
+                            'html.parser'
+                        )
+                        nav_el = nav_soup.find('nav', attrs={'epub:type': 'toc'}) or nav_soup.find('nav')
+                        if nav_el:
+                            for a in nav_el.find_all('a'):
+                                href = a.get('href', '')
+                                if href:
+                                    ncx_labels[abs_path(href)] = a.get_text(strip=True)
+                    except Exception:
+                        pass
+
+            for idx, idref in enumerate(spine_ids):
+                fpath = manifest.get(idref, '')
+                if not fpath or fpath not in names:
+                    continue
+                try:
+                    soup = BeautifulSoup(zf.read(fpath).decode('utf-8', errors='replace'), 'html.parser')
+                except Exception:
+                    continue
+                for img in soup.find_all('img'):
+                    img.decompose()
+
+                heading = ''
+                ht = soup.find(['h1', 'h2', 'h3'])
+                if ht:
+                    heading = ht.get_text(separator=' ', strip=True)
+                ncx_label = ncx_labels.get(fpath, '')
+
+                if any(kw in (heading or ncx_label).lower() for kw in skip_kw):
+                    continue
+
+                body_text = ''
+                for p in soup.find_all('p'):
+                    t = p.get_text(separator=' ', strip=True)
+                    if len(t) > 20 and t.lower() != heading.lower():
+                        body_text = t
+                        break
+
+                results.append({
+                    'idx': idx,
+                    'file': fpath,
+                    'heading': heading,
+                    'ncx_label': ncx_label,
+                    'body_preview': ' '.join(body_text.split()[:num_words]),
+                })
+
+        return results
+
+    def detect_boilerplate(self, text: str) -> List[dict]:
+        """Detect Project Gutenberg header, footer, and table of contents sections.
+
+        Returns [{type, start_line, end_line, preview}, ...].
+        """
+        sections = []
+        lines = text.split('\n')
+
+        # PG Header: lines 0 through the START marker (inclusive)
+        for i, line in enumerate(lines[:300]):
+            if re.search(r'\*{3}\s*START OF.*PROJECT GUTENBERG', line, re.IGNORECASE):
+                sections.append({
+                    'type': 'header',
+                    'start_line': 0,
+                    'end_line': i,
+                    'preview': '\n'.join(lines[:min(8, i + 1)]),
+                })
+                break
+
+        # PG Footer: from END marker to end of file
+        for i, line in enumerate(lines):
+            if re.search(r'\*{3}\s*END OF.*PROJECT GUTENBERG', line, re.IGNORECASE):
+                sections.append({
+                    'type': 'footer',
+                    'start_line': i,
+                    'end_line': len(lines) - 1,
+                    'preview': '\n'.join(lines[i:min(i + 8, len(lines))]),
+                })
+                break
+
+        # TOC: "CONTENTS" / "TABLE OF CONTENTS" heading followed by chapter listings
+        toc_start = None
+        for i, line in enumerate(lines[:500]):
+            if re.match(r'^\s*(table\s+of\s+)?contents\.?\s*$', line, re.IGNORECASE):
+                toc_start = i
+                break
+        if toc_start is not None:
+            toc_end = min(toc_start + 150, len(lines) - 1)
+            blank_run = 0
+            for i in range(toc_start + 1, min(toc_start + 250, len(lines))):
+                if not lines[i].strip():
+                    blank_run += 1
+                    if blank_run >= 3:
+                        toc_end = i
+                        break
+                else:
+                    blank_run = 0
+            sections.append({
+                'type': 'toc',
+                'start_line': toc_start,
+                'end_line': toc_end,
+                'preview': '\n'.join(lines[toc_start:min(toc_start + 12, toc_end + 1)]),
+            })
+
+        return sections
+
+    def get_chapter_candidates(self, text: str, epub_bytes: Optional[bytes]) -> dict:
+        """For each EPUB spine item, find the best matching chapter break in plain text.
+
+        Returns {'candidates': [...], 'log': [...]}.
+        Each candidate: {idx, heading, ncx_label, title, matched, strategy,
+                         position, line_num, context}
+        """
+        log: list = []
+        spine_items = self.get_spine_preview(epub_bytes, num_words=100)
+
+        if not spine_items:
+            log.append("[CANDIDATES] No spine items found in EPUB")
+            return {'candidates': [], 'log': log}
+
+        log.append(f"[CANDIDATES] Processing {len(spine_items)} spine items")
+        candidates = []
+        used_positions: set = set()
+
+        for item in spine_items:
+            heading = item['heading']
+            body_preview = item['body_preview']
+            idx = item['idx']
+            ncx_label = item['ncx_label']
+
+            log_before = len(log)
+            result = self._find_chapter_position(text, heading, body_preview, log, idx)
+            new_entries = log[log_before:]
+
+            # Extract strategy label from the log entry (e.g. "S1a", "S2")
+            strategy_str = ''
+            if new_entries:
+                m = re.search(r'\b(S\d+[ab]?)\b', new_entries[-1])
+                if m:
+                    strategy_str = m.group(1)
+
+            if result and result[0] in used_positions:
+                log.append(f"[CANDIDATES] idx={idx} pos={result[0]} already claimed — marking unmatched")
+                result = None
+
+            if result:
+                pos, _ = result
+                used_positions.add(pos)
+                line_num = text[:pos].count('\n') + 1
+                candidates.append({
+                    'idx': idx,
+                    'heading': heading,
+                    'ncx_label': ncx_label,
+                    'title': heading or ncx_label or f'Chapter {len(candidates) + 1}',
+                    'matched': True,
+                    'strategy': strategy_str,
+                    'position': pos,
+                    'line_num': line_num,
+                    'context': self._get_context(text, pos),
+                })
+            else:
+                candidates.append({
+                    'idx': idx,
+                    'heading': heading,
+                    'ncx_label': ncx_label,
+                    'title': heading or ncx_label or f'Chapter {len(candidates) + 1}',
+                    'matched': False,
+                    'strategy': None,
+                    'position': None,
+                    'line_num': None,
+                    'context': None,
+                })
+
+        matched = sum(1 for c in candidates if c['matched'])
+        log.append(f"[CANDIDATES] {matched}/{len(candidates)} chapters matched")
+        return {'candidates': candidates, 'log': log}
+
+    def _get_context(self, text: str, pos: int, lines_before: int = 3, lines_after: int = 4) -> dict:
+        """Return lines surrounding a character position for context display."""
+        all_lines = text.split('\n')
+        line_idx = text[:pos].count('\n')
+        before_start = max(0, line_idx - lines_before)
+        after_end = min(len(all_lines) - 1, line_idx + lines_after)
+        return {
+            'before': '\n'.join(all_lines[before_start:line_idx]),
+            'match_line': all_lines[line_idx] if line_idx < len(all_lines) else '',
+            'after': '\n'.join(all_lines[line_idx + 1:after_end + 1]),
+        }
+
     # ---------- Method 3: Regex Heading Detection ---------------------- #
 
     def _method_regex_headings(self, text: str, epub_bytes: Optional[bytes],

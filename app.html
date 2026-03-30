@@ -1411,6 +1411,30 @@
         .toast.fade-out {
             animation: fadeOut 0.3s ease-out forwards;
         }
+
+        /* Parse Wizard */
+        .parse-wizard { display: flex; flex-direction: column; gap: 8px; min-height: 0; flex: 1; }
+        .parse-wizard-tabs { display: flex; border-bottom: 2px solid #e2e8f0; gap: 0; flex-shrink: 0; }
+        .parse-wizard-tab { padding: 7px 14px; border: none; background: none; cursor: pointer; font-size: 13px; color: #64748b; border-bottom: 3px solid transparent; margin-bottom: -2px; transition: color 0.15s; }
+        .parse-wizard-tab:hover { color: #4338ca; }
+        .parse-wizard-tab.active { color: #4f46e5; border-bottom-color: #4f46e5; font-weight: 600; }
+        .parse-wizard-panel { display: none; flex-direction: column; gap: 8px; padding-top: 8px; min-height: 0; overflow-y: auto; }
+        .parse-wizard-panel.active { display: flex; }
+        .boilerplate-item { background: #fff7ed; border: 1px solid #fed7aa; border-radius: 6px; padding: 10px 12px; }
+        .boilerplate-item pre { font-size: 11px; max-height: 80px; overflow-y: auto; background: #1e1e2e; color: #cdd6f4; border-radius: 4px; padding: 6px; margin: 4px 0 0 0; font-family: 'Consolas', 'Monaco', monospace; white-space: pre-wrap; }
+        .boilerplate-type-badge { display: inline-block; font-size: 10px; font-weight: 700; padding: 2px 7px; border-radius: 10px; text-transform: uppercase; }
+        .boilerplate-type-badge.header, .boilerplate-type-badge.footer { background: #fed7aa; color: #c2410c; }
+        .boilerplate-type-badge.toc { background: #ddd6fe; color: #6d28d9; }
+        .candidate-item { background: #f0f4ff; border: 1px solid #c7d2fe; border-radius: 6px; padding: 10px 12px; }
+        .candidate-item.unmatched { background: #fef2f2; border-color: #fecaca; }
+        .candidate-context { font-family: 'Consolas', 'Monaco', monospace; font-size: 11px; line-height: 1.5; background: #1e1e2e; color: #6b7280; border-radius: 4px; padding: 6px 8px; margin-top: 6px; white-space: pre; overflow-x: auto; max-height: 90px; overflow-y: auto; }
+        .candidate-context .ctx-match { color: #ffd700; font-weight: bold; }
+        .strategy-badge { display: inline-block; font-size: 10px; font-weight: 700; padding: 2px 7px; border-radius: 10px; background: #c7d2fe; color: #3730a3; }
+        .strategy-badge.unmatched-badge { background: #fecaca; color: #dc2626; }
+        .spine-preview-table { width: 100%; border-collapse: collapse; font-size: 12px; }
+        .spine-preview-table th { background: #e0e7ff; color: #3730a3; font-weight: 600; padding: 5px 8px; text-align: left; }
+        .spine-preview-table td { padding: 4px 8px; border-top: 1px solid #e2e8f0; vertical-align: top; }
+        .spine-preview-table tr:hover td { background: #f8faff; }
     </style>
 </head>
 <body>
@@ -1509,27 +1533,56 @@
                     <button class="pane-btn" id="unlockChaptersBtn" onclick="gutenbergTab.unlockChapters()" style="background: #dc2626; display: none;" title="Unlock to allow re-parsing">Unlock</button>
                 </div>
             </div>
-            <div class="pane-content" style="padding: 15px; display: flex; flex-direction: column; gap: 10px;">
+            <div class="pane-content" style="padding: 15px; display: flex; flex-direction: column; gap: 10px; min-height: 0;">
                 <div id="chapterLockStatus" style="display: none; background: #ecfdf5; border: 1px solid #6ee7b7; border-radius: 6px; padding: 8px 12px; font-size: 13px; color: #065f46; font-weight: 500;"></div>
-                <!-- Chapter Parsing Method Selector -->
-                <div id="parsingMethodPanel" style="background: #f0f4ff; border: 1px solid #c7d2fe; border-radius: 8px; padding: 12px;">
-                    <div style="display: flex; align-items: center; gap: 10px; flex-wrap: wrap;">
-                        <label style="font-size: 13px; font-weight: 600; color: #3730a3; white-space: nowrap;">Parsing Method:</label>
-                        <select id="parsingMethodSelect" style="flex: 1; min-width: 200px; padding: 6px 10px; border: 1px solid #a5b4fc; border-radius: 6px; font-size: 13px; background: white;">
-                            <option value="epub_toc">1. EPUB Table of Contents</option>
-                            <option value="epub_spine">2. EPUB Spine (TXT match)</option>
-                            <option value="regex_headings">3. Regex Heading Detection</option>
-                            <option value="blank_line_sections">4. Blank-Line Section Breaks</option>
-                            <option value="hybrid_epub_regex" selected>5. Hybrid EPUB + Regex</option>
-                        </select>
-                        <button class="pane-btn" onclick="gutenbergTab.reparseChapters()" style="background: #4f46e5; white-space: nowrap;">Re-Parse Chapters</button>
-                        <button class="pane-btn" onclick="gutenbergTab.toggleParseLog()" style="background: #6366f1; white-space: nowrap;" id="toggleLogBtn">Show Log</button>
+
+                <!-- 3-step Parse Wizard -->
+                <div class="parse-wizard">
+                    <!-- Step tabs -->
+                    <div class="parse-wizard-tabs">
+                        <button class="parse-wizard-tab active" data-step="1" onclick="gutenbergTab.switchParseStep(1)">1. EPUB Preview</button>
+                        <button class="parse-wizard-tab" data-step="2" onclick="gutenbergTab.switchParseStep(2)">2. Clean Text</button>
+                        <button class="parse-wizard-tab" data-step="3" onclick="gutenbergTab.switchParseStep(3)">3. Chapter Breaks</button>
                     </div>
-                    <div id="parsingMethodDesc" style="font-size: 12px; color: #4338ca; margin-top: 6px;"></div>
+
+                    <!-- Step 1: EPUB Spine Preview -->
+                    <div class="parse-wizard-panel active" id="parse-wizard-panel-1">
+                        <div style="display: flex; align-items: center; gap: 8px; flex-wrap: wrap;">
+                            <span style="font-size: 13px; color: #4338ca; font-weight: 500; flex: 1;">EPUB chapter order and first paragraph text</span>
+                            <button class="pane-btn" onclick="gutenbergTab.loadSpinePreview()" id="spinePreviewBtn" style="background: #4f46e5;">Load Preview</button>
+                            <button class="pane-btn" onclick="gutenbergTab.switchParseStep(2)" style="background: #059669;">Next →</button>
+                        </div>
+                        <div id="epub-spine-list" style="overflow-y: auto; max-height: 400px;"></div>
+                    </div>
+
+                    <!-- Step 2: Clean Text (remove boilerplate) -->
+                    <div class="parse-wizard-panel" id="parse-wizard-panel-2">
+                        <div style="display: flex; align-items: center; gap: 8px; flex-wrap: wrap;">
+                            <span style="font-size: 13px; color: #4338ca; font-weight: 500; flex: 1;">Remove header, footer, and table of contents</span>
+                            <button class="pane-btn" onclick="gutenbergTab.detectBoilerplate()" style="background: #4f46e5;">Detect</button>
+                            <button class="pane-btn" id="applyDeletionsBtn" onclick="gutenbergTab.applyDeletions()" style="background: #dc2626; display: none;">Delete Selected</button>
+                            <button class="pane-btn" onclick="gutenbergTab.switchParseStep(3)" style="background: #059669;">Next →</button>
+                        </div>
+                        <div id="boilerplate-list" style="display: flex; flex-direction: column; gap: 6px; overflow-y: auto; max-height: 400px;"></div>
+                    </div>
+
+                    <!-- Step 3: Review Chapter Breaks -->
+                    <div class="parse-wizard-panel" id="parse-wizard-panel-3">
+                        <div style="display: flex; align-items: center; gap: 8px; flex-wrap: wrap;">
+                            <span style="font-size: 13px; color: #4338ca; font-weight: 500; flex: 1;">Confirm chapter break positions</span>
+                            <button class="pane-btn" onclick="gutenbergTab.detectCandidates()" id="detectCandidatesBtn" style="background: #4f46e5;">Find Breaks</button>
+                            <button class="pane-btn" id="applyChaptersBtn" onclick="gutenbergTab.applyChapterBreaks()" style="background: #059669; display: none;">Apply Chapters</button>
+                        </div>
+                        <div id="chapter-candidates-list" style="display: flex; flex-direction: column; gap: 6px; overflow-y: auto; max-height: 500px;"></div>
+                    </div>
                 </div>
-                <!-- Verbose Parse Log (collapsible) -->
-                <div id="parseLogPanel" style="display: none; background: #1e1e2e; color: #cdd6f4; border-radius: 8px; padding: 10px; max-height: 400px; overflow-y: auto; font-family: 'Consolas', 'Monaco', monospace; font-size: 12px; line-height: 1.6; flex: 1;">
-                    <div id="parseLogContent" style="white-space: pre-wrap;">No parse log yet. Click "Re-Parse Chapters" to generate one.</div>
+
+                <!-- Log toggle + panel -->
+                <div style="display: flex; gap: 6px; align-items: center; flex-shrink: 0;">
+                    <button class="pane-btn" onclick="gutenbergTab.toggleParseLog()" style="background: #6366f1;" id="toggleLogBtn">Show Log</button>
+                </div>
+                <div id="parseLogPanel" style="display: none; background: #1e1e2e; color: #cdd6f4; border-radius: 8px; padding: 10px; max-height: 300px; overflow-y: auto; font-family: 'Consolas', 'Monaco', monospace; font-size: 12px; line-height: 1.6; flex-shrink: 0;">
+                    <div id="parseLogContent" style="white-space: pre-wrap;">No parse log yet.</div>
                 </div>
             </div>
         </div>
