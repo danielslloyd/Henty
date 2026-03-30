@@ -929,10 +929,20 @@ class TextToAudioConverter:
                 })
 
             use_turbo = (tts_model == 'chatterbox_turbo')
+            print(f"[TTS VERBOSE] tts_model={tts_model!r}, use_turbo={use_turbo}, HAS_TURBO={HAS_TURBO}")
             if use_turbo:
-                model = self.load_turbo_model()
+                if not HAS_TURBO:
+                    print(f"[TTS VERBOSE] WARNING: Turbo requested but not available — loading standard model instead")
+                    model = self.load_model()
+                    print(f"[TTS VERBOSE] Standard model loaded (turbo unavailable): {type(model).__name__}")
+                else:
+                    print(f"[TTS VERBOSE] Loading Chatterbox Turbo model...")
+                    model = self.load_turbo_model()
+                    print(f"[TTS VERBOSE] Turbo model loaded successfully: {type(model).__name__}")
             else:
+                print(f"[TTS VERBOSE] Loading Chatterbox Standard model...")
                 model = self.load_model()
+                print(f"[TTS VERBOSE] Standard model loaded successfully: {type(model).__name__}")
 
             # Prepare generation parameters
             gen_params = {
@@ -2713,10 +2723,25 @@ def generate_project_chunk_audio():
         language_id = data.get('language_id', 'en')
         tts_model = data.get('tts_model', config.DEFAULT_TTS_MODEL if hasattr(config, 'DEFAULT_TTS_MODEL') else 'chatterbox')
 
+        # Verbose model selection logging
+        requested_model = tts_model
+        has_emotion_tags = converter.text_has_emotion_tags(chunk_text)
+        print(f"[TTS MODEL] Requested: {requested_model}")
+        print(f"[TTS MODEL] HAS_TURBO available: {HAS_TURBO}")
+        print(f"[TTS MODEL] Emotion tags in text: {has_emotion_tags}")
+
         # Auto-detect emotion tags → force turbo
-        if converter.text_has_emotion_tags(chunk_text):
+        if has_emotion_tags:
             tts_model = 'chatterbox_turbo'
-            print(f"[TTS] Emotion tags detected, forcing Chatterbox Turbo")
+            print(f"[TTS MODEL] Forced to chatterbox_turbo (emotion tags detected)")
+        else:
+            print(f"[TTS MODEL] No emotion tags — using requested model: {tts_model}")
+
+        if tts_model == 'chatterbox_turbo' and not HAS_TURBO:
+            print(f"[TTS MODEL] WARNING: chatterbox_turbo requested but HAS_TURBO=False — falling back to chatterbox")
+            tts_model = 'chatterbox'
+
+        print(f"[TTS MODEL] Final model selected: {tts_model}")
 
         # Construct voice sample path
         audio_prompt_path = None
@@ -2737,7 +2762,7 @@ def generate_project_chunk_audio():
         print(f"\n=== Generating audio for chunk {chunk_id} on {model_device} ===")
         print(f"Text file ID: {text_file_id}")
         print(f"Voice: {voice_sample}")
-        print(f"Model: {tts_model}")
+        print(f"Model (final): {tts_model} | requested: {requested_model} | emotion_tags: {has_emotion_tags}")
         print(f"Exaggeration: {exaggeration}, CFG: {cfg_weight}, Temp: {temperature}")
 
         # Generate audio filename with timestamp and chunk ID
@@ -2801,7 +2826,9 @@ def generate_project_chunk_audio():
                     'possibly_truncated': possibly_truncated,
                     'generation_time_ms': generation_time_ms,
                     'input_text': chunk_text,  # Store the text used for generation to detect outdated takes
-                    'tts_model': tts_model
+                    'tts_model': tts_model,
+                    'tts_model_requested': requested_model,
+                    'tts_model_emotion_forced': has_emotion_tags and requested_model != tts_model
                 }
                 chunk['generated_audios'].append(audio_entry)
 
@@ -3924,53 +3951,74 @@ def reparse_chapters():
         data = request.json
         method = data.get('method', 'epub_toc')
 
-        # Load stored raw text
-        raw_text_file = os.path.join(converter.current_project_path, 'raw_text.txt')
-        if not os.path.exists(raw_text_file):
-            return jsonify({'error': 'No raw text found. Load a Gutenberg text first.'}), 400
-
-        with open(raw_text_file, 'r', encoding='utf-8') as f:
-            text = f.read()
-
         processor = GutenbergProcessor(output_dir=converter.current_project_path)
+        log_lines: list = []
 
-        # Try to load cached EPUB; if missing, auto-download using stored book ID
+        # Resolve Gutenberg book ID from metadata or chapter source URLs
+        book_id = converter.current_project_metadata.get('gutenberg_book_id')
+        if not book_id:
+            for ch in converter.current_project_metadata.get('chapters', []):
+                src_url = ch.get('source_url', '')
+                if src_url:
+                    book_id = processor.get_gutenberg_book_id(src_url)
+                    if book_id:
+                        break
+
+        if book_id:
+            log_lines.append(f"[REPARSE] Gutenberg book ID (GN): {book_id}")
+            # Always re-download the canonical plain text file for parsing
+            plain_text_url = processor.get_plain_text_url(book_id)
+            log_lines.append(f"[REPARSE] Fetching plain text: {plain_text_url}")
+            print(f"[REPARSE] GN={book_id} — downloading plain text: {plain_text_url}")
+            try:
+                raw_content = processor.download_text(plain_text_url)
+                log_lines.append(f"[REPARSE] Plain text downloaded: {len(raw_content):,} chars")
+                title = processor.extract_title(raw_content) or converter.current_project_metadata.get('title', '')
+                text = processor.strip_gutenberg_metadata(raw_content, title)
+                text = processor.process_carriage_returns(text)
+                text = text.replace('<<<SECTION_BREAK>>>', '\n\n')
+                log_lines.append(f"[REPARSE] Plain text processed: {len(text):,} chars")
+            except Exception as e:
+                log_lines.append(f"[REPARSE] WARNING: Failed to download plain text ({e}) — falling back to cached raw_text.txt")
+                print(f"[REPARSE] Plain text download failed: {e}")
+                raw_text_file = os.path.join(converter.current_project_path, 'raw_text.txt')
+                if not os.path.exists(raw_text_file):
+                    return jsonify({'error': 'No raw text found and plain text download failed.'}), 400
+                with open(raw_text_file, 'r', encoding='utf-8') as f:
+                    text = f.read()
+        else:
+            log_lines.append("[REPARSE] No Gutenberg book ID found — using cached raw_text.txt")
+            raw_text_file = os.path.join(converter.current_project_path, 'raw_text.txt')
+            if not os.path.exists(raw_text_file):
+                return jsonify({'error': 'No raw text found. Load a Gutenberg text first.'}), 400
+            with open(raw_text_file, 'r', encoding='utf-8') as f:
+                text = f.read()
+
+        # Load or download the EPUB
         epub_cache = os.path.join(converter.current_project_path, 'source.epub')
         epub_bytes = None
         if os.path.exists(epub_cache):
             with open(epub_cache, 'rb') as f:
                 epub_bytes = f.read()
+            log_lines.append(f"[REPARSE] Loaded cached EPUB: {len(epub_bytes):,} bytes")
             print(f"[REPARSE] Loaded cached EPUB: {len(epub_bytes):,} bytes")
-        else:
-            # Try to find book ID from project metadata or chapter source URLs
-            book_id = converter.current_project_metadata.get('gutenberg_book_id')
-            if not book_id:
-                # Fall back to scanning chapter source URLs
-                for ch in converter.current_project_metadata.get('chapters', []):
-                    src_url = ch.get('source_url', '')
-                    if src_url:
-                        book_id = processor.get_gutenberg_book_id(src_url)
-                        if book_id:
-                            break
-            if book_id:
-                epub_url = processor.get_epub_url(book_id)
-                print(f"[REPARSE] source.epub not cached — downloading from: {epub_url}")
-                epub_bytes = processor.download_epub(book_id)
-                if epub_bytes:
-                    with open(epub_cache, 'wb') as ef:
-                        ef.write(epub_bytes)
-                    print(f"[REPARSE] EPUB downloaded and cached: {len(epub_bytes):,} bytes")
-                else:
-                    print(f"[REPARSE] EPUB download FAILED from: {epub_url}")
+        elif book_id:
+            epub_url = processor.get_epub_url(book_id)
+            log_lines.append(f"[REPARSE] Fetching EPUB: {epub_url}")
+            print(f"[REPARSE] GN={book_id} — downloading EPUB: {epub_url}")
+            epub_bytes = processor.download_epub(book_id)
+            if epub_bytes:
+                with open(epub_cache, 'wb') as ef:
+                    ef.write(epub_bytes)
+                log_lines.append(f"[REPARSE] EPUB downloaded and cached: {len(epub_bytes):,} bytes")
+                print(f"[REPARSE] EPUB downloaded and cached: {len(epub_bytes):,} bytes")
             else:
-                print("[REPARSE] No Gutenberg book ID found in project metadata or chapter source_url fields — cannot auto-download EPUB")
-                print(f"[REPARSE] Project metadata keys: {list(converter.current_project_metadata.keys())}")
-                # Show what source_urls exist
-                for i, ch in enumerate(converter.current_project_metadata.get('chapters', [])[:3]):
-                    print(f"[REPARSE]   chapter[{i}] source_url={ch.get('source_url', '(none)')}")
+                log_lines.append(f"[REPARSE] WARNING: EPUB download failed from {epub_url}")
+                print(f"[REPARSE] EPUB download FAILED from: {epub_url}")
+        else:
+            log_lines.append("[REPARSE] No Gutenberg book ID — EPUB not available")
 
         # Run the selected parsing method with verbose logging
-        log_lines: list = []
         parsed = processor.parse_chapters(text, epub_bytes, method, log=log_lines)
 
         # Print log to server console too

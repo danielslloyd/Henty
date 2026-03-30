@@ -554,6 +554,10 @@ class TTSTab {
                                 <span class="setting-value">${firstTake.voice_sample || 'Default'}</span>
                             </div>
                             <div class="setting-row">
+                                <span class="setting-label">Model</span>
+                                <span class="setting-value take-model-value">${firstTake.tts_model === 'chatterbox_turbo' ? 'Turbo' : 'Standard'}${firstTake.tts_model_emotion_forced ? ' <span class="model-forced-badge" title="Forced by emotion tags">(auto)</span>' : ''}</span>
+                            </div>
+                            <div class="setting-row">
                                 <span class="setting-label">Exaggeration</span>
                                 <span class="setting-value">${firstTake.exaggeration}</span>
                             </div>
@@ -565,12 +569,6 @@ class TTSTab {
                                 <span class="setting-label">Temperature</span>
                                 <span class="setting-value">${firstTake.temperature || this.projectDefaults.temperature}</span>
                             </div>
-                            ${firstTake.tts_model ? `
-                            <div class="setting-row">
-                                <span class="setting-label">Model</span>
-                                <span class="setting-value">${firstTake.tts_model === 'chatterbox_turbo' ? 'Turbo' : 'Standard'}</span>
-                            </div>
-                            ` : ''}
                             ${firstTake.audio_duration_seconds ? `
                             <div class="setting-row">
                                 <span class="setting-label">Duration</span>
@@ -690,6 +688,10 @@ class TTSTab {
                                     <span class="setting-value">${take.voice_sample || 'Default'}</span>
                                 </div>
                                 <div class="setting-row">
+                                    <span class="setting-label">Model</span>
+                                    <span class="setting-value take-model-value">${take.tts_model === 'chatterbox_turbo' ? 'Turbo' : 'Standard'}${take.tts_model_emotion_forced ? ' <span class="model-forced-badge" title="Forced by emotion tags">(auto)</span>' : ''}</span>
+                                </div>
+                                <div class="setting-row">
                                     <span class="setting-label">Exaggeration</span>
                                     <span class="setting-value">${take.exaggeration}</span>
                                 </div>
@@ -701,12 +703,6 @@ class TTSTab {
                                     <span class="setting-label">Temperature</span>
                                     <span class="setting-value">${take.temperature || this.projectDefaults.temperature}</span>
                                 </div>
-                                ${take.tts_model ? `
-                                <div class="setting-row">
-                                    <span class="setting-label">Model</span>
-                                    <span class="setting-value">${take.tts_model === 'chatterbox_turbo' ? 'Turbo' : 'Standard'}</span>
-                                </div>
-                                ` : ''}
                                 ${take.audio_duration_seconds ? `
                                 <div class="setting-row">
                                     <span class="setting-label">Duration</span>
@@ -1138,8 +1134,16 @@ class TTSTab {
         }
 
         // Add generating class to take rows only
+        const modelLabel = ttsModel === 'chatterbox_turbo' ? 'Turbo' : 'Standard';
         const rows = document.querySelectorAll(`.chunk-take-row[data-chunk-id="${chunkId}"]`);
-        rows.forEach(row => row.classList.add('generating'));
+        rows.forEach(row => {
+            row.classList.add('generating');
+            // Inject model label into the take-icons area for no-takes rows
+            const takeIcons = row.querySelector('.take-icons');
+            if (takeIcons && row.classList.contains('no-takes')) {
+                takeIcons.innerHTML = `<span class="generating-text">Generating... <span class="generating-model-badge">${modelLabel}</span></span>`;
+            }
+        });
 
         // Track this generation
         this.activeGenerations[chunkId] = {
@@ -1152,7 +1156,7 @@ class TTSTab {
 
         // If chunk already has takes, create a placeholder for the new take
         if (hasExistingTakes) {
-            this.showGeneratingPlaceholder(chunkId);
+            this.showGeneratingPlaceholder(chunkId, ttsModel);
         }
 
         // Show progress bar (only on placeholder if regenerating)
@@ -1471,7 +1475,7 @@ class TTSTab {
         progressBars.forEach(bar => bar.remove());
     }
 
-    showGeneratingPlaceholder(chunkId) {
+    showGeneratingPlaceholder(chunkId, ttsModel = 'chatterbox') {
         // Find the last take row for this chunk
         const rows = document.querySelectorAll(`.chunk-take-row[data-chunk-id="${chunkId}"]`);
         if (rows.length === 0) return;
@@ -1485,11 +1489,12 @@ class TTSTab {
         const placeholder = document.createElement('div');
         placeholder.className = 'chunk-take-row additional-take generating-placeholder';
         placeholder.setAttribute('data-chunk-id', chunkId);
+        const modelLabel = ttsModel === 'chatterbox_turbo' ? 'Turbo' : 'Standard';
         placeholder.innerHTML = `
             <div class="chunk-take-header">
                 <div class="chunk-left"></div>
                 <div class="take-icons">
-                    <span class="generating-text">Generating take...</span>
+                    <span class="generating-text">Generating... <span class="generating-model-badge">${modelLabel}</span></span>
                 </div>
             </div>
         `;
