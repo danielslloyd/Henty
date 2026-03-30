@@ -507,26 +507,49 @@ class TextToAudioConverter:
 
     def smart_chunk_text(self, text, max_chunk_size=None):
         """
-        Chunk text by splitting on every line break.
-        Each non-empty line becomes one chunk.
+        Chunk text with newline-forced boundaries + sentence splitting for long lines.
+        Rules:
+        1. Split on newlines first — each non-empty line is at least one chunk.
+        2. Consecutive non-empty lines are NOT merged (newline forces boundary).
+        3. If a line exceeds max_chunk_size, split by sentences.
         """
+        if max_chunk_size is None:
+            max_chunk_size = config.MAX_CHUNK_SIZE
+
         chunks = []
         chunk_id = 0
-        pos = 0
+
+        def add_chunk(t):
+            nonlocal chunk_id
+            t = t.strip()
+            if not t:
+                return
+            nickname = t[:50] + ('...' if len(t) > 50 else '')
+            chunks.append({
+                'id': chunk_id,
+                'text': t,
+                'nickname': nickname,
+            })
+            chunk_id += 1
 
         for line in text.split('\n'):
             stripped = line.strip()
-            if stripped:
-                nickname = stripped[:50] + ('...' if len(stripped) > 50 else '')
-                chunks.append({
-                    'id': chunk_id,
-                    'text': stripped,
-                    'nickname': nickname,
-                    'start_pos': pos,
-                    'end_pos': pos + len(line)
-                })
-                chunk_id += 1
-            pos += len(line) + 1  # +1 for \n
+            if not stripped:
+                continue
+            if len(stripped) <= max_chunk_size:
+                add_chunk(stripped)
+            else:
+                # Split by sentences, accumulate up to max_chunk_size
+                sentences = re.split(r'(?<=[.!?])\s+', stripped)
+                current = ''
+                for sentence in sentences:
+                    if current and len(current) + 1 + len(sentence) > max_chunk_size:
+                        add_chunk(current)
+                        current = sentence
+                    else:
+                        current = (current + ' ' + sentence).strip() if current else sentence
+                if current:
+                    add_chunk(current)
 
         return chunks
 
@@ -3908,6 +3931,17 @@ def add_gutenberg_url_to_project():
         converter.current_project_metadata.update(gutenberg_urls)
         converter.current_project_metadata['last_modified'] = datetime.now().isoformat()
         converter.current_project_metadata['version'] = '3.0'
+        converter.current_project_metadata['book_file_stage'] = 3
+
+        # Generate book.txt (single-file representation)
+        try:
+            book_content = generate_book_file(new_chapters)
+            book_file_path = os.path.join(converter.current_project_path, 'book.txt')
+            with open(book_file_path, 'w', encoding='utf-8') as f:
+                f.write(book_content)
+            print(f"[INIT] Generated book.txt ({len(book_content)} chars)")
+        except Exception as bf_err:
+            print(f"[INIT] Warning: Failed to generate book.txt: {bf_err}")
 
         # Save to file
         project_file = os.path.join(converter.current_project_path, 'project.json')
@@ -4056,15 +4090,18 @@ def reparse_chapters():
 
         # Replace chapters in project metadata
         converter.current_project_metadata['chapters'] = new_chapters
-
-        # Regenerate XML
-        xml_content = converter.text_to_xml_content(text, [
-            {'id': ch['id'], 'title': ch['title'], 'text': ch_text, 'order': ch['order'],
-             'non_voiced': False}
-            for ch, (_, ch_text) in zip(new_chapters, parsed)
-        ])
-        converter.current_project_metadata['content_xml'] = xml_content
         converter.current_project_metadata['last_modified'] = datetime.now().isoformat()
+        converter.current_project_metadata['book_file_stage'] = 3
+
+        # Regenerate book.txt
+        try:
+            book_content = generate_book_file(new_chapters)
+            book_file_path = os.path.join(converter.current_project_path, 'book.txt')
+            with open(book_file_path, 'w', encoding='utf-8') as f:
+                f.write(book_content)
+            log_lines.append(f"[REPARSE] Generated book.txt ({len(book_content)} chars)")
+        except Exception as bf_err:
+            log_lines.append(f"[REPARSE] Warning: Failed to generate book.txt: {bf_err}")
 
         # Save
         project_file = os.path.join(converter.current_project_path, 'project.json')
@@ -4142,6 +4179,155 @@ def unlock_chapters():
             json.dump(converter.current_project_metadata, f, indent=2, ensure_ascii=False)
 
         return jsonify({'success': True, 'message': 'Chapters unlocked'})
+
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/project/book-file', methods=['GET'])
+@auth_manager.require_api_key
+def get_book_file():
+    """Return the book.txt content and current stage. Migrates from old format if needed."""
+    try:
+        if converter.current_project_path is None:
+            return jsonify({'error': 'No project loaded'}), 400
+
+        book_file_path = os.path.join(converter.current_project_path, 'book.txt')
+
+        if not os.path.exists(book_file_path):
+            # Attempt migration
+            content = migrate_to_book_file(
+                converter.current_project_path,
+                converter.current_project_metadata
+            )
+            if content is None:
+                return jsonify({'error': 'No book file found. Load a Gutenberg book first.'}), 400
+        else:
+            with open(book_file_path, 'r', encoding='utf-8') as f:
+                content = f.read()
+
+        stage = converter.current_project_metadata.get('book_file_stage', 0)
+        return jsonify({'content': content, 'stage': stage})
+
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/project/save-book-file', methods=['POST'])
+@auth_manager.require_api_key
+def save_book_file():
+    """
+    Save book.txt content, re-parse it into chapters array, and update project.json.
+    Preserves existing audio data.
+    """
+    try:
+        if converter.current_project_path is None:
+            return jsonify({'error': 'No project loaded'}), 400
+
+        data = request.json or {}
+        content = data.get('content', '')
+        if not content:
+            return jsonify({'error': 'No content provided'}), 400
+
+        book_file_path = os.path.join(converter.current_project_path, 'book.txt')
+        with open(book_file_path, 'w', encoding='utf-8') as f:
+            f.write(content)
+
+        # Parse book.txt into chapters, preserving existing audio
+        existing_chapters = converter.current_project_metadata.get('chapters', [])
+        new_chapters = parse_book_file(content, existing_chapters)
+
+        converter.current_project_metadata['chapters'] = new_chapters
+        converter.current_project_metadata['last_modified'] = datetime.now().isoformat()
+
+        # Update stage if it looks like chapters are present
+        if new_chapters and converter.current_project_metadata.get('book_file_stage', 0) < 2:
+            converter.current_project_metadata['book_file_stage'] = 2
+        has_chunks = any(len(ch.get('chunks', [])) > 0 for ch in new_chapters)
+        if has_chunks and converter.current_project_metadata.get('book_file_stage', 0) < 3:
+            converter.current_project_metadata['book_file_stage'] = 3
+
+        project_file = os.path.join(converter.current_project_path, 'project.json')
+        with open(project_file, 'w', encoding='utf-8') as f:
+            json.dump(converter.current_project_metadata, f, indent=2, ensure_ascii=False)
+
+        # Count dirty chunks
+        dirty_count = sum(
+            1 for ch in new_chapters
+            for ck in ch.get('chunks', [])
+            if ck.get('dirty', False)
+        )
+
+        return jsonify({
+            'success': True,
+            'chapter_count': len(new_chapters),
+            'dirty_count': dirty_count
+        })
+
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/project/tag-chunks', methods=['POST'])
+@auth_manager.require_api_key
+def tag_chunks():
+    """
+    Run smart chunking on current book.txt, inserting </chunk> markers.
+    Operates on the chapter bodies without disturbing <chapter>/<delete> tags.
+    """
+    try:
+        if converter.current_project_path is None:
+            return jsonify({'error': 'No project loaded'}), 400
+
+        book_file_path = os.path.join(converter.current_project_path, 'book.txt')
+        if not os.path.exists(book_file_path):
+            return jsonify({'error': 'No book.txt found'}), 400
+
+        with open(book_file_path, 'r', encoding='utf-8') as f:
+            content = f.read()
+
+        def rechunk_chapter_body(body_text):
+            """Re-chunk a chapter body using smart_chunk_text."""
+            # Remove existing </chunk> markers first
+            body_text = body_text.replace('</chunk>', '')
+            chunks = converter.smart_chunk_text(body_text)
+            if not chunks:
+                return body_text
+            return '\n</chunk>\n'.join(c['text'] for c in chunks) + '\n</chunk>'
+
+        # Replace chapter bodies with re-chunked versions
+        def replace_body(m):
+            tag_open = m.group(1)
+            body = m.group(2)
+            new_body = rechunk_chapter_body(body)
+            return f'{tag_open}\n{new_body}\n</chapter>'
+
+        new_content = re.sub(
+            r'(<chapter[^>]*>)(.*?)(</chapter>)',
+            replace_body,
+            content,
+            flags=re.DOTALL
+        )
+
+        with open(book_file_path, 'w', encoding='utf-8') as f:
+            f.write(new_content)
+
+        # Re-parse to update project.json
+        existing_chapters = converter.current_project_metadata.get('chapters', [])
+        new_chapters = parse_book_file(new_content, existing_chapters)
+        converter.current_project_metadata['chapters'] = new_chapters
+        converter.current_project_metadata['book_file_stage'] = 3
+        converter.current_project_metadata['last_modified'] = datetime.now().isoformat()
+
+        project_file = os.path.join(converter.current_project_path, 'project.json')
+        with open(project_file, 'w', encoding='utf-8') as f:
+            json.dump(converter.current_project_metadata, f, indent=2, ensure_ascii=False)
+
+        return jsonify({
+            'success': True,
+            'content': new_content,
+            'chapter_count': len(new_chapters)
+        })
 
     except Exception as e:
         return jsonify({'error': str(e)}), 500
@@ -5335,6 +5521,191 @@ def parse_markdown_to_chapters(markdown_content, existing_chapters):
         new_chapters.append(new_chapter)
 
     return new_chapters
+
+
+def parse_book_file(content, existing_chapters):
+    """
+    Parse book.txt content into a chapters array.
+
+    Format:
+        <delete>...</delete>          - boilerplate (ignored)
+        <chapter title="...">         - chapter start (on own line)
+        ...chunk text...
+        </chunk>                      - chunk boundary
+        [pause:X]                     - pause chunk (must be sole content of chunk segment)
+        [file:path]                   - common-file chunk (must be sole content of chunk segment)
+        {display|spoken}              - pronunciation markup (preserved as-is)
+        </chapter>                    - chapter end (on own line)
+
+    Text outside <delete> and <chapter> tags is orphaned (skipped with warning).
+    The last text segment before </chapter> is implicitly a chunk even without </chunk>.
+    Preserves existing audio data by matching chapters by title and chunks by index/text.
+    """
+
+    # Build lookup of existing chapters by title
+    existing_chapter_map = {}
+    for ch in existing_chapters:
+        title = ch.get('title') or ch.get('name', '')
+        existing_chapter_map[title] = ch
+
+    # Remove delete blocks
+    cleaned = re.sub(r'<delete>.*?</delete>', '', content, flags=re.DOTALL)
+
+    # Find all chapter blocks
+    chapter_pattern = re.compile(
+        r'<chapter\s+title="([^"]*)"(?:\s+non-voiced="true")?\s*>(.*?)</chapter>',
+        re.DOTALL
+    )
+    non_voiced_pattern = re.compile(r'non-voiced="true"')
+
+    new_chapters = []
+
+    for m in chapter_pattern.finditer(content):
+        title = m.group(1)
+        chapter_content = m.group(2)
+        is_non_voiced = bool(non_voiced_pattern.search(m.group(0).split('>')[0]))
+
+        # Split on </chunk> markers — last segment may be implicit chunk
+        raw_segments = chapter_content.split('</chunk>')
+
+        parsed_chunks = []
+        for seg in raw_segments:
+            seg = seg.strip()
+            if not seg:
+                continue
+
+            # Pause chunk
+            pause_match = re.match(r'^\[pause:(\d+\.?\d*)\]\s*$', seg)
+            if pause_match:
+                parsed_chunks.append({'type': 'pause', 'duration': float(pause_match.group(1))})
+                continue
+
+            # File chunk
+            file_match = re.match(r'^\[file:(.+?)\]\s*$', seg)
+            if file_match:
+                parsed_chunks.append({'type': 'common_file', 'path': file_match.group(1)})
+                continue
+
+            # Text chunk — preserve internal newlines
+            parsed_chunks.append({'type': 'text', 'text': seg})
+
+        # Get existing chapter to preserve audio
+        existing_chapter = existing_chapter_map.get(title)
+        existing_chunks = existing_chapter.get('chunks', []) if existing_chapter else []
+
+        # Build chunk list with audio preservation
+        new_chunk_list = []
+        chunk_id = 0
+
+        for i, chunk_data in enumerate(parsed_chunks):
+            existing_chunk = existing_chunks[i] if i < len(existing_chunks) else {}
+
+            if chunk_data['type'] == 'text':
+                old_text = existing_chunk.get('text', '')
+                new_text = chunk_data['text']
+                has_audio = len(existing_chunk.get('generated_audios', [])) > 0
+                chunk = {
+                    'id': existing_chunk.get('id', chunk_id),
+                    'type': 'text',
+                    'text': new_text,
+                    'nickname': new_text[:50].strip() + ('...' if len(new_text) > 50 else ''),
+                    'dirty': old_text != new_text and has_audio,
+                    'generated_audios': existing_chunk.get('generated_audios', [])
+                }
+            elif chunk_data['type'] == 'pause':
+                chunk = {
+                    'id': existing_chunk.get('id', chunk_id),
+                    'type': 'pause',
+                    'duration': chunk_data['duration'],
+                    'generated_audios': existing_chunk.get('generated_audios', [])
+                }
+            elif chunk_data['type'] == 'common_file':
+                chunk = {
+                    'id': existing_chunk.get('id', chunk_id),
+                    'type': 'common_file',
+                    'path': chunk_data['path'],
+                    'generated_audios': existing_chunk.get('generated_audios', [])
+                }
+            else:
+                continue
+
+            chunk_id = max(chunk_id, chunk.get('id', 0)) + 1
+            new_chunk_list.append(chunk)
+
+        new_chapter = {
+            'id': existing_chapter.get('id') if existing_chapter else str(uuid.uuid4()),
+            'title': title,
+            'name': title,
+            'non_voiced': is_non_voiced,
+            'chunks': new_chunk_list
+        }
+        new_chapters.append(new_chapter)
+
+    return new_chapters
+
+
+def generate_book_file(chapters):
+    """
+    Convert chapters array back into book.txt format.
+    Produces Stage 3 content (with <chapter>, </chunk> but no <delete> blocks).
+    """
+    lines = []
+    for chapter in chapters:
+        title = chapter.get('title') or chapter.get('name', '')
+        non_voiced = chapter.get('non_voiced', False)
+        nv_attr = ' non-voiced="true"' if non_voiced else ''
+        lines.append(f'<chapter title="{title}"{nv_attr}>')
+
+        chunks = chapter.get('chunks', [])
+        for chunk in chunks:
+            ctype = chunk.get('type', 'text')
+            if ctype == 'text':
+                lines.append(chunk.get('text', ''))
+            elif ctype == 'pause':
+                lines.append(f"[pause:{chunk.get('duration', 1.0)}]")
+            elif ctype == 'common_file':
+                lines.append(f"[file:{chunk.get('path', '')}]")
+            lines.append('</chunk>')
+
+        lines.append('</chapter>')
+        lines.append('')
+
+    return '\n'.join(lines)
+
+
+def migrate_to_book_file(project_path, metadata):
+    """
+    Migrate an existing project to book.txt format.
+    Non-destructive: raw_text.txt is never modified.
+    Returns the book.txt content (also writes it to disk).
+    """
+    book_file_path = os.path.join(project_path, 'book.txt')
+
+    # Already migrated
+    if os.path.exists(book_file_path):
+        with open(book_file_path, 'r', encoding='utf-8') as f:
+            return f.read()
+
+    # Try to reconstruct from existing chapters
+    chapters = metadata.get('chapters', [])
+    if chapters:
+        content = generate_book_file(chapters)
+        with open(book_file_path, 'w', encoding='utf-8') as f:
+            f.write(content)
+        print(f"[migrate] Created book.txt from chapters array ({len(chapters)} chapters)")
+        return content
+
+    # Fall back to raw_text.txt (Stage 0)
+    raw_text_path = os.path.join(project_path, 'raw_text.txt')
+    if os.path.exists(raw_text_path):
+        with open(raw_text_path, 'r', encoding='utf-8') as f:
+            content = f.read()
+        with open(book_file_path, 'w', encoding='utf-8') as f:
+            f.write(content)
+        print(f"[migrate] Created book.txt from raw_text.txt (Stage 0)")
+        return content
+
+    return None
 
 
 # Serve static HTML and JavaScript files
