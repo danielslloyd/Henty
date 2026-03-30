@@ -70,12 +70,13 @@ class GutenbergProcessor:
         """Download the no-images EPUB; returns None on failure."""
         url = self.get_epub_url(book_id)
         try:
-            print(f"Downloading EPUB: {url}")
+            print(f"[EPUB] Downloading: {url}")
             resp = requests.get(url, timeout=60)
             resp.raise_for_status()
+            print(f"[EPUB] Downloaded successfully: {len(resp.content):,} bytes")
             return resp.content
         except Exception as e:
-            print(f"EPUB download failed ({e})")
+            print(f"[EPUB] Download failed for book {book_id}: {e}")
             return None
 
     def get_epub_chapter_titles(self, epub_bytes: bytes) -> List[str]:
@@ -353,7 +354,7 @@ class GutenbergProcessor:
                 if pos not in used_positions:
                     used_positions.add(pos)
                     splits.append((pos, match.end(), title))
-                    print(f"DEBUG [SPLIT]: ✓ '{title}' → {strategy}, pos={pos}, text={snippet}")
+                    print(f"DEBUG [SPLIT]: ✓ '{title}' → {strategy}, pos={pos}, text={snippet[:120]}...")
                 else:
                     print(f"DEBUG [SPLIT]: ✗ '{title}' → pos={pos} already claimed (duplicate)")
             else:
@@ -368,7 +369,8 @@ class GutenbergProcessor:
                     for m2 in list(re.finditer(r'(?m)^.*' + re.escape(word) + r'.*$', text, re.IGNORECASE))[:2]:
                         ctx_start = max(0, m2.start() - 40)
                         ctx_end = min(len(text), m2.end() + 40)
-                        print(f"DEBUG [SPLIT]:   near '{word}': {repr(text[ctx_start:ctx_end])}")
+                        ctx = repr(text[ctx_start:ctx_end])
+                        print(f"DEBUG [SPLIT]:   near '{word}': {ctx[:100]}...")
                     break
 
         if not splits:
