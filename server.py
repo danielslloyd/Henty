@@ -58,6 +58,100 @@ def compute_similarity(text_a, text_b):
     b = normalize(text_b)
     return difflib.SequenceMatcher(None, a, b).ratio()
 
+
+LOG_PREVIEW_LIMIT = 300
+
+
+def preview_for_log(value, limit=LOG_PREVIEW_LIMIT):
+    """Return a single-line preview capped for safe server logging."""
+    if value is None:
+        return ""
+    text = str(value).replace('\r', '\\r').replace('\n', '\\n')
+    if len(text) <= limit:
+        return text
+    return f"{text[:limit]}... [{len(text)} chars total]"
+
+
+def preview_json_for_log(value, limit=LOG_PREVIEW_LIMIT):
+    """Serialize JSON-ish values and cap the output for logs."""
+    try:
+        serialized = json.dumps(value, ensure_ascii=False)
+    except Exception:
+        serialized = str(value)
+    return preview_for_log(serialized, limit=limit)
+
+
+def build_gutenberg_url_metadata(book_id, source_url, processor=None):
+    """Build canonical Gutenberg URL metadata for persistence and UI reuse."""
+    if not book_id:
+        return {
+            'gutenberg_book_id': None,
+            'gutenberg_source_url': source_url or None,
+            'gutenberg_txt_url': None,
+            'gutenberg_epub_url': None,
+        }
+
+    processor = processor or GutenbergProcessor(output_dir='.')
+    return {
+        'gutenberg_book_id': book_id,
+        'gutenberg_source_url': source_url,
+        'gutenberg_txt_url': processor.get_plain_text_url(book_id),
+        'gutenberg_epub_url': processor.get_epub_url(book_id),
+    }
+
+
+def enrich_project_metadata_with_gutenberg_urls(metadata, project_path=None):
+    """Backfill canonical Gutenberg URLs into loaded project metadata."""
+    if not metadata:
+        return metadata
+
+    source_url = metadata.get('gutenberg_source_url')
+    book_id = metadata.get('gutenberg_book_id')
+
+    if not source_url:
+        for chapter in metadata.get('chapters', []):
+            chapter_source_url = chapter.get('source_url')
+            if chapter_source_url and 'gutenberg.org' in chapter_source_url.lower():
+                source_url = chapter_source_url
+                break
+
+    if not book_id and source_url and 'gutenberg.org' in source_url.lower():
+        processor = GutenbergProcessor(output_dir=project_path or '.')
+        book_id = processor.get_gutenberg_book_id(source_url)
+
+    if source_url or book_id:
+        metadata.update(build_gutenberg_url_metadata(book_id, source_url, GutenbergProcessor(output_dir=project_path or '.')))
+
+    return metadata
+
+
+def ensure_cached_project_epub(project_path, metadata):
+    """Load cached EPUB bytes or re-download from saved Gutenberg metadata."""
+    epub_cache = os.path.join(project_path, 'source.epub')
+    if os.path.exists(epub_cache):
+        with open(epub_cache, 'rb') as f:
+            return f.read(), None
+
+    if not metadata:
+        return None, 'No project metadata available.'
+
+    processor = GutenbergProcessor(output_dir=project_path)
+    metadata = enrich_project_metadata_with_gutenberg_urls(metadata, project_path)
+    book_id = metadata.get('gutenberg_book_id')
+    epub_url = metadata.get('gutenberg_epub_url')
+
+    if not book_id:
+        return None, 'No saved Gutenberg EPUB URL found. Load a Gutenberg book first.'
+
+    epub_bytes = processor.download_epub(book_id)
+    if not epub_bytes:
+        return None, f'Failed to download EPUB from {epub_url or "Project Gutenberg"}'
+
+    with open(epub_cache, 'wb') as ef:
+        ef.write(epub_bytes)
+    print(f"[EPUB CACHE] Downloaded EPUB from {epub_url or 'Project Gutenberg'} ({len(epub_bytes):,} bytes)")
+    return epub_bytes, None
+
 # Configure CORS for remote access
 # Note: When using wildcard (*), we can't use credentials
 if config.ALLOWED_ORIGINS == ['*'] or config.ALLOWED_ORIGINS == '*':
@@ -1075,6 +1169,7 @@ def generate_from_upload():
         # Read file content
         text = file.read().decode('utf-8')
         print(f"File content length: {len(text)} characters")
+        print(f"File content preview: {preview_for_log(text)}")
 
         # Get optional parameters from form data
         language_id = request.form.get('language_id', 'en')
@@ -1116,7 +1211,7 @@ def generate_from_upload():
             'cfg_weight': cfg_weight,
             'voice_sample': voice_sample_name,
             'audio_file': audio_filename,
-            'text_preview': text[:200],
+            'text_preview': text[:LOG_PREVIEW_LIMIT],
             'is_best_take': False
         }
 
@@ -1125,7 +1220,7 @@ def generate_from_upload():
         # Generate audio if it doesn't exist
         if not os.path.exists(audio_path):
             print(f"Generating audio for: {filename}...")
-            print(f"Text preview: {text[:100]}...")
+            print(f"Text preview: {preview_for_log(text)}")
             result = converter.generate_audio(
                 text,
                 audio_path,
@@ -1572,6 +1667,9 @@ def create_project():
                         # Use GutenbergProcessor for special Gutenberg handling
                         processor = GutenbergProcessor(output_dir=project_path)
 
+                        book_id = processor.get_gutenberg_book_id(url)
+                        gutenberg_urls = build_gutenberg_url_metadata(book_id, url, processor)
+
                         # Download content (supports both .txt and .html)
                         print(f'[CREATE PROJECT API] Downloading content from Gutenberg...')
                         content = processor.download_text(url)
@@ -1674,6 +1772,7 @@ def create_project():
                             project_metadata['content_xml'] = xml_content
                             project_metadata['original_filename'] = f"{title}.html"
                             project_metadata['version'] = '3.0'
+                            project_metadata.update(gutenberg_urls)
 
                             print(f'[CREATE PROJECT API] Created {len(new_chapters)} chapters with HTML processing')
 
@@ -1759,6 +1858,7 @@ def create_project():
                             project_metadata['content_xml'] = xml_content
                             project_metadata['original_filename'] = f"{title}.txt"
                             project_metadata['version'] = '3.0'
+                            project_metadata.update(gutenberg_urls)
 
                             print(f'[CREATE PROJECT API] Created {len(new_chapters)} chapters with Gutenberg processing')
 
@@ -1873,7 +1973,8 @@ def load_project():
         print(f'[LOAD PROJECT API] Reading project.json...')
         with open(project_file, 'r', encoding='utf-8') as f:
             project_metadata = json.load(f)
-        print(f'[LOAD PROJECT API] Project metadata: {project_metadata}')
+        project_metadata = enrich_project_metadata_with_gutenberg_urls(project_metadata, project_path)
+        print(f'[LOAD PROJECT API] Project metadata: {preview_json_for_log(project_metadata)}')
 
         # Add default audio settings if not present (backwards compatibility)
         if 'default_audio_settings' not in project_metadata:
@@ -1931,7 +2032,10 @@ def get_project_info():
         return jsonify({
             'has_project': True,
             'project_path': converter.current_project_path,
-            'metadata': converter.current_project_metadata
+            'metadata': enrich_project_metadata_with_gutenberg_urls(
+                converter.current_project_metadata,
+                converter.current_project_path
+            )
         })
 
     except Exception as e:
@@ -2100,6 +2204,11 @@ def get_project_text_files():
         if converter.current_project_path is None:
             return jsonify({'error': 'No project loaded'}), 400
 
+        converter.current_project_metadata = enrich_project_metadata_with_gutenberg_urls(
+            converter.current_project_metadata,
+            converter.current_project_path
+        )
+
         # Return both chapters (new) and text_files (old) for backwards compatibility
         chapters = converter.current_project_metadata.get('chapters', [])
         text_files = converter.current_project_metadata.get('text_files', [])
@@ -2109,7 +2218,13 @@ def get_project_text_files():
             'chapters': chapters,
             'text_files': text_files,  # Keep for backwards compatibility
             'has_chapters': len(chapters) > 0,
-            'content_xml': converter.current_project_metadata.get('content_xml', None)
+            'content_xml': converter.current_project_metadata.get('content_xml', None),
+            'gutenberg': {
+                'book_id': converter.current_project_metadata.get('gutenberg_book_id'),
+                'source_url': converter.current_project_metadata.get('gutenberg_source_url'),
+                'txt_url': converter.current_project_metadata.get('gutenberg_txt_url'),
+                'epub_url': converter.current_project_metadata.get('gutenberg_epub_url'),
+            }
         })
 
     except Exception as e:
@@ -3697,7 +3812,8 @@ def add_gutenberg_url_to_project():
         print(f"Book ID: {book_id}")
 
         # Always download the canonical plain text for content
-        plain_text_url = processor.get_plain_text_url(book_id)
+        gutenberg_urls = build_gutenberg_url_metadata(book_id, url, processor)
+        plain_text_url = gutenberg_urls['gutenberg_txt_url']
         print(f"DEBUG [A] Downloading plain text: {plain_text_url}")
         raw_content = processor.download_text(plain_text_url)
         print(f"DEBUG [A] Plain text downloaded: {len(raw_content):,} characters")
@@ -3812,8 +3928,7 @@ def add_gutenberg_url_to_project():
         # Store/update XML content
         converter.current_project_metadata['content_xml'] = xml_content
         converter.current_project_metadata['original_filename'] = f"{title}.txt"
-        converter.current_project_metadata['gutenberg_book_id'] = book_id
-        converter.current_project_metadata['gutenberg_source_url'] = url
+        converter.current_project_metadata.update(gutenberg_urls)
         converter.current_project_metadata['last_modified'] = datetime.now().isoformat()
         converter.current_project_metadata['version'] = '3.0'
         converter.current_project_metadata['book_file_stage'] = 3
@@ -3842,7 +3957,10 @@ def add_gutenberg_url_to_project():
             'chapters': new_chapters,
             'chapter_count': len(new_chapters),
             'content_xml': xml_content,
-            'debug': debug_info,
+            'debug': {
+                **debug_info,
+                'epub_url': gutenberg_urls['gutenberg_epub_url'],
+            },
         })
 
     except Exception as e:
@@ -3882,20 +4000,19 @@ def reparse_chapters():
         processor = GutenbergProcessor(output_dir=converter.current_project_path)
         log_lines: list = []
 
-        # Resolve Gutenberg book ID from metadata or chapter source URLs
+        converter.current_project_metadata = enrich_project_metadata_with_gutenberg_urls(
+            converter.current_project_metadata,
+            converter.current_project_path
+        )
         book_id = converter.current_project_metadata.get('gutenberg_book_id')
-        if not book_id:
-            for ch in converter.current_project_metadata.get('chapters', []):
-                src_url = ch.get('source_url', '')
-                if src_url:
-                    book_id = processor.get_gutenberg_book_id(src_url)
-                    if book_id:
-                        break
 
         if book_id:
             log_lines.append(f"[REPARSE] Gutenberg book ID (GN): {book_id}")
             # Always re-download the canonical plain text file for parsing
-            plain_text_url = processor.get_plain_text_url(book_id)
+            plain_text_url = (
+                converter.current_project_metadata.get('gutenberg_txt_url')
+                or processor.get_plain_text_url(book_id)
+            )
             log_lines.append(f"[REPARSE] Fetching plain text: {plain_text_url}")
             print(f"[REPARSE] GN={book_id} — downloading plain text: {plain_text_url}")
             try:
@@ -3923,26 +4040,16 @@ def reparse_chapters():
                 text = f.read()
 
         # Load or download the EPUB
-        epub_cache = os.path.join(converter.current_project_path, 'source.epub')
-        epub_bytes = None
-        if os.path.exists(epub_cache):
-            with open(epub_cache, 'rb') as f:
-                epub_bytes = f.read()
+        epub_bytes, epub_error = ensure_cached_project_epub(
+            converter.current_project_path,
+            converter.current_project_metadata
+        )
+        if epub_bytes:
             log_lines.append(f"[REPARSE] Loaded cached EPUB: {len(epub_bytes):,} bytes")
             print(f"[REPARSE] Loaded cached EPUB: {len(epub_bytes):,} bytes")
-        elif book_id:
-            epub_url = processor.get_epub_url(book_id)
-            log_lines.append(f"[REPARSE] Fetching EPUB: {epub_url}")
-            print(f"[REPARSE] GN={book_id} — downloading EPUB: {epub_url}")
-            epub_bytes = processor.download_epub(book_id)
-            if epub_bytes:
-                with open(epub_cache, 'wb') as ef:
-                    ef.write(epub_bytes)
-                log_lines.append(f"[REPARSE] EPUB downloaded and cached: {len(epub_bytes):,} bytes")
-                print(f"[REPARSE] EPUB downloaded and cached: {len(epub_bytes):,} bytes")
-            else:
-                log_lines.append(f"[REPARSE] WARNING: EPUB download failed from {epub_url}")
-                print(f"[REPARSE] EPUB download FAILED from: {epub_url}")
+        elif epub_error:
+            log_lines.append(f"[REPARSE] WARNING: {epub_error}")
+            print(f"[REPARSE] {epub_error}")
         else:
             log_lines.append("[REPARSE] No Gutenberg book ID — EPUB not available")
 
@@ -4234,16 +4341,25 @@ def epub_spine_preview():
         if converter.current_project_path is None:
             return jsonify({'error': 'No project loaded'}), 400
 
-        epub_cache = os.path.join(converter.current_project_path, 'source.epub')
-        if not os.path.exists(epub_cache):
-            return jsonify({'error': 'No cached EPUB found. Load a Gutenberg book first.'}), 400
-
-        with open(epub_cache, 'rb') as f:
-            epub_bytes = f.read()
+        converter.current_project_metadata = enrich_project_metadata_with_gutenberg_urls(
+            converter.current_project_metadata,
+            converter.current_project_path
+        )
+        epub_bytes, epub_error = ensure_cached_project_epub(
+            converter.current_project_path,
+            converter.current_project_metadata
+        )
+        if not epub_bytes:
+            return jsonify({'error': epub_error or 'No cached EPUB found. Load a Gutenberg book first.'}), 400
 
         processor = GutenbergProcessor(output_dir=converter.current_project_path)
         items = processor.get_spine_preview(epub_bytes, num_words=60)
-        return jsonify({'items': items, 'count': len(items)})
+        return jsonify({
+            'items': items,
+            'count': len(items),
+            'epub_url': converter.current_project_metadata.get('gutenberg_epub_url'),
+            'txt_url': converter.current_project_metadata.get('gutenberg_txt_url'),
+        })
 
     except Exception as e:
         return jsonify({'error': str(e)}), 500

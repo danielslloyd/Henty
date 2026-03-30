@@ -23,6 +23,7 @@ class GutenbergTab {
         this.markdownContent = '';
         this.chapters = [];
         this.defaultGutenbergUrl = '';
+        this.projectGutenberg = {};
         this.parsingMethods = {};
         this.cleanViewActive = false;
         this.chaptersLocked = false;
@@ -749,6 +750,7 @@ class GutenbergTab {
                     const logLines = [
                         `[LOAD] Book ID: ${d.book_id}`,
                         `[LOAD] Plain text URL: ${d.txt_url}`,
+                        `[LOAD] EPUB URL: ${d.epub_url}`,
                         `[LOAD] Plain text: ${d.txt_chars?.toLocaleString()} chars`,
                         `[LOAD] EPUB downloaded: ${d.epub_downloaded} (${d.epub_bytes?.toLocaleString()} bytes)`,
                         `[LOAD] EPUB titles found: ${d.epub_titles?.length || 0}`,
@@ -1042,6 +1044,13 @@ class GutenbergTab {
             if (data.error) {
                 if (el) el.innerHTML = `<p style="color:#dc2626; font-size:13px;">⚠ ${this._esc(data.error)}</p>`;
                 return;
+            }
+            if (data.epub_url || data.txt_url) {
+                this.projectGutenberg = {
+                    ...this.projectGutenberg,
+                    epub_url: data.epub_url || this.projectGutenberg.epub_url,
+                    txt_url: data.txt_url || this.projectGutenberg.txt_url,
+                };
             }
             this._renderSpinePreview(data.items || []);
         } catch (e) {
