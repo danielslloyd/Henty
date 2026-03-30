@@ -928,6 +928,248 @@ class GutenbergTab {
     generateId() {
         return 'id_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9);
     }
+
+    // ------------------------------------------------------------------ //
+    //  Parse Wizard (3-step interactive chapter placement)                //
+    // ------------------------------------------------------------------ //
+
+    switchParseStep(step) {
+        document.querySelectorAll('.parse-wizard-panel').forEach(p => p.classList.remove('active'));
+        document.querySelectorAll('.parse-wizard-tab').forEach(t => t.classList.remove('active'));
+        const panel = document.getElementById(`parse-wizard-panel-${step}`);
+        if (panel) panel.classList.add('active');
+        document.querySelectorAll(`.parse-wizard-tab[data-step="${step}"]`).forEach(t => t.classList.add('active'));
+    }
+
+    // Step 1: EPUB Spine Preview
+    async loadSpinePreview() {
+        const btn = document.getElementById('spinePreviewBtn');
+        if (btn) btn.textContent = 'Loading…';
+        try {
+            const res = await fetch(`${SERVER_URL}/api/project/epub-spine-preview`, {
+                headers: { 'X-API-Key': API_KEY }
+            });
+            const data = await res.json();
+            if (data.error) { showToast(data.error, 'error'); return; }
+            this._renderSpinePreview(data.items || []);
+        } catch (e) {
+            showToast('Error loading EPUB preview: ' + e.message, 'error');
+        } finally {
+            if (btn) btn.textContent = 'Reload';
+        }
+    }
+
+    _renderSpinePreview(items) {
+        const el = document.getElementById('epub-spine-list');
+        if (!el) return;
+        if (!items.length) {
+            el.innerHTML = '<p style="color:#64748b; font-size:13px;">No content spine items found in EPUB.</p>';
+            return;
+        }
+        el.innerHTML = `
+            <table class="spine-preview-table">
+                <thead><tr><th>#</th><th>Heading</th><th>NCX Label</th><th>Body Preview</th></tr></thead>
+                <tbody>${items.map(item => `
+                    <tr>
+                        <td style="color:#94a3b8;">${item.idx}</td>
+                        <td style="font-weight:600;">${this._esc(item.heading)}</td>
+                        <td style="color:#6d28d9;">${this._esc(item.ncx_label)}</td>
+                        <td style="color:#64748b; max-width:280px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;" title="${this._esc(item.body_preview)}">${this._esc(item.body_preview.substring(0, 120))}…</td>
+                    </tr>`).join('')}
+                </tbody>
+            </table>`;
+    }
+
+    // Step 2: Detect and remove boilerplate
+    async detectBoilerplate() {
+        const el = document.getElementById('boilerplate-list');
+        if (el) el.innerHTML = '<p style="color:#64748b; font-size:13px;">Detecting…</p>';
+        try {
+            const res = await fetch(`${SERVER_URL}/api/project/detect-boilerplate`, {
+                headers: { 'X-API-Key': API_KEY }
+            });
+            const data = await res.json();
+            if (data.error) { showToast(data.error, 'error'); return; }
+            this._renderBoilerplate(data.sections || [], data.total_lines || 0);
+        } catch (e) {
+            showToast('Error: ' + e.message, 'error');
+        }
+    }
+
+    _renderBoilerplate(sections, totalLines) {
+        const el = document.getElementById('boilerplate-list');
+        const applyBtn = document.getElementById('applyDeletionsBtn');
+        if (!el) return;
+        if (!sections.length) {
+            el.innerHTML = '<p style="color:#16a34a; font-size:13px;">✓ No boilerplate detected.</p>';
+            if (applyBtn) applyBtn.style.display = 'none';
+            return;
+        }
+        this._pendingBoilerplateSections = sections;
+        el.innerHTML = sections.map((s, i) => `
+            <div class="boilerplate-item">
+                <label style="display:flex; align-items:flex-start; gap:8px; cursor:pointer;">
+                    <input type="checkbox" class="boilerplate-check" data-idx="${i}" checked style="margin-top:3px; flex-shrink:0;">
+                    <div style="min-width:0;">
+                        <span class="boilerplate-type-badge ${this._esc(s.type)}">${this._esc(s.type.toUpperCase())}</span>
+                        <span style="font-size:12px; color:#92400e;"> lines ${s.start_line}–${s.end_line}</span>
+                        <pre>${this._esc(s.preview)}</pre>
+                    </div>
+                </label>
+            </div>`).join('');
+        if (applyBtn) applyBtn.style.display = '';
+    }
+
+    async applyDeletions() {
+        const checks = document.querySelectorAll('.boilerplate-check:checked');
+        if (!checks.length) { showToast('Nothing selected', 'error'); return; }
+        const regions = [];
+        checks.forEach(cb => {
+            const s = (this._pendingBoilerplateSections || [])[parseInt(cb.dataset.idx)];
+            if (s) regions.push({ start_line: s.start_line, end_line: s.end_line });
+        });
+        try {
+            const res = await fetch(`${SERVER_URL}/api/project/delete-text-lines`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', 'X-API-Key': API_KEY },
+                body: JSON.stringify({ regions })
+            });
+            const data = await res.json();
+            if (data.error) { showToast(data.error, 'error'); return; }
+            showToast(`Removed ${data.deleted_lines} lines. Text now ${data.line_count} lines.`, 'success');
+            document.getElementById('boilerplate-list').innerHTML =
+                '<p style="color:#16a34a; font-size:13px;">✓ Deletions applied. Run detection again to check.</p>';
+            const applyBtn = document.getElementById('applyDeletionsBtn');
+            if (applyBtn) applyBtn.style.display = 'none';
+        } catch (e) {
+            showToast('Error: ' + e.message, 'error');
+        }
+    }
+
+    // Step 3: Detect and confirm chapter break positions
+    async detectCandidates() {
+        const btn = document.getElementById('detectCandidatesBtn');
+        if (btn) btn.textContent = 'Searching…';
+        const listEl = document.getElementById('chapter-candidates-list');
+        if (listEl) listEl.innerHTML = '<p style="color:#64748b; font-size:13px;">Running strategies…</p>';
+        try {
+            const res = await fetch(`${SERVER_URL}/api/project/chapter-candidates`, {
+                headers: { 'X-API-Key': API_KEY }
+            });
+            const data = await res.json();
+            if (data.error) { showToast(data.error, 'error'); return; }
+            if (data.log && data.log.length) this.appendToLog(data.log);
+            this._renderCandidates(data.candidates || []);
+        } catch (e) {
+            showToast('Error: ' + e.message, 'error');
+        } finally {
+            if (btn) btn.textContent = 'Re-Search';
+        }
+    }
+
+    _renderCandidates(candidates) {
+        this._pendingCandidates = candidates;
+        const el = document.getElementById('chapter-candidates-list');
+        const applyBtn = document.getElementById('applyChaptersBtn');
+        if (!el) return;
+        if (!candidates.length) {
+            el.innerHTML = '<p style="color:#64748b; font-size:13px;">No candidates found. Check EPUB is loaded and text is cleaned.</p>';
+            if (applyBtn) applyBtn.style.display = 'none';
+            return;
+        }
+        el.innerHTML = candidates.map((c, i) => {
+            const ctx = c.context;
+            const contextHtml = ctx ? `<div class="candidate-context">${
+                this._esc(ctx.before) + (ctx.before ? '\n' : '')
+            }<span class="ctx-match">▶ ${this._esc(ctx.match_line)}</span>${
+                ctx.after ? '\n' + this._esc(ctx.after) : ''
+            }</div>` : '';
+            return `<div class="candidate-item${c.matched ? '' : ' unmatched'}">
+                <label style="display:flex; align-items:flex-start; gap:8px; cursor:pointer;">
+                    <input type="checkbox" class="candidate-check" data-idx="${i}" ${c.matched ? 'checked' : ''} style="margin-top:4px; flex-shrink:0;">
+                    <div style="flex:1; min-width:0;">
+                        <div style="display:flex; align-items:center; gap:6px; flex-wrap:wrap; margin-bottom:4px;">
+                            <input type="text" class="candidate-title-input" data-idx="${i}"
+                                value="${this._esc(c.title)}"
+                                style="font-weight:600; font-size:13px; border:1px solid #c7d2fe; border-radius:4px; padding:2px 7px; flex:1; min-width:120px;">
+                            <span class="strategy-badge ${c.matched ? '' : 'unmatched-badge'}">${c.matched ? this._esc(c.strategy || '?') : 'no match'}</span>
+                            ${c.matched ? `<span style="font-size:11px; color:#94a3b8;">line ${c.line_num}</span>` : ''}
+                        </div>
+                        ${c.matched ? contextHtml : `
+                            <div style="display:flex; gap:6px; margin-top:4px;">
+                                <input type="text" class="candidate-search-input" data-idx="${i}"
+                                    placeholder="Enter a phrase from the chapter start to search manually…"
+                                    style="flex:1; font-size:12px; padding:4px 8px; border:1px solid #fecaca; border-radius:4px;">
+                                <button onclick="gutenbergTab.searchCandidate(${i})"
+                                    style="font-size:12px; padding:4px 10px; background:#4f46e5; color:white; border:none; border-radius:4px; cursor:pointer;">Search</button>
+                            </div>`}
+                    </div>
+                </label>
+            </div>`;
+        }).join('');
+        if (applyBtn) applyBtn.style.display = '';
+    }
+
+    async searchCandidate(idx) {
+        const input = document.querySelector(`.candidate-search-input[data-idx="${idx}"]`);
+        if (!input || !input.value.trim()) return;
+        try {
+            const res = await fetch(`${SERVER_URL}/api/project/search-text-position`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', 'X-API-Key': API_KEY },
+                body: JSON.stringify({ phrase: input.value.trim() })
+            });
+            const data = await res.json();
+            if (!data.found) { showToast('Phrase not found in text', 'error'); return; }
+            const c = this._pendingCandidates[idx];
+            c.matched = true;
+            c.position = data.position;
+            c.line_num = data.line_num;
+            c.context = data.context;
+            c.strategy = 'manual';
+            this._renderCandidates(this._pendingCandidates);
+        } catch (e) {
+            showToast('Error: ' + e.message, 'error');
+        }
+    }
+
+    async applyChapterBreaks() {
+        if (!this._pendingCandidates) { showToast('No candidates loaded', 'error'); return; }
+        const breaks = [];
+        document.querySelectorAll('.candidate-check:checked').forEach(cb => {
+            const i = parseInt(cb.dataset.idx);
+            const c = this._pendingCandidates[i];
+            if (c && c.matched && c.position !== null) {
+                const titleInput = document.querySelector(`.candidate-title-input[data-idx="${i}"]`);
+                breaks.push({ title: titleInput ? titleInput.value.trim() : c.title, position: c.position });
+            }
+        });
+        if (!breaks.length) { showToast('No confirmed chapter breaks selected', 'error'); return; }
+        try {
+            const res = await fetch(`${SERVER_URL}/api/project/apply-chapter-breaks`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', 'X-API-Key': API_KEY },
+                body: JSON.stringify({ breaks })
+            });
+            const data = await res.json();
+            if (data.error) { showToast(data.error, 'error'); return; }
+            await this.loadMarkdown();
+            if (typeof ttsTab !== 'undefined' && ttsTab.refreshChapters) await ttsTab.refreshChapters();
+            if (typeof readerTab !== 'undefined' && readerTab.refresh) await readerTab.refresh();
+            showToast(`Applied ${data.chapter_count} chapters`, 'success');
+        } catch (e) {
+            showToast('Error: ' + e.message, 'error');
+        }
+    }
+
+    _esc(str) {
+        if (!str) return '';
+        return String(str)
+            .replace(/&/g, '&amp;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;')
+            .replace(/"/g, '&quot;');
+    }
 }
 
 // Create global instance

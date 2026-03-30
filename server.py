@@ -4038,6 +4038,257 @@ def unlock_chapters():
         return jsonify({'error': str(e)}), 500
 
 
+@app.route('/api/project/epub-spine-preview', methods=['GET'])
+@auth_manager.require_api_key
+def epub_spine_preview():
+    """Return EPUB spine items with heading and first-paragraph body preview."""
+    try:
+        if converter.current_project_path is None:
+            return jsonify({'error': 'No project loaded'}), 400
+
+        epub_cache = os.path.join(converter.current_project_path, 'source.epub')
+        if not os.path.exists(epub_cache):
+            return jsonify({'error': 'No cached EPUB found. Load a Gutenberg book first.'}), 400
+
+        with open(epub_cache, 'rb') as f:
+            epub_bytes = f.read()
+
+        processor = GutenbergProcessor(output_dir=converter.current_project_path)
+        items = processor.get_spine_preview(epub_bytes, num_words=60)
+        return jsonify({'items': items, 'count': len(items)})
+
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/project/detect-boilerplate', methods=['GET'])
+@auth_manager.require_api_key
+def detect_boilerplate():
+    """Detect PG header, footer, and TOC in the current raw text file."""
+    try:
+        if converter.current_project_path is None:
+            return jsonify({'error': 'No project loaded'}), 400
+
+        raw_text_file = os.path.join(converter.current_project_path, 'raw_text.txt')
+        if not os.path.exists(raw_text_file):
+            return jsonify({'error': 'No raw text file found. Load a Gutenberg book first.'}), 400
+
+        with open(raw_text_file, 'r', encoding='utf-8') as f:
+            text = f.read()
+
+        processor = GutenbergProcessor(output_dir=converter.current_project_path)
+        sections = processor.detect_boilerplate(text)
+        return jsonify({'sections': sections, 'total_lines': text.count('\n') + 1})
+
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/project/delete-text-lines', methods=['POST'])
+@auth_manager.require_api_key
+def delete_text_lines():
+    """Delete one or more line ranges from raw_text.txt (0-indexed, inclusive).
+
+    Body: {"regions": [{"start_line": N, "end_line": M}, ...]}
+    Regions are applied in reverse order so earlier line numbers stay valid.
+    """
+    try:
+        if converter.current_project_path is None:
+            return jsonify({'error': 'No project loaded'}), 400
+
+        data = request.json or {}
+        regions = data.get('regions', [])
+        if not regions:
+            return jsonify({'error': 'No regions specified'}), 400
+
+        raw_text_file = os.path.join(converter.current_project_path, 'raw_text.txt')
+        if not os.path.exists(raw_text_file):
+            return jsonify({'error': 'No raw text file found.'}), 400
+
+        with open(raw_text_file, 'r', encoding='utf-8') as f:
+            lines = f.read().split('\n')
+
+        # Sort regions in reverse order (highest start_line first) to preserve positions
+        regions_sorted = sorted(regions, key=lambda r: r['start_line'], reverse=True)
+        deleted_lines = 0
+        for region in regions_sorted:
+            start = int(region['start_line'])
+            end = int(region['end_line'])
+            if 0 <= start <= end < len(lines):
+                del lines[start:end + 1]
+                deleted_lines += end - start + 1
+
+        new_text = '\n'.join(lines)
+        with open(raw_text_file, 'w', encoding='utf-8') as f:
+            f.write(new_text)
+
+        return jsonify({
+            'success': True,
+            'deleted_lines': deleted_lines,
+            'line_count': len(lines),
+            'char_count': len(new_text),
+        })
+
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/project/chapter-candidates', methods=['GET'])
+@auth_manager.require_api_key
+def chapter_candidates():
+    """Run chapter detection strategies against current raw_text.txt and EPUB.
+
+    Returns candidate chapter break positions with context for each EPUB spine item.
+    """
+    try:
+        if converter.current_project_path is None:
+            return jsonify({'error': 'No project loaded'}), 400
+
+        raw_text_file = os.path.join(converter.current_project_path, 'raw_text.txt')
+        if not os.path.exists(raw_text_file):
+            return jsonify({'error': 'No raw text file found.'}), 400
+
+        with open(raw_text_file, 'r', encoding='utf-8') as f:
+            text = f.read()
+
+        epub_cache = os.path.join(converter.current_project_path, 'source.epub')
+        epub_bytes = None
+        if os.path.exists(epub_cache):
+            with open(epub_cache, 'rb') as f:
+                epub_bytes = f.read()
+
+        processor = GutenbergProcessor(output_dir=converter.current_project_path)
+        result = processor.get_chapter_candidates(text, epub_bytes)
+        return jsonify(result)
+
+    except Exception as e:
+        import traceback
+        print(traceback.format_exc())
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/project/search-text-position', methods=['POST'])
+@auth_manager.require_api_key
+def search_text_position():
+    """Find the last occurrence of a phrase in raw_text.txt.
+
+    Body: {"phrase": "..."}
+    Returns: {found, position, line_num, context}
+    """
+    try:
+        if converter.current_project_path is None:
+            return jsonify({'error': 'No project loaded'}), 400
+
+        data = request.json or {}
+        phrase = data.get('phrase', '').strip()
+        if not phrase:
+            return jsonify({'error': 'No phrase provided'}), 400
+
+        raw_text_file = os.path.join(converter.current_project_path, 'raw_text.txt')
+        if not os.path.exists(raw_text_file):
+            return jsonify({'error': 'No raw text file found.'}), 400
+
+        with open(raw_text_file, 'r', encoding='utf-8') as f:
+            text = f.read()
+
+        # Find last occurrence (back-to-front to skip TOC)
+        pos = None
+        for m in re.finditer(re.escape(phrase), text, re.IGNORECASE):
+            pos = m.start()
+
+        if pos is None:
+            return jsonify({'found': False})
+
+        processor = GutenbergProcessor(output_dir=converter.current_project_path)
+        line_num = text[:pos].count('\n') + 1
+        context = processor._get_context(text, pos)
+        return jsonify({'found': True, 'position': pos, 'line_num': line_num, 'context': context})
+
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/project/apply-chapter-breaks', methods=['POST'])
+@auth_manager.require_api_key
+def apply_chapter_breaks():
+    """Build chapter structure from user-confirmed break positions.
+
+    Body: {"breaks": [{"title": "...", "position": N}, ...]}
+    Positions are character offsets in the current raw_text.txt.
+    """
+    try:
+        import uuid as uuid_mod
+
+        if converter.current_project_path is None:
+            return jsonify({'error': 'No project loaded'}), 400
+
+        data = request.json or {}
+        breaks = data.get('breaks', [])
+        if not breaks:
+            return jsonify({'error': 'No breaks provided'}), 400
+
+        raw_text_file = os.path.join(converter.current_project_path, 'raw_text.txt')
+        if not os.path.exists(raw_text_file):
+            return jsonify({'error': 'No raw text file found.'}), 400
+
+        with open(raw_text_file, 'r', encoding='utf-8') as f:
+            text = f.read()
+
+        # Sort breaks by position
+        breaks_sorted = sorted(breaks, key=lambda b: int(b['position']))
+
+        # Slice text into chapters
+        parsed = []
+        for i, brk in enumerate(breaks_sorted):
+            pos = int(brk['position'])
+            next_pos = int(breaks_sorted[i + 1]['position']) if i + 1 < len(breaks_sorted) else len(text)
+            ch_text = text[pos:next_pos].strip()
+            if ch_text:
+                parsed.append((brk.get('title', f'Chapter {i + 1}'), ch_text))
+
+        if not parsed:
+            return jsonify({'error': 'No non-empty chapters produced from the given breaks'}), 400
+
+        new_chapters = []
+        for i, (ch_title, ch_text) in enumerate(parsed):
+            chunks = converter.smart_chunk_text(ch_text)
+            for chunk in chunks:
+                chunk['dirty'] = False
+                chunk['generated_audios'] = []
+            new_chapters.append({
+                'id': str(uuid_mod.uuid4()),
+                'title': ch_title or f'Chapter {i + 1}',
+                'order': i,
+                'chunks': chunks,
+                'audio_output': None,
+                'added_at': datetime.now().isoformat(),
+                'source': 'interactive_wizard',
+            })
+
+        converter.current_project_metadata['chapters'] = new_chapters
+        xml_content = converter.text_to_xml_content(text, [
+            {'id': ch['id'], 'title': ch['title'], 'text': ch_text, 'order': ch['order'], 'non_voiced': False}
+            for ch, (_, ch_text) in zip(new_chapters, parsed)
+        ])
+        converter.current_project_metadata['content_xml'] = xml_content
+        converter.current_project_metadata['last_modified'] = datetime.now().isoformat()
+
+        project_file = os.path.join(converter.current_project_path, 'project.json')
+        with open(project_file, 'w', encoding='utf-8') as f:
+            json.dump(converter.current_project_metadata, f, indent=2, ensure_ascii=False)
+
+        return jsonify({
+            'success': True,
+            'chapter_count': len(new_chapters),
+            'chapters': new_chapters,
+        })
+
+    except Exception as e:
+        import traceback
+        print(traceback.format_exc())
+        return jsonify({'error': str(e)}), 500
+
+
 @app.route('/api/project/chapter/generate-all', methods=['POST'])
 @auth_manager.require_api_key
 def generate_all_chapter_chunks():
