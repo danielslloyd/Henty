@@ -1475,7 +1475,10 @@
                 <div class="pane-actions">
                     <button class="pane-btn" onclick="gutenbergTab.processText()">Process Text</button>
                     <button class="pane-btn" onclick="gutenbergTab.saveCode()">Save</button>
+                    <button class="pane-btn" id="undoBtn" onclick="gutenbergTab.undo()" disabled title="Nothing to undo" style="background: #64748b;">Undo</button>
                     <button class="pane-btn" onclick="gutenbergTab.validateChunks()">Validate</button>
+                    <button class="pane-btn" id="lockChaptersBtn" onclick="gutenbergTab.lockChapters()" style="background: #059669;" title="Lock chapter divisions and save original text">Lock Chapters</button>
+                    <button class="pane-btn" id="unlockChaptersBtn" onclick="gutenbergTab.unlockChapters()" style="background: #dc2626; display: none;" title="Unlock to allow re-parsing">Unlock</button>
                 </div>
             </div>
             <div class="pane-content" style="padding: 15px; display: flex; flex-direction: column;">
@@ -1499,12 +1502,25 @@
                 <div id="parseLogPanel" style="display: none; background: #1e1e2e; color: #cdd6f4; border-radius: 8px; padding: 10px; margin-bottom: 10px; max-height: 300px; overflow-y: auto; font-family: 'Consolas', 'Monaco', monospace; font-size: 12px; line-height: 1.6;">
                     <div id="parseLogContent" style="white-space: pre-wrap;">No parse log yet. Click "Re-Parse Chapters" to generate one.</div>
                 </div>
+                <div id="chapterLockStatus" style="display: none; background: #ecfdf5; border: 1px solid #6ee7b7; border-radius: 6px; padding: 8px 12px; margin-bottom: 8px; font-size: 13px; color: #065f46; font-weight: 500;"></div>
                 <div class="xml-tips">
                     <strong>Editing:</strong>
                     <button class="xml-btn" onclick="gutenbergTab.insertChapterBreak()">+ Chapter</button>
                     <button class="xml-btn" onclick="gutenbergTab.insertChunkBreak()">+ Chunk Break</button>
                     <button class="xml-btn" onclick="gutenbergTab.insertPause()">+ Pause</button>
                     <button class="xml-btn" onclick="gutenbergTab.insertPronunciation()" style="background:#7c3aed;color:white;" title="Insert {display|spoken} pronunciation override">+ Pronunciation</button>
+                    <select onchange="if(this.value) { gutenbergTab.insertEmotionTag(this.value); this.value=''; }" style="padding: 4px 8px; border-radius: 4px; border: 1px solid #a78bfa; font-size: 12px; background: #ede9fe; cursor: pointer;">
+                        <option value="">+ Emotion Tag</option>
+                        <option value="laugh">[laugh]</option>
+                        <option value="chuckle">[chuckle]</option>
+                        <option value="cough">[cough]</option>
+                        <option value="sigh">[sigh]</option>
+                        <option value="gasp">[gasp]</option>
+                        <option value="groan">[groan]</option>
+                        <option value="sniff">[sniff]</option>
+                        <option value="clear throat">[clear throat]</option>
+                        <option value="shush">[shush]</option>
+                    </select>
                     <span style="margin-left: auto;">
                         <button class="xml-btn" id="cleanViewToggle" onclick="gutenbergTab.toggleCleanView()" title="Toggle between clean text and markup view">Clean View</button>
                     </span>

@@ -393,7 +393,7 @@ class GutenbergProcessor:
 
     PARSING_METHODS = {
         'epub_toc': 'EPUB Table of Contents — uses NCX/nav chapter titles from the EPUB to locate chapter boundaries in the plain text',
-        'epub_spine_html': 'EPUB Spine + HTML Headings — walks the EPUB spine order reading h1-h3 headings and body text from each content file',
+        'epub_spine_html': 'EPUB Spine + HTML Headings — walks the EPUB spine order reading h1-h3 headings from each content file, then splits plain text at matching positions',
         'regex_headings': 'Regex Heading Detection — scans plain text for "Chapter N", Roman numerals, "Part N", ALL-CAPS headings, etc.',
         'blank_line_sections': 'Blank-Line Section Breaks — splits on 3+ consecutive blank lines (common Gutenberg section separator)',
         'hybrid_epub_regex': 'Hybrid EPUB + Regex — tries EPUB TOC first; fills gaps and validates with regex heading detection',
@@ -525,16 +525,28 @@ class GutenbergProcessor:
                 html = zf.read(fpath).decode('utf-8', errors='replace')
                 soup = BeautifulSoup(html, 'html.parser')
 
-                # Extract heading
+                # Extract heading (strip out <img> tags and image placeholders)
                 heading = ''
                 for tag in ['h1', 'h2', 'h3']:
                     h = soup.find(tag)
                     if h:
+                        # Remove <img> tags before extracting text
+                        for img in h.find_all('img'):
+                            img.decompose()
                         heading = h.get_text(strip=True)
                         break
 
+                # Skip headings that look like image placeholders
+                if heading and re.match(r'^\[?\s*(?:illustration|image|figure|plate|map|portrait|frontispiece)', heading, re.IGNORECASE):
+                    log.append(f"[M2-EPUB_SPINE]   spine[{idx}] \"{heading}\" — image placeholder, skipping")
+                    continue
+
                 # Check if this spine item has meaningful body content
-                body_len = len(soup.get_text(strip=True))
+                # Remove img tags from soup before measuring text length
+                body_soup = BeautifulSoup(html, 'html.parser')
+                for img in body_soup.find_all('img'):
+                    img.decompose()
+                body_len = len(body_soup.get_text(strip=True))
 
                 if not heading or body_len < 50:
                     log.append(f"[M2-EPUB_SPINE]   spine[{idx}] \"{heading or '(no heading)'}\" — too short ({body_len} chars), skipping")

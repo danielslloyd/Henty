@@ -48,6 +48,7 @@ class ServerConfig:
         # Generation settings
         self.MAX_PARALLEL_GENERATIONS = int(os.getenv('MAX_PARALLEL_GENERATIONS', '3'))
         self.DEVICE_PREFERENCE = os.getenv('DEVICE_PREFERENCE', 'auto')  # auto, cuda, cpu
+        self.DEFAULT_TTS_MODEL = os.getenv('DEFAULT_TTS_MODEL', 'chatterbox')  # chatterbox or chatterbox_turbo
 
         # Initialize API key if needed
         if self.REQUIRE_AUTH and not self.API_KEY:
@@ -76,7 +77,8 @@ class ServerConfig:
             'default_project_dir': self.DEFAULT_PROJECT_DIR,
             'common_files_dir': self.COMMON_FILES_DIR,
             'default_gutenberg_url': self.DEFAULT_GUTENBERG_URL,
-            'default_voice': self.DEFAULT_VOICE
+            'default_voice': self.DEFAULT_VOICE,
+            'default_tts_model': self.DEFAULT_TTS_MODEL
         }
 
     @staticmethod
