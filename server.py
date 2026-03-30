@@ -3924,53 +3924,74 @@ def reparse_chapters():
         data = request.json
         method = data.get('method', 'epub_toc')
 
-        # Load stored raw text
-        raw_text_file = os.path.join(converter.current_project_path, 'raw_text.txt')
-        if not os.path.exists(raw_text_file):
-            return jsonify({'error': 'No raw text found. Load a Gutenberg text first.'}), 400
-
-        with open(raw_text_file, 'r', encoding='utf-8') as f:
-            text = f.read()
-
         processor = GutenbergProcessor(output_dir=converter.current_project_path)
+        log_lines: list = []
 
-        # Try to load cached EPUB; if missing, auto-download using stored book ID
+        # Resolve Gutenberg book ID from metadata or chapter source URLs
+        book_id = converter.current_project_metadata.get('gutenberg_book_id')
+        if not book_id:
+            for ch in converter.current_project_metadata.get('chapters', []):
+                src_url = ch.get('source_url', '')
+                if src_url:
+                    book_id = processor.get_gutenberg_book_id(src_url)
+                    if book_id:
+                        break
+
+        if book_id:
+            log_lines.append(f"[REPARSE] Gutenberg book ID (GN): {book_id}")
+            # Always re-download the canonical plain text file for parsing
+            plain_text_url = processor.get_plain_text_url(book_id)
+            log_lines.append(f"[REPARSE] Fetching plain text: {plain_text_url}")
+            print(f"[REPARSE] GN={book_id} — downloading plain text: {plain_text_url}")
+            try:
+                raw_content = processor.download_text(plain_text_url)
+                log_lines.append(f"[REPARSE] Plain text downloaded: {len(raw_content):,} chars")
+                title = processor.extract_title(raw_content) or converter.current_project_metadata.get('title', '')
+                text = processor.strip_gutenberg_metadata(raw_content, title)
+                text = processor.process_carriage_returns(text)
+                text = text.replace('<<<SECTION_BREAK>>>', '\n\n')
+                log_lines.append(f"[REPARSE] Plain text processed: {len(text):,} chars")
+            except Exception as e:
+                log_lines.append(f"[REPARSE] WARNING: Failed to download plain text ({e}) — falling back to cached raw_text.txt")
+                print(f"[REPARSE] Plain text download failed: {e}")
+                raw_text_file = os.path.join(converter.current_project_path, 'raw_text.txt')
+                if not os.path.exists(raw_text_file):
+                    return jsonify({'error': 'No raw text found and plain text download failed.'}), 400
+                with open(raw_text_file, 'r', encoding='utf-8') as f:
+                    text = f.read()
+        else:
+            log_lines.append("[REPARSE] No Gutenberg book ID found — using cached raw_text.txt")
+            raw_text_file = os.path.join(converter.current_project_path, 'raw_text.txt')
+            if not os.path.exists(raw_text_file):
+                return jsonify({'error': 'No raw text found. Load a Gutenberg text first.'}), 400
+            with open(raw_text_file, 'r', encoding='utf-8') as f:
+                text = f.read()
+
+        # Load or download the EPUB
         epub_cache = os.path.join(converter.current_project_path, 'source.epub')
         epub_bytes = None
         if os.path.exists(epub_cache):
             with open(epub_cache, 'rb') as f:
                 epub_bytes = f.read()
+            log_lines.append(f"[REPARSE] Loaded cached EPUB: {len(epub_bytes):,} bytes")
             print(f"[REPARSE] Loaded cached EPUB: {len(epub_bytes):,} bytes")
-        else:
-            # Try to find book ID from project metadata or chapter source URLs
-            book_id = converter.current_project_metadata.get('gutenberg_book_id')
-            if not book_id:
-                # Fall back to scanning chapter source URLs
-                for ch in converter.current_project_metadata.get('chapters', []):
-                    src_url = ch.get('source_url', '')
-                    if src_url:
-                        book_id = processor.get_gutenberg_book_id(src_url)
-                        if book_id:
-                            break
-            if book_id:
-                epub_url = processor.get_epub_url(book_id)
-                print(f"[REPARSE] source.epub not cached — downloading from: {epub_url}")
-                epub_bytes = processor.download_epub(book_id)
-                if epub_bytes:
-                    with open(epub_cache, 'wb') as ef:
-                        ef.write(epub_bytes)
-                    print(f"[REPARSE] EPUB downloaded and cached: {len(epub_bytes):,} bytes")
-                else:
-                    print(f"[REPARSE] EPUB download FAILED from: {epub_url}")
+        elif book_id:
+            epub_url = processor.get_epub_url(book_id)
+            log_lines.append(f"[REPARSE] Fetching EPUB: {epub_url}")
+            print(f"[REPARSE] GN={book_id} — downloading EPUB: {epub_url}")
+            epub_bytes = processor.download_epub(book_id)
+            if epub_bytes:
+                with open(epub_cache, 'wb') as ef:
+                    ef.write(epub_bytes)
+                log_lines.append(f"[REPARSE] EPUB downloaded and cached: {len(epub_bytes):,} bytes")
+                print(f"[REPARSE] EPUB downloaded and cached: {len(epub_bytes):,} bytes")
             else:
-                print("[REPARSE] No Gutenberg book ID found in project metadata or chapter source_url fields — cannot auto-download EPUB")
-                print(f"[REPARSE] Project metadata keys: {list(converter.current_project_metadata.keys())}")
-                # Show what source_urls exist
-                for i, ch in enumerate(converter.current_project_metadata.get('chapters', [])[:3]):
-                    print(f"[REPARSE]   chapter[{i}] source_url={ch.get('source_url', '(none)')}")
+                log_lines.append(f"[REPARSE] WARNING: EPUB download failed from {epub_url}")
+                print(f"[REPARSE] EPUB download FAILED from: {epub_url}")
+        else:
+            log_lines.append("[REPARSE] No Gutenberg book ID — EPUB not available")
 
         # Run the selected parsing method with verbose logging
-        log_lines: list = []
         parsed = processor.parse_chapters(text, epub_bytes, method, log=log_lines)
 
         # Print log to server console too
