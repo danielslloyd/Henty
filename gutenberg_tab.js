@@ -944,16 +944,21 @@ class GutenbergTab {
     // Step 1: EPUB Spine Preview
     async loadSpinePreview() {
         const btn = document.getElementById('spinePreviewBtn');
+        const el = document.getElementById('epub-spine-list');
         if (btn) btn.textContent = 'Loading…';
+        if (el) el.innerHTML = '<p style="color:#64748b; font-size:13px;">Loading EPUB preview…</p>';
         try {
             const res = await fetch(`${SERVER_URL}/api/project/epub-spine-preview`, {
                 headers: { 'X-API-Key': API_KEY }
             });
             const data = await res.json();
-            if (data.error) { showToast(data.error, 'error'); return; }
+            if (data.error) {
+                if (el) el.innerHTML = `<p style="color:#dc2626; font-size:13px;">⚠ ${this._esc(data.error)}</p>`;
+                return;
+            }
             this._renderSpinePreview(data.items || []);
         } catch (e) {
-            showToast('Error loading EPUB preview: ' + e.message, 'error');
+            if (el) el.innerHTML = `<p style="color:#dc2626; font-size:13px;">⚠ ${this._esc(e.message)}</p>`;
         } finally {
             if (btn) btn.textContent = 'Reload';
         }
@@ -989,10 +994,13 @@ class GutenbergTab {
                 headers: { 'X-API-Key': API_KEY }
             });
             const data = await res.json();
-            if (data.error) { showToast(data.error, 'error'); return; }
+            if (data.error) {
+                if (el) el.innerHTML = `<p style="color:#dc2626; font-size:13px;">⚠ ${this._esc(data.error)}</p>`;
+                return;
+            }
             this._renderBoilerplate(data.sections || [], data.total_lines || 0);
         } catch (e) {
-            showToast('Error: ' + e.message, 'error');
+            if (el) el.innerHTML = `<p style="color:#dc2626; font-size:13px;">⚠ ${this._esc(e.message)}</p>`;
         }
     }
 
@@ -1049,19 +1057,22 @@ class GutenbergTab {
     // Step 3: Detect and confirm chapter break positions
     async detectCandidates() {
         const btn = document.getElementById('detectCandidatesBtn');
-        if (btn) btn.textContent = 'Searching…';
         const listEl = document.getElementById('chapter-candidates-list');
+        if (btn) btn.textContent = 'Searching…';
         if (listEl) listEl.innerHTML = '<p style="color:#64748b; font-size:13px;">Running strategies…</p>';
         try {
             const res = await fetch(`${SERVER_URL}/api/project/chapter-candidates`, {
                 headers: { 'X-API-Key': API_KEY }
             });
             const data = await res.json();
-            if (data.error) { showToast(data.error, 'error'); return; }
+            if (data.error) {
+                if (listEl) listEl.innerHTML = `<p style="color:#dc2626; font-size:13px;">⚠ ${this._esc(data.error)}</p>`;
+                return;
+            }
             if (data.log && data.log.length) this.appendToLog(data.log);
             this._renderCandidates(data.candidates || []);
         } catch (e) {
-            showToast('Error: ' + e.message, 'error');
+            if (listEl) listEl.innerHTML = `<p style="color:#dc2626; font-size:13px;">⚠ ${this._esc(e.message)}</p>`;
         } finally {
             if (btn) btn.textContent = 'Re-Search';
         }
