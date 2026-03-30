@@ -86,6 +86,28 @@ class GutenbergTab {
             .replace(/</g, '&lt;')
             .replace(/>/g, '&gt;');
 
+        // Highlight <delete>...</delete> blocks (red background)
+        escaped = escaped.replace(
+            /(&lt;delete&gt;)([\s\S]*?)(&lt;\/delete&gt;)/g,
+            '<span style="background:#fee2e2;color:#991b1b;border-radius:3px;padding:0 2px">$1$2$3</span>'
+        );
+
+        // Highlight <chapter title="..."> and </chapter> tags (blue)
+        escaped = escaped.replace(
+            /(&lt;chapter[^&]*&gt;)/g,
+            '<span style="background:#dbeafe;color:#1e40af;border-radius:3px;padding:0 3px;font-weight:600">$1</span>'
+        );
+        escaped = escaped.replace(
+            /(&lt;\/chapter&gt;)/g,
+            '<span style="background:#dbeafe;color:#1e40af;border-radius:3px;padding:0 3px;font-weight:600">$1</span>'
+        );
+
+        // Highlight legacy markdown ## chapter headers
+        escaped = escaped.replace(
+            /(^#{2,3}\s+.+$)/gm,
+            '<span style="background:#dbeafe;color:#1e40af;font-weight:600">$1</span>'
+        );
+
         // Highlight pronunciation/paralinguistic markup: {display|spoken} or {|[tag]}
         escaped = escaped.replace(
             /\{([^|}]*)\|([^}]*)\}/g,
@@ -186,13 +208,21 @@ class GutenbergTab {
      */
     async _performSave(markdownContent) {
         try {
-            const response = await fetch(`${SERVER_URL}/api/project/save-markdown`, {
+            // Use book-file endpoint for new format, fall back to save-markdown for legacy
+            const endpoint = this._useBookFile
+                ? `${SERVER_URL}/api/project/save-book-file`
+                : `${SERVER_URL}/api/project/save-markdown`;
+            const body = this._useBookFile
+                ? JSON.stringify({ content: markdownContent })
+                : JSON.stringify({ markdown_content: markdownContent });
+
+            const response = await fetch(endpoint, {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
                     'X-API-Key': API_KEY
                 },
-                body: JSON.stringify({ markdown_content: markdownContent })
+                body
             });
 
             if (response.ok) {
@@ -269,26 +299,50 @@ class GutenbergTab {
 
     async loadMarkdown() {
         try {
-            const response = await fetch(`${SERVER_URL}/api/project/get-text-files`, {
+            // Try book-file (new format) first
+            const bookResp = await fetch(`${SERVER_URL}/api/project/book-file`, {
                 headers: { 'X-API-Key': API_KEY }
             });
 
-            if (response.ok) {
-                const data = await response.json();
-                this.chapters = data.chapters || [];
+            if (bookResp.ok) {
+                const data = await bookResp.json();
+                this._useBookFile = true;
+                this.markdownContent = data.content || '';
+                this._lastSavedContent = this.markdownContent;
+                this._bookFileStage = data.stage || 0;
+                console.log('[LOAD] Loaded book.txt (stage', this._bookFileStage, ')');
 
-                console.log('[LOAD MARKDOWN] Loaded chapters:', this.chapters.length);
-
-                if (this.chapters.length > 0) {
-                    this.markdownContent = this.chaptersToMarkdown(this.chapters);
-                    this._lastSavedContent = this.markdownContent;
-                } else {
-                    this.markdownContent = '';
-                    this._lastSavedContent = '';
+                // Also fetch chapters for TTS/reader tab awareness
+                const chapResp = await fetch(`${SERVER_URL}/api/project/get-text-files`, {
+                    headers: { 'X-API-Key': API_KEY }
+                });
+                if (chapResp.ok) {
+                    const chapData = await chapResp.json();
+                    this.chapters = chapData.chapters || [];
                 }
+            } else {
+                // Fall back to legacy markdown from chapters
+                this._useBookFile = false;
+                const response = await fetch(`${SERVER_URL}/api/project/get-text-files`, {
+                    headers: { 'X-API-Key': API_KEY }
+                });
 
-                this.displayMarkdown();
+                if (response.ok) {
+                    const data = await response.json();
+                    this.chapters = data.chapters || [];
+                    console.log('[LOAD MARKDOWN] Loaded chapters (legacy):', this.chapters.length);
+
+                    if (this.chapters.length > 0) {
+                        this.markdownContent = this.chaptersToMarkdown(this.chapters);
+                        this._lastSavedContent = this.markdownContent;
+                    } else {
+                        this.markdownContent = '';
+                        this._lastSavedContent = '';
+                    }
+                }
             }
+
+            this.displayMarkdown();
         } catch (error) {
             console.error('Error loading markdown:', error);
         }
@@ -306,10 +360,19 @@ class GutenbergTab {
         }
 
         if (this.cleanViewActive) {
-            // Clean view: strip {display|spoken} → display text only, hide </chunk> tags
+            // Clean view: strip all tags and markup, show plain readable text
             let cleanText = this.markdownContent;
+            // Remove <delete>...</delete> blocks entirely
+            cleanText = cleanText.replace(/<delete>[\s\S]*?<\/delete>/g, '');
+            // Remove chapter open/close tags but keep content
+            cleanText = cleanText.replace(/<chapter[^>]*>\n?/g, '');
+            cleanText = cleanText.replace(/<\/chapter>/g, '');
+            // Strip {display|spoken} → display text only
             cleanText = cleanText.replace(/\{([^|}]*)\|[^}]*\}/g, '$1');
+            // Remove </chunk> markers
             cleanText = cleanText.replace(/<\/chunk>/g, '');
+            // Remove legacy markdown chapter headers
+            cleanText = cleanText.replace(/^#{2,3}\s+.+$/gm, '');
             const escaped = cleanText
                 .replace(/&/g, '&amp;')
                 .replace(/</g, '&lt;')
@@ -317,11 +380,35 @@ class GutenbergTab {
             editor.innerHTML = escaped;
             editor.contentEditable = 'false';
         } else {
-            // Markup view: highlight {display|spoken} and </chunk> tags with color
+            // Markup view: highlight all tags with color
             let escaped = this.markdownContent
                 .replace(/&/g, '&amp;')
                 .replace(/</g, '&lt;')
                 .replace(/>/g, '&gt;');
+
+            // Highlight <delete>...</delete> blocks (red background)
+            escaped = escaped.replace(
+                /(&lt;delete&gt;)([\s\S]*?)(&lt;\/delete&gt;)/g,
+                '<span style="background:#fee2e2;color:#991b1b;border-radius:3px;padding:0 2px">$1$2$3</span>'
+            );
+
+            // Highlight <chapter title="..."> tags (blue/teal)
+            escaped = escaped.replace(
+                /(&lt;chapter[^&]*&gt;)/g,
+                '<span style="background:#dbeafe;color:#1e40af;border-radius:3px;padding:0 3px;font-weight:600">$1</span>'
+            );
+
+            // Highlight </chapter> tags (blue/teal)
+            escaped = escaped.replace(
+                /(&lt;\/chapter&gt;)/g,
+                '<span style="background:#dbeafe;color:#1e40af;border-radius:3px;padding:0 3px;font-weight:600">$1</span>'
+            );
+
+            // Highlight legacy markdown ## chapter headers
+            escaped = escaped.replace(
+                /(^#{2,3}\s+.+$)/gm,
+                '<span style="background:#dbeafe;color:#1e40af;font-weight:600">$1</span>'
+            );
 
             // Highlight pronunciation/paralinguistic markup: {display|spoken} or {|[tag]}
             escaped = escaped.replace(
