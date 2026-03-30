@@ -13,7 +13,15 @@ if exist "voice_samples\Dan_Test1.wav" (
 )
 echo.
 
-echo Step 2: Starting server...
+echo Step 2: Killing any existing servers...
+REM Kill any existing processes on port 5000
+for /f "tokens=5" %%A in ('netstat -ano 2^>nul ^| findstr ":5000 "') do (
+    taskkill /PID %%A /T /F 2>nul
+)
+timeout /t 1 /nobreak >nul 2>&1
+echo.
+
+echo Step 3: Starting server...
 echo.
 echo IMPORTANT: After the server starts:
 echo   1. Open http://localhost:5000/app.html in your browser
