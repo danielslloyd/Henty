@@ -656,45 +656,57 @@ class GutenbergProcessor:
         the first letter/word, e.g. "9037m t was not" instead of "It was not")
         by trying body-text phrases that skip word 0.
 
+        Searches back-to-front (takes LAST match) to avoid matching headings in
+        table of contents rather than the main chapter body.
+
         Returns (section_start, content_start) or None.
         - section_start: position of the chapter heading block (used for ordering)
         - content_start: same as section_start (chapter text includes its heading)
         """
         tag = f"[M2-FIND[{idx}]]"
 
-        # Strategy 1a: exact heading as standalone line
+        # Strategy 1a: exact heading as standalone line (LAST match to skip TOC)
         if heading:
             escaped = re.escape(heading)
-            m = re.search(r'(?m)^[ \t]*' + escaped + r'[.!?]?[ \t]*$', text, re.IGNORECASE)
+            pattern = r'(?m)^[ \t]*' + escaped + r'[.!?]?[ \t]*$'
+            m = None
+            for match in re.finditer(pattern, text, re.IGNORECASE):
+                m = match  # keep last match
             if m:
-                log.append(f"{tag} S1a (exact heading): '{heading}' at pos={m.start()}")
+                log.append(f"{tag} S1a (exact heading, last match): '{heading}' at pos={m.start()}")
                 return (m.start(), m.start())
 
-            # Strategy 1b: normalized heading (flexible whitespace/punctuation)
+            # Strategy 1b: normalized heading (flexible whitespace/punctuation, LAST match)
             words = re.sub(r'[^\w\s]', ' ', heading.lower()).split()
             if words:
                 pattern = r'(?m)^[ \t]*' + r'[\s.]*'.join(re.escape(w) for w in words) + r'[.!?]?[ \t]*$'
-                m = re.search(pattern, text, re.IGNORECASE)
+                m = None
+                for match in re.finditer(pattern, text, re.IGNORECASE):
+                    m = match  # keep last match
                 if m:
-                    log.append(f"{tag} S1b (normalized heading): '{heading}' at pos={m.start()}")
+                    log.append(f"{tag} S1b (normalized heading, last match): '{heading}' at pos={m.start()}")
                     return (m.start(), m.start())
 
-        # Strategy 2: body text words[1:7] — skip word 0 (handles decorated initials)
+        # Strategy 2: body text words[1:7] — skip word 0 (handles decorated initials, LAST match)
         if body_text:
             words = body_text.split()
             if len(words) >= 3:
                 phrase = ' '.join(words[1:min(7, len(words))])
-                m = re.search(re.escape(phrase), text, re.IGNORECASE)
+                m = None
+                for match in re.finditer(re.escape(phrase), text, re.IGNORECASE):
+                    m = match  # keep last match
                 if m:
-                    log.append(f"{tag} S2 (body words[1:7]): '{phrase[:40]}...' at pos={m.start()}")
+                    log.append(f"{tag} S2 (body words[1:7], last match): '{phrase[:40]}...' at pos={m.start()}")
                     start = self._backtrack_to_section_start(text, m.start())
                     return (start, start)
 
-            # Strategy 3: body text words[0:6] — try without skipping first word
+            # Strategy 3: body text words[0:6] — try without skipping first word (LAST match)
             phrase = ' '.join(words[0:min(6, len(words))])
-            m = re.search(re.escape(phrase), text, re.IGNORECASE)
+            m = None
+            for match in re.finditer(re.escape(phrase), text, re.IGNORECASE):
+                m = match  # keep last match
             if m:
-                log.append(f"{tag} S3 (body words[0:6]): '{phrase[:40]}...' at pos={m.start()}")
+                log.append(f"{tag} S3 (body words[0:6], last match): '{phrase[:40]}...' at pos={m.start()}")
                 start = self._backtrack_to_section_start(text, m.start())
                 return (start, start)
 
