@@ -393,7 +393,7 @@ class GutenbergProcessor:
 
     PARSING_METHODS = {
         'epub_toc': 'EPUB Table of Contents — uses NCX/nav chapter titles from the EPUB to locate chapter boundaries in the plain text',
-        'epub_spine_html': 'EPUB Spine + HTML Headings — walks the EPUB spine order reading h1-h3 headings from each content file, then splits plain text at matching positions',
+        'epub_spine': 'EPUB Spine (TXT match) — walks the EPUB spine to get chapter order from NCX labels, then matches those titles directly in the plain text (no HTML parsing)',
         'regex_headings': 'Regex Heading Detection — scans plain text for "Chapter N", Roman numerals, "Part N", ALL-CAPS headings, etc.',
         'blank_line_sections': 'Blank-Line Section Breaks — splits on 3+ consecutive blank lines (common Gutenberg section separator)',
         'hybrid_epub_regex': 'Hybrid EPUB + Regex — tries EPUB TOC first; fills gaps and validates with regex heading detection',
@@ -415,7 +415,8 @@ class GutenbergProcessor:
 
         dispatch = {
             'epub_toc':          self._method_epub_toc,
-            'epub_spine_html':   self._method_epub_spine_html,
+            'epub_spine':        self._method_epub_spine,
+            'epub_spine_html':   self._method_epub_spine,  # legacy alias
             'regex_headings':    self._method_regex_headings,
             'blank_line_sections': self._method_blank_line_sections,
             'hybrid_epub_regex': self._method_hybrid_epub_regex,
@@ -458,12 +459,16 @@ class GutenbergProcessor:
 
     # ---------- Method 2: EPUB Spine + HTML Headings ------------------- #
 
-    def _method_epub_spine_html(self, text: str, epub_bytes: Optional[bytes],
-                                log: list) -> List[Tuple[str, str]]:
-        """Walk the EPUB spine to get chapter titles/order, then cut the plain text at matching positions."""
+    def _method_epub_spine(self, text: str, epub_bytes: Optional[bytes],
+                           log: list) -> List[Tuple[str, str]]:
+        """Walk EPUB spine order and resolve NCX labels for each spine item, then match in plain text.
+
+        No HTML content files are opened — only the OPF manifest/spine and NCX/nav are read.
+        This gives spine-ordered chapter titles without any HTML parsing.
+        """
         import zipfile, io
-        log.append("[M2-EPUB_SPINE] Starting EPUB Spine + HTML method")
-        log.append("[M2-EPUB_SPINE] Strategy: extract headings from EPUB HTML, use them to split plain text")
+        log.append("[M2-EPUB_SPINE] Starting EPUB Spine (TXT match) method")
+        log.append("[M2-EPUB_SPINE] Strategy: spine order + NCX labels only, no HTML content parsing")
 
         if not epub_bytes:
             log.append("[M2-EPUB_SPINE] No EPUB data — returning empty")
@@ -473,12 +478,11 @@ class GutenbergProcessor:
             return []
 
         skip_kw = {'contents', 'table of contents', 'cover', 'copyright',
-                    'title page', 'half-title', 'dedication', 'epigraph',
-                    'acknowledgement', 'index', 'bibliography', 'about the',
-                    'project gutenberg'}
+                   'title page', 'half-title', 'dedication', 'epigraph',
+                   'acknowledgement', 'index', 'bibliography', 'about the',
+                   'project gutenberg'}
 
-        # Step 1: Walk the EPUB spine and collect headings from each HTML file
-        headings: List[str] = []
+        titles: List[str] = []
 
         with zipfile.ZipFile(io.BytesIO(epub_bytes)) as zf:
             names = set(zf.namelist())
@@ -500,75 +504,93 @@ class GutenbergProcessor:
 
             opf_dir = os.path.dirname(opf_path)
             opf_soup = BeautifulSoup(zf.read(opf_path).decode('utf-8', errors='replace'), 'html.parser')
+            log.append(f"[M2-EPUB_SPINE] OPF at '{opf_path}'")
 
-            def abs_path(href):
+            def abs_path(href: str) -> str:
                 href = href.split('#')[0]
                 if opf_dir:
                     return opf_dir.rstrip('/') + '/' + href.lstrip('/')
                 return href
 
-            # Build manifest lookup
-            manifest = {}
-            for item in opf_soup.find_all('item'):
-                manifest[item.get('id', '')] = abs_path(item.get('href', ''))
+            # Build manifest: id → absolute path
+            manifest = {
+                item.get('id', ''): abs_path(item.get('href', ''))
+                for item in opf_soup.find_all('item')
+            }
+            # Reverse manifest: absolute path → id (for NCX lookup)
+            path_to_id = {v: k for k, v in manifest.items()}
 
-            # Read spine order
+            # Read spine order (list of manifest item IDs)
             spine_ids = [ref.get('idref', '') for ref in opf_soup.find_all('itemref')]
             log.append(f"[M2-EPUB_SPINE] Spine has {len(spine_ids)} items")
 
+            # Build NCX label map: absolute path (without fragment) → label
+            # from NCX navPoints (EPUB 2) and nav.xhtml (EPUB 3)
+            ncx_labels: dict = {}  # abs_path → label
+
+            ncx_item = opf_soup.find('item', attrs={'media-type': 'application/x-dtbncx+xml'})
+            if ncx_item:
+                ncx_path = abs_path(ncx_item.get('href', ''))
+                try:
+                    ncx_soup = BeautifulSoup(
+                        zf.read(ncx_path).decode('utf-8', errors='replace'), 'html.parser'
+                    )
+                    for pt in ncx_soup.find_all('navPoint'):
+                        lbl = pt.find('navLabel')
+                        content = pt.find('content')
+                        label_text = lbl.get_text(strip=True) if lbl else ''
+                        src = content.get('src', '') if content else ''
+                        if label_text and src:
+                            ncx_labels[abs_path(src)] = label_text
+                    log.append(f"[M2-EPUB_SPINE] Built NCX label map: {len(ncx_labels)} entries")
+                except Exception as e:
+                    log.append(f"[M2-EPUB_SPINE] NCX parse error: {e}")
+            else:
+                # Try nav.xhtml (EPUB 3)
+                nav_item = next(
+                    (item for item in opf_soup.find_all('item')
+                     if 'nav' in item.get('properties', '')), None
+                )
+                if nav_item:
+                    nav_path = abs_path(nav_item.get('href', ''))
+                    try:
+                        nav_soup = BeautifulSoup(
+                            zf.read(nav_path).decode('utf-8', errors='replace'), 'html.parser'
+                        )
+                        nav_el = (nav_soup.find('nav', attrs={'epub:type': 'toc'})
+                                  or nav_soup.find('nav'))
+                        if nav_el:
+                            for a in nav_el.find_all('a'):
+                                label_text = a.get_text(strip=True)
+                                href = a.get('href', '')
+                                if label_text and href:
+                                    ncx_labels[abs_path(href)] = label_text
+                        log.append(f"[M2-EPUB_SPINE] Built nav.xhtml label map: {len(ncx_labels)} entries")
+                    except Exception as e:
+                        log.append(f"[M2-EPUB_SPINE] nav.xhtml parse error: {e}")
+
+            # Walk spine in order; resolve NCX label for each item
             for idx, idref in enumerate(spine_ids):
                 fpath = manifest.get(idref, '')
-                if not fpath or fpath not in names:
-                    log.append(f"[M2-EPUB_SPINE]   spine[{idx}] id={idref} — file not found, skipping")
+                label = ncx_labels.get(fpath, '').strip()
+                if not label:
+                    log.append(f"[M2-EPUB_SPINE]   spine[{idx}] id={idref!r} path={fpath!r} — no NCX label, skipping")
                     continue
-
-                html = zf.read(fpath).decode('utf-8', errors='replace')
-                soup = BeautifulSoup(html, 'html.parser')
-
-                # Extract heading (strip out <img> tags and image placeholders)
-                heading = ''
-                for tag in ['h1', 'h2', 'h3']:
-                    h = soup.find(tag)
-                    if h:
-                        # Remove <img> tags before extracting text
-                        for img in h.find_all('img'):
-                            img.decompose()
-                        heading = h.get_text(strip=True)
-                        break
-
-                # Skip headings that look like image placeholders
-                if heading and re.match(r'^\[?\s*(?:illustration|image|figure|plate|map|portrait|frontispiece)', heading, re.IGNORECASE):
-                    log.append(f"[M2-EPUB_SPINE]   spine[{idx}] \"{heading}\" — image placeholder, skipping")
+                if any(kw in label.lower() for kw in skip_kw):
+                    log.append(f"[M2-EPUB_SPINE]   spine[{idx}] \"{label}\" — skip keyword, skipping")
                     continue
+                titles.append(label)
+                log.append(f"[M2-EPUB_SPINE]   spine[{idx}] \"{label}\"")
 
-                # Check if this spine item has meaningful body content
-                # Remove img tags from soup before measuring text length
-                body_soup = BeautifulSoup(html, 'html.parser')
-                for img in body_soup.find_all('img'):
-                    img.decompose()
-                body_len = len(body_soup.get_text(strip=True))
+        log.append(f"[M2-EPUB_SPINE] Collected {len(titles)} titles from spine/NCX")
 
-                if not heading or body_len < 50:
-                    log.append(f"[M2-EPUB_SPINE]   spine[{idx}] \"{heading or '(no heading)'}\" — too short ({body_len} chars), skipping")
-                    continue
-
-                if any(kw in heading.lower() for kw in skip_kw):
-                    log.append(f"[M2-EPUB_SPINE]   spine[{idx}] \"{heading}\" — skip keyword match, skipping")
-                    continue
-
-                headings.append(heading)
-                log.append(f"[M2-EPUB_SPINE]   spine[{idx}] heading: \"{heading}\"")
-
-        log.append(f"[M2-EPUB_SPINE] Collected {len(headings)} headings from EPUB spine")
-
-        if not headings:
-            log.append("[M2-EPUB_SPINE] No headings found — returning empty")
+        if not titles:
+            log.append("[M2-EPUB_SPINE] No titles found — returning empty")
             return []
 
-        # Step 2: Use these headings to split the plain text (same logic as epub_toc)
-        log.append("[M2-EPUB_SPINE] Matching headings against plain text...")
-        chapters = self.split_text_by_chapter_titles(text, headings)
-        log.append(f"[M2-EPUB_SPINE] Matched {len(chapters)} of {len(headings)} headings in plain text")
+        log.append("[M2-EPUB_SPINE] Matching titles against plain text...")
+        chapters = self.split_text_by_chapter_titles(text, titles)
+        log.append(f"[M2-EPUB_SPINE] Matched {len(chapters)} of {len(titles)} titles in plain text")
         return chapters
 
     # ---------- Method 3: Regex Heading Detection ---------------------- #

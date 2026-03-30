@@ -318,6 +318,7 @@
         .panes-container.panes-2 { grid-template-columns: 1fr 1fr; }
         .panes-container.panes-3 { grid-template-columns: 1fr 1fr 1fr; }
         .panes-container.panes-4 { grid-template-columns: 1fr 1fr; grid-template-rows: 1fr 1fr; }
+        .panes-container.panes-5 { grid-template-columns: 1fr 1fr 1fr; grid-template-rows: 1fr 1fr; }
 
         /* Pane */
         .pane {
@@ -699,6 +700,10 @@
             color: #9ca3af;
             font-weight: 400;
         }
+
+        /* Transcript/diff icon color only for mid/low similarity scores */
+        .take-icon.diff.diff-warn .material-symbols-outlined { color: #d97706; }
+        .take-icon.diff.diff-error .material-symbols-outlined { color: #dc2626; }
 
         /* Progress bar for chunk generation */
         .chunk-progress-bar {
@@ -1449,6 +1454,10 @@
                 <label for="toggle-raw"><span class="material-symbols-outlined">description</span> Raw Text</label>
             </div>
             <div class="toggle-item">
+                <input type="checkbox" id="toggle-parse" checked onchange="updatePaneVisibility()">
+                <label for="toggle-parse"><span class="material-symbols-outlined">account_tree</span> Chapter Parsing</label>
+            </div>
+            <div class="toggle-item">
                 <input type="checkbox" id="toggle-xml" checked onchange="updatePaneVisibility()">
                 <label for="toggle-xml"><span class="material-symbols-outlined">edit_note</span> Markdown</label>
             </div>
@@ -1474,7 +1483,7 @@
     </div>
 
     <!-- Panes Container -->
-    <div class="panes-container panes-2" id="panesContainer">
+    <div class="panes-container panes-3" id="panesContainer">
         <!-- Pane 1: Raw Text -->
         <div class="pane hidden" id="pane-raw">
             <div class="pane-header">
@@ -1491,27 +1500,24 @@
             </div>
         </div>
 
-        <!-- Pane 2: Markdown Editor -->
-        <div class="pane" id="pane-xml">
+        <!-- Pane 2: Chapter Parsing -->
+        <div class="pane" id="pane-parse">
             <div class="pane-header">
-                <h2>Markdown</h2>
+                <h2>Chapter Parsing</h2>
                 <div class="pane-actions">
-                    <button class="pane-btn" onclick="gutenbergTab.processText()">Process Text</button>
-                    <button class="pane-btn" onclick="gutenbergTab.saveCode()">Save</button>
-                    <button class="pane-btn" id="undoBtn" onclick="gutenbergTab.undo()" disabled title="Nothing to undo" style="background: #64748b;">Undo</button>
-                    <button class="pane-btn" onclick="gutenbergTab.validateChunks()">Validate</button>
                     <button class="pane-btn" id="lockChaptersBtn" onclick="gutenbergTab.lockChapters()" style="background: #059669;" title="Lock chapter divisions and save original text">Lock Chapters</button>
                     <button class="pane-btn" id="unlockChaptersBtn" onclick="gutenbergTab.unlockChapters()" style="background: #dc2626; display: none;" title="Unlock to allow re-parsing">Unlock</button>
                 </div>
             </div>
-            <div class="pane-content" style="padding: 15px; display: flex; flex-direction: column;">
+            <div class="pane-content" style="padding: 15px; display: flex; flex-direction: column; gap: 10px;">
+                <div id="chapterLockStatus" style="display: none; background: #ecfdf5; border: 1px solid #6ee7b7; border-radius: 6px; padding: 8px 12px; font-size: 13px; color: #065f46; font-weight: 500;"></div>
                 <!-- Chapter Parsing Method Selector -->
-                <div id="parsingMethodPanel" style="background: #f0f4ff; border: 1px solid #c7d2fe; border-radius: 8px; padding: 12px; margin-bottom: 10px;">
+                <div id="parsingMethodPanel" style="background: #f0f4ff; border: 1px solid #c7d2fe; border-radius: 8px; padding: 12px;">
                     <div style="display: flex; align-items: center; gap: 10px; flex-wrap: wrap;">
                         <label style="font-size: 13px; font-weight: 600; color: #3730a3; white-space: nowrap;">Parsing Method:</label>
                         <select id="parsingMethodSelect" style="flex: 1; min-width: 200px; padding: 6px 10px; border: 1px solid #a5b4fc; border-radius: 6px; font-size: 13px; background: white;">
                             <option value="epub_toc">1. EPUB Table of Contents</option>
-                            <option value="epub_spine_html">2. EPUB Spine + HTML Headings</option>
+                            <option value="epub_spine">2. EPUB Spine (TXT match)</option>
                             <option value="regex_headings">3. Regex Heading Detection</option>
                             <option value="blank_line_sections">4. Blank-Line Section Breaks</option>
                             <option value="hybrid_epub_regex" selected>5. Hybrid EPUB + Regex</option>
@@ -1522,18 +1528,32 @@
                     <div id="parsingMethodDesc" style="font-size: 12px; color: #4338ca; margin-top: 6px;"></div>
                 </div>
                 <!-- Verbose Parse Log (collapsible) -->
-                <div id="parseLogPanel" style="display: none; background: #1e1e2e; color: #cdd6f4; border-radius: 8px; padding: 10px; margin-bottom: 10px; max-height: 300px; overflow-y: auto; font-family: 'Consolas', 'Monaco', monospace; font-size: 12px; line-height: 1.6;">
+                <div id="parseLogPanel" style="display: none; background: #1e1e2e; color: #cdd6f4; border-radius: 8px; padding: 10px; max-height: 400px; overflow-y: auto; font-family: 'Consolas', 'Monaco', monospace; font-size: 12px; line-height: 1.6; flex: 1;">
                     <div id="parseLogContent" style="white-space: pre-wrap;">No parse log yet. Click "Re-Parse Chapters" to generate one.</div>
                 </div>
-                <div id="chapterLockStatus" style="display: none; background: #ecfdf5; border: 1px solid #6ee7b7; border-radius: 6px; padding: 8px 12px; margin-bottom: 8px; font-size: 13px; color: #065f46; font-weight: 500;"></div>
+            </div>
+        </div>
+
+        <!-- Pane 3: Markdown Editor -->
+        <div class="pane" id="pane-xml">
+            <div class="pane-header">
+                <h2>Markdown</h2>
+                <div class="pane-actions">
+                    <button class="pane-btn" onclick="gutenbergTab.processText()">Process Text</button>
+                    <button class="pane-btn" onclick="gutenbergTab.saveCode()">Save</button>
+                    <button class="pane-btn" id="undoBtn" onclick="gutenbergTab.undo()" disabled title="Nothing to undo" style="background: #64748b;">Undo</button>
+                    <button class="pane-btn" onclick="gutenbergTab.validateChunks()">Validate</button>
+                </div>
+            </div>
+            <div class="pane-content" style="padding: 15px; display: flex; flex-direction: column;">
                 <div class="xml-tips">
                     <strong>Editing:</strong>
                     <button class="xml-btn" onclick="gutenbergTab.insertChapterBreak()">+ Chapter</button>
                     <button class="xml-btn" onclick="gutenbergTab.insertChunkBreak()">+ Chunk Break</button>
                     <button class="xml-btn" onclick="gutenbergTab.insertPause()">+ Pause</button>
                     <button class="xml-btn" onclick="gutenbergTab.insertPronunciation()" style="background:#7c3aed;color:white;" title="Insert {display|spoken} pronunciation override">+ Pronunciation</button>
-                    <select onchange="if(this.value) { gutenbergTab.insertEmotionTag(this.value); this.value=''; }" style="padding: 4px 8px; border-radius: 4px; border: 1px solid #a78bfa; font-size: 12px; background: #ede9fe; cursor: pointer;">
-                        <option value="">+ Emotion Tag</option>
+                    <select onchange="if(this.value) { gutenbergTab.insertParalinguisticTag(this.value); this.value=''; }" style="padding: 4px 8px; border-radius: 4px; border: 1px solid #a78bfa; font-size: 12px; background: #ede9fe; cursor: pointer;">
+                        <option value="">+ Paralinguistic Tag</option>
                         <option value="laugh">[laugh]</option>
                         <option value="chuckle">[chuckle]</option>
                         <option value="cough">[cough]</option>
@@ -1736,17 +1756,19 @@
 
         function updatePaneVisibility() {
             const rawVisible = document.getElementById('toggle-raw').checked;
+            const parseVisible = document.getElementById('toggle-parse').checked;
             const xmlVisible = document.getElementById('toggle-xml').checked;
             const ttsVisible = document.getElementById('toggle-tts').checked;
             const readerVisible = document.getElementById('toggle-reader').checked;
 
             document.getElementById('pane-raw').classList.toggle('hidden', !rawVisible);
+            document.getElementById('pane-parse').classList.toggle('hidden', !parseVisible);
             document.getElementById('pane-xml').classList.toggle('hidden', !xmlVisible);
             document.getElementById('pane-tts').classList.toggle('hidden', !ttsVisible);
             document.getElementById('pane-reader').classList.toggle('hidden', !readerVisible);
 
             // Update grid layout
-            const visibleCount = [rawVisible, xmlVisible, ttsVisible, readerVisible].filter(v => v).length;
+            const visibleCount = [rawVisible, parseVisible, xmlVisible, ttsVisible, readerVisible].filter(v => v).length;
             const container = document.getElementById('panesContainer');
             container.className = `panes-container panes-${visibleCount}`;
         }

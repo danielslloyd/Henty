@@ -842,7 +842,7 @@ class TextToAudioConverter:
 
     def process_pronunciation_markup(self, text):
         """Replace {display|spoken} pronunciation markup with the spoken form for TTS.
-        Supports emotion tags: {display|[laugh]} or {|[cough]} — the square-bracket
+        Supports paralinguistic tags: {display|[laugh]} or {|[cough]} — the square-bracket
         tag is passed through verbatim for Chatterbox Turbo.
         If no pipe is present inside braces, returns the text unchanged.
         """
@@ -853,10 +853,10 @@ class TextToAudioConverter:
             return m.group(0)    # no pipe = not a pronunciation marker, leave as-is
         return re.sub(r'\{([^}]+)\}', replacer, text)
 
-    def text_has_emotion_tags(self, text):
-        """Check if text contains Chatterbox Turbo emotion/paralinguistic tags."""
-        emotion_tags = ['laugh', 'chuckle', 'cough', 'sigh', 'gasp', 'groan', 'sniff', 'clear throat', 'shush']
-        pattern = r'\{[^}]*\|\s*\[(?:' + '|'.join(re.escape(t) for t in emotion_tags) + r')\]\s*\}'
+    def text_has_paralinguistic_tags(self, text):
+        """Check if text contains Chatterbox Turbo paralinguistic tags, e.g. {ha ha|[laugh]}."""
+        paralinguistic_tags = ['laugh', 'chuckle', 'cough', 'sigh', 'gasp', 'groan', 'sniff', 'clear throat', 'shush']
+        pattern = r'\{[^}]*\|\s*\[(?:' + '|'.join(re.escape(t) for t in paralinguistic_tags) + r')\]\s*\}'
         return bool(re.search(pattern, text))
 
     def extract_display_text(self, text):
@@ -2725,17 +2725,19 @@ def generate_project_chunk_audio():
 
         # Verbose model selection logging
         requested_model = tts_model
-        has_emotion_tags = converter.text_has_emotion_tags(chunk_text)
+        has_paralinguistic_tags = converter.text_has_paralinguistic_tags(chunk_text)
         print(f"[TTS MODEL] Requested: {requested_model}")
         print(f"[TTS MODEL] HAS_TURBO available: {HAS_TURBO}")
-        print(f"[TTS MODEL] Emotion tags in text: {has_emotion_tags}")
+        print(f"[TTS MODEL] Paralinguistic tags in text: {has_paralinguistic_tags}")
+        # Note: Chatterbox Turbo expects [laugh], [cough], etc. embedded directly in text.
+        # process_pronunciation_markup strips the {display|[tag]} wrapper, leaving [tag] in the text.
 
-        # Auto-detect emotion tags → force turbo
-        if has_emotion_tags:
+        # Auto-detect paralinguistic tags → force turbo
+        if has_paralinguistic_tags:
             tts_model = 'chatterbox_turbo'
-            print(f"[TTS MODEL] Forced to chatterbox_turbo (emotion tags detected)")
+            print(f"[TTS MODEL] Forced to chatterbox_turbo (paralinguistic tags detected)")
         else:
-            print(f"[TTS MODEL] No emotion tags — using requested model: {tts_model}")
+            print(f"[TTS MODEL] No paralinguistic tags — using requested model: {tts_model}")
 
         if tts_model == 'chatterbox_turbo' and not HAS_TURBO:
             print(f"[TTS MODEL] WARNING: chatterbox_turbo requested but HAS_TURBO=False — falling back to chatterbox")
@@ -2762,7 +2764,7 @@ def generate_project_chunk_audio():
         print(f"\n=== Generating audio for chunk {chunk_id} on {model_device} ===")
         print(f"Text file ID: {text_file_id}")
         print(f"Voice: {voice_sample}")
-        print(f"Model (final): {tts_model} | requested: {requested_model} | emotion_tags: {has_emotion_tags}")
+        print(f"Model (final): {tts_model} | requested: {requested_model} | emotion_tags: {has_paralinguistic_tags}")
         print(f"Exaggeration: {exaggeration}, CFG: {cfg_weight}, Temp: {temperature}")
 
         # Generate audio filename with timestamp and chunk ID
@@ -2828,7 +2830,7 @@ def generate_project_chunk_audio():
                     'input_text': chunk_text,  # Store the text used for generation to detect outdated takes
                     'tts_model': tts_model,
                     'tts_model_requested': requested_model,
-                    'tts_model_emotion_forced': has_emotion_tags and requested_model != tts_model
+                    'tts_model_emotion_forced': has_paralinguistic_tags and requested_model != tts_model
                 }
                 chunk['generated_audios'].append(audio_entry)
 

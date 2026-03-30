@@ -86,7 +86,7 @@ class GutenbergTab {
             .replace(/</g, '&lt;')
             .replace(/>/g, '&gt;');
 
-        // Highlight pronunciation/emotion markup: {display|spoken} or {|[tag]}
+        // Highlight pronunciation/paralinguistic markup: {display|spoken} or {|[tag]}
         escaped = escaped.replace(
             /\{([^|}]*)\|([^}]*)\}/g,
             '<span style="background:#ddd6fe;border-radius:3px;padding:0 2px">{$1|<span style="color:#7c3aed;font-weight:600">$2</span>}</span>'
@@ -323,7 +323,7 @@ class GutenbergTab {
                 .replace(/</g, '&lt;')
                 .replace(/>/g, '&gt;');
 
-            // Highlight pronunciation/emotion markup: {display|spoken} or {|[tag]}
+            // Highlight pronunciation/paralinguistic markup: {display|spoken} or {|[tag]}
             escaped = escaped.replace(
                 /\{([^|}]*)\|([^}]*)\}/g,
                 '<span style="background:#ddd6fe;border-radius:3px;padding:0 2px">{$1|<span style="color:#7c3aed;font-weight:600">$2</span>}</span>'
@@ -461,10 +461,10 @@ class GutenbergTab {
         editor.focus();
     }
 
-    // Insert an emotion tag at cursor: {|[tag]}
-    insertEmotionTag(tag) {
+    // Insert a paralinguistic tag at cursor: {|[tag]}
+    insertParalinguisticTag(tag) {
         if (this.cleanViewActive) {
-            showToast('Switch to Markup View to insert emotion tags', 'error');
+            showToast('Switch to Markup View to insert paralinguistic tags', 'error');
             return;
         }
         const editor = document.getElementById('pseudoXmlEditor');
@@ -564,13 +564,11 @@ class GutenbergTab {
     _updateLockUI() {
         const lockBtn = document.getElementById('lockChaptersBtn');
         const unlockBtn = document.getElementById('unlockChaptersBtn');
-        const parsingPanel = document.getElementById('parsingMethodPanel');
         const lockStatus = document.getElementById('chapterLockStatus');
 
         if (this.chaptersLocked) {
             if (lockBtn) lockBtn.style.display = 'none';
             if (unlockBtn) unlockBtn.style.display = '';
-            if (parsingPanel) parsingPanel.style.display = 'none';
             if (lockStatus) {
                 lockStatus.style.display = '';
                 lockStatus.textContent = '🔒 Chapters locked — editing text and pronunciation only';
@@ -578,7 +576,6 @@ class GutenbergTab {
         } else {
             if (lockBtn) lockBtn.style.display = '';
             if (unlockBtn) unlockBtn.style.display = 'none';
-            if (parsingPanel) parsingPanel.style.display = '';
             if (lockStatus) lockStatus.style.display = 'none';
         }
     }

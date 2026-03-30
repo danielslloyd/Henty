@@ -513,7 +513,6 @@ class TTSTab {
                                 <button class="chunk-icon add" onclick="event.stopPropagation(); ttsTab.selectChunk(${chunk.id}); setTimeout(() => ttsTab.generateChunkAudio(${chunk.id}), 100)" title="Generate take">
                                     <span class="material-symbols-outlined">text_to_speech</span>
                                 </button>
-                                ${isOutdated ? '<span class="material-symbols-outlined outdated-icon" title="Text changed since generation">edit_off</span>' : ''}
                                 <span class="chunk-preview-text">${chunkPreview}</span>
                                 ${(() => {
                                     const flags = this.getFlagsForChunk(chunk.id);
@@ -521,6 +520,7 @@ class TTSTab {
                                 })()}
                             </div>
                             <div class="take-icons">
+                                ${isOutdated ? '<span class="material-symbols-outlined outdated-icon" title="Text changed since this take was generated">edit_off</span>' : ''}
                                 <button class="take-icon check-circle ${isBest ? 'best' : ''}"
                                         onclick='event.stopPropagation(); ttsTab.setBestTake(${chunk.id}, "${firstTake.audio_file}")'
                                         title="${isBest ? 'Best take' : 'Set as best take'}">
@@ -529,10 +529,9 @@ class TTSTab {
                                 <button class="take-icon settings" data-settings-for="${takeId}" onclick="event.stopPropagation(); ttsTab.toggleTakeSettings('${takeId}')" title="View settings">
                                     <span class="material-symbols-outlined">settings</span>
                                 </button>
-                                <button class="take-icon diff" data-diff-for="diff_${takeId}" onclick="event.stopPropagation(); ttsTab.toggleDiffPanel('diff_${takeId}')" title="Compare transcription" ${firstTake.transcription ? '' : 'disabled'}>
+                                <button class="take-icon diff${firstTake.similarity_score !== undefined && firstTake.similarity_score < 85 ? (firstTake.similarity_score >= 60 ? ' diff-warn' : ' diff-error') : ''}" data-diff-for="diff_${takeId}" onclick="event.stopPropagation(); ttsTab.toggleDiffPanel('diff_${takeId}')" title="Compare transcription" ${firstTake.transcription ? '' : 'disabled'}>
                                     <span class="material-symbols-outlined">speaker_notes</span>
                                 </button>
-                                ${firstTake.similarity_score !== undefined ? `<span class="take-score-badge score-${firstTake.similarity_score >= 85 ? 'high' : firstTake.similarity_score >= 60 ? 'mid' : 'low'}" title="Similarity: ${firstTake.similarity_score}%">${firstTake.similarity_score}%</span>` : ''}
                                 <button class="take-icon play" onclick="event.stopPropagation(); ttsTab.playTakeAudio('${firstTake.audio_url}', event)" title="Play">
                                     <span class="material-symbols-outlined">play_arrow</span>
                                 </button>
@@ -555,7 +554,7 @@ class TTSTab {
                             </div>
                             <div class="setting-row">
                                 <span class="setting-label">Model</span>
-                                <span class="setting-value take-model-value">${firstTake.tts_model === 'chatterbox_turbo' ? 'Turbo' : 'Standard'}${firstTake.tts_model_emotion_forced ? ' <span class="model-forced-badge" title="Forced by emotion tags">(auto)</span>' : ''}</span>
+                                <span class="setting-value take-model-value">${firstTake.tts_model === 'chatterbox_turbo' ? 'Turbo' : 'Standard'}${firstTake.tts_model_emotion_forced ? ' <span class="model-forced-badge" title="Forced by paralinguistic tags">(auto)</span>' : ''}</span>
                             </div>
                             <div class="setting-row">
                                 <span class="setting-label">Exaggeration</span>
@@ -579,6 +578,12 @@ class TTSTab {
                             <div class="setting-row">
                                 <span class="setting-label">Gen Time</span>
                                 <span class="setting-value">${(firstTake.generation_time_ms / 1000).toFixed(1)}s</span>
+                            </div>
+                            ` : ''}
+                            ${firstTake.similarity_score !== undefined ? `
+                            <div class="setting-row">
+                                <span class="setting-label">Similarity</span>
+                                <span class="setting-value take-score-badge score-${firstTake.similarity_score >= 85 ? 'high' : firstTake.similarity_score >= 60 ? 'mid' : 'low'}">${firstTake.similarity_score}%</span>
                             </div>
                             ` : ''}
                             ${firstTake.possibly_truncated ? `
@@ -651,10 +656,9 @@ class TTSTab {
                                  onclick="ttsTab.highlightChunk(${chunk.id}, true)"
                                  onmouseenter="ttsTab.highlightChunk(${chunk.id})"
                                  onmouseleave="ttsTab.unhighlightChunk(${chunk.id})">
-                                <div class="chunk-left">
-                                    ${isOutdated ? '<span class="material-symbols-outlined outdated-icon" title="Text changed since generation">edit_off</span>' : ''}
-                                </div>
+                                <div class="chunk-left"></div>
                                 <div class="take-icons">
+                                    ${isOutdated ? '<span class="material-symbols-outlined outdated-icon" title="Text changed since this take was generated">edit_off</span>' : ''}
                                     <button class="take-icon check-circle ${isBest ? 'best' : ''}"
                                             onclick='event.stopPropagation(); ttsTab.setBestTake(${chunk.id}, "${take.audio_file}")'
                                             title="${isBest ? 'Best take' : 'Set as best take'}">
@@ -663,10 +667,9 @@ class TTSTab {
                                     <button class="take-icon settings" data-settings-for="${takeId}" onclick="event.stopPropagation(); ttsTab.toggleTakeSettings('${takeId}')" title="View settings">
                                         <span class="material-symbols-outlined">settings</span>
                                     </button>
-                                    <button class="take-icon diff" data-diff-for="diff_${takeId}" onclick="event.stopPropagation(); ttsTab.toggleDiffPanel('diff_${takeId}')" title="Compare transcription" ${take.transcription ? '' : 'disabled'}>
+                                    <button class="take-icon diff${take.similarity_score !== undefined && take.similarity_score < 85 ? (take.similarity_score >= 60 ? ' diff-warn' : ' diff-error') : ''}" data-diff-for="diff_${takeId}" onclick="event.stopPropagation(); ttsTab.toggleDiffPanel('diff_${takeId}')" title="Compare transcription" ${take.transcription ? '' : 'disabled'}>
                                         <span class="material-symbols-outlined">speaker_notes</span>
                                     </button>
-                                    ${take.similarity_score !== undefined ? `<span class="take-score-badge score-${take.similarity_score >= 85 ? 'high' : take.similarity_score >= 60 ? 'mid' : 'low'}" title="Similarity: ${take.similarity_score}%">${take.similarity_score}%</span>` : ''}
                                     <button class="take-icon play" onclick="event.stopPropagation(); ttsTab.playTakeAudio('${take.audio_url}', event)" title="Play">
                                         <span class="material-symbols-outlined">play_arrow</span>
                                     </button>
@@ -689,7 +692,7 @@ class TTSTab {
                                 </div>
                                 <div class="setting-row">
                                     <span class="setting-label">Model</span>
-                                    <span class="setting-value take-model-value">${take.tts_model === 'chatterbox_turbo' ? 'Turbo' : 'Standard'}${take.tts_model_emotion_forced ? ' <span class="model-forced-badge" title="Forced by emotion tags">(auto)</span>' : ''}</span>
+                                    <span class="setting-value take-model-value">${take.tts_model === 'chatterbox_turbo' ? 'Turbo' : 'Standard'}${take.tts_model_emotion_forced ? ' <span class="model-forced-badge" title="Forced by paralinguistic tags">(auto)</span>' : ''}</span>
                                 </div>
                                 <div class="setting-row">
                                     <span class="setting-label">Exaggeration</span>
@@ -713,6 +716,12 @@ class TTSTab {
                                 <div class="setting-row">
                                     <span class="setting-label">Gen Time</span>
                                     <span class="setting-value">${(take.generation_time_ms / 1000).toFixed(1)}s</span>
+                                </div>
+                                ` : ''}
+                                ${take.similarity_score !== undefined ? `
+                                <div class="setting-row">
+                                    <span class="setting-label">Similarity</span>
+                                    <span class="setting-value take-score-badge score-${take.similarity_score >= 85 ? 'high' : take.similarity_score >= 60 ? 'mid' : 'low'}">${take.similarity_score}%</span>
                                 </div>
                                 ` : ''}
                                 ${take.possibly_truncated ? `
@@ -1074,11 +1083,11 @@ class TTSTab {
         const cfgWeight = document.getElementById(`cfg_weight_chunk_${chunkId}`)?.value || this.projectDefaults.cfg_weight;
         let ttsModel = document.getElementById(`model_chunk_${chunkId}`)?.value || this.projectDefaults.tts_model || 'chatterbox';
 
-        // Auto-detect emotion tags in chunk text → force turbo
-        const hasEmotionTags = /\{[^}]*\|\s*\[(?:laugh|chuckle|cough|sigh|gasp|groan|sniff|clear throat|shush)\]\s*\}/.test(chunk.text);
-        if (hasEmotionTags) {
+        // Auto-detect paralinguistic tags in chunk text → force turbo
+        const hasParalinguisticTags = /\{[^}]*\|\s*\[(?:laugh|chuckle|cough|sigh|gasp|groan|sniff|clear throat|shush)\]\s*\}/.test(chunk.text);
+        if (hasParalinguisticTags) {
             ttsModel = 'chatterbox_turbo';
-            console.log(`[TTS TAB] Emotion tags detected in chunk ${chunkId}, using Turbo model`);
+            console.log(`[TTS TAB] Paralinguistic tags detected in chunk ${chunkId}, using Turbo model`);
         }
 
         // NEVER allow generation with missing voice sample
@@ -2014,32 +2023,11 @@ class TTSTab {
             const hasOutdated = audios.some(a => a.input_text && a.input_text !== chunk.text);
 
             rows.forEach(row => {
-                // Toggle outdated-take class
+                // Toggle outdated-take class; per-take icons are set on full re-render
                 if (hasOutdated) {
                     row.classList.add('outdated-take');
                 } else {
                     row.classList.remove('outdated-take');
-                }
-
-                // Add or remove the outdated icon in the chunk-left area
-                const chunkLeft = row.querySelector('.chunk-left');
-                if (!chunkLeft) return;
-
-                const existingIcon = chunkLeft.querySelector('.outdated-icon');
-                if (hasOutdated && !existingIcon) {
-                    const icon = document.createElement('span');
-                    icon.className = 'material-symbols-outlined outdated-icon';
-                    icon.title = 'Text changed since generation';
-                    icon.textContent = 'edit_off';
-                    // Insert after the add button
-                    const addBtn = chunkLeft.querySelector('.chunk-icon.add');
-                    if (addBtn) {
-                        addBtn.after(icon);
-                    } else {
-                        chunkLeft.prepend(icon);
-                    }
-                } else if (!hasOutdated && existingIcon) {
-                    existingIcon.remove();
                 }
             });
         }
