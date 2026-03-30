@@ -10,7 +10,14 @@ echo.
 
 REM Kill any previously running Henty server instances
 echo [INFO] Stopping any previously running Henty server...
+REM Try window title first
 taskkill /FI "WINDOWTITLE eq Henty Server*" /T /F 2>nul
+REM Kill any process listening on port 5000
+for /f "tokens=5" %%A in ('netstat -ano ^| findstr ":5000 " 2^>nul') do (
+    taskkill /PID %%A /T /F 2>nul
+)
+REM Small delay to ensure cleanup
+timeout /t 1 /nobreak >nul 2>&1
 
 REM Check if Python is available
 python --version >nul 2>&1
