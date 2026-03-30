@@ -929,10 +929,20 @@ class TextToAudioConverter:
                 })
 
             use_turbo = (tts_model == 'chatterbox_turbo')
+            print(f"[TTS VERBOSE] tts_model={tts_model!r}, use_turbo={use_turbo}, HAS_TURBO={HAS_TURBO}")
             if use_turbo:
-                model = self.load_turbo_model()
+                if not HAS_TURBO:
+                    print(f"[TTS VERBOSE] WARNING: Turbo requested but not available — loading standard model instead")
+                    model = self.load_model()
+                    print(f"[TTS VERBOSE] Standard model loaded (turbo unavailable): {type(model).__name__}")
+                else:
+                    print(f"[TTS VERBOSE] Loading Chatterbox Turbo model...")
+                    model = self.load_turbo_model()
+                    print(f"[TTS VERBOSE] Turbo model loaded successfully: {type(model).__name__}")
             else:
+                print(f"[TTS VERBOSE] Loading Chatterbox Standard model...")
                 model = self.load_model()
+                print(f"[TTS VERBOSE] Standard model loaded successfully: {type(model).__name__}")
 
             # Prepare generation parameters
             gen_params = {
@@ -2713,10 +2723,25 @@ def generate_project_chunk_audio():
         language_id = data.get('language_id', 'en')
         tts_model = data.get('tts_model', config.DEFAULT_TTS_MODEL if hasattr(config, 'DEFAULT_TTS_MODEL') else 'chatterbox')
 
+        # Verbose model selection logging
+        requested_model = tts_model
+        has_emotion_tags = converter.text_has_emotion_tags(chunk_text)
+        print(f"[TTS MODEL] Requested: {requested_model}")
+        print(f"[TTS MODEL] HAS_TURBO available: {HAS_TURBO}")
+        print(f"[TTS MODEL] Emotion tags in text: {has_emotion_tags}")
+
         # Auto-detect emotion tags → force turbo
-        if converter.text_has_emotion_tags(chunk_text):
+        if has_emotion_tags:
             tts_model = 'chatterbox_turbo'
-            print(f"[TTS] Emotion tags detected, forcing Chatterbox Turbo")
+            print(f"[TTS MODEL] Forced to chatterbox_turbo (emotion tags detected)")
+        else:
+            print(f"[TTS MODEL] No emotion tags — using requested model: {tts_model}")
+
+        if tts_model == 'chatterbox_turbo' and not HAS_TURBO:
+            print(f"[TTS MODEL] WARNING: chatterbox_turbo requested but HAS_TURBO=False — falling back to chatterbox")
+            tts_model = 'chatterbox'
+
+        print(f"[TTS MODEL] Final model selected: {tts_model}")
 
         # Construct voice sample path
         audio_prompt_path = None
@@ -2737,7 +2762,7 @@ def generate_project_chunk_audio():
         print(f"\n=== Generating audio for chunk {chunk_id} on {model_device} ===")
         print(f"Text file ID: {text_file_id}")
         print(f"Voice: {voice_sample}")
-        print(f"Model: {tts_model}")
+        print(f"Model (final): {tts_model} | requested: {requested_model} | emotion_tags: {has_emotion_tags}")
         print(f"Exaggeration: {exaggeration}, CFG: {cfg_weight}, Temp: {temperature}")
 
         # Generate audio filename with timestamp and chunk ID
@@ -2801,7 +2826,9 @@ def generate_project_chunk_audio():
                     'possibly_truncated': possibly_truncated,
                     'generation_time_ms': generation_time_ms,
                     'input_text': chunk_text,  # Store the text used for generation to detect outdated takes
-                    'tts_model': tts_model
+                    'tts_model': tts_model,
+                    'tts_model_requested': requested_model,
+                    'tts_model_emotion_forced': has_emotion_tags and requested_model != tts_model
                 }
                 chunk['generated_audios'].append(audio_entry)
 
