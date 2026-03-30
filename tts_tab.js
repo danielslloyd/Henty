@@ -81,7 +81,8 @@ class TTSTab {
             exaggeration: 0.6,
             cfg_weight: 0.4,
             voice_sample: '',
-            temperature: 0.8
+            temperature: 0.8,
+            tts_model: 'chatterbox'  // 'chatterbox' or 'chatterbox_turbo'
         };
         this.activeGenerations = {};
         this.generationQueue = [];
@@ -132,6 +133,12 @@ class TTSTab {
             if (response.ok) {
                 const config = await response.json();
                 const defaultVoice = config.default_voice || 'Stoker Extended';
+
+                // Load default TTS model from config
+                if (config.default_tts_model) {
+                    this.projectDefaults.tts_model = config.default_tts_model;
+                    console.log('[TTS TAB] Default TTS model:', config.default_tts_model);
+                }
 
                 // Find matching voice sample (file extension agnostic)
                 const matchingVoice = this.voiceSamples.find(v => {
@@ -354,6 +361,15 @@ class TTSTab {
                                 <span class="project-setting-value" id="projectTempValue">${this.projectDefaults.temperature}</span>
                             </div>
                         </div>
+                        <div class="project-setting-item">
+                            <label class="project-setting-label">TTS Model</label>
+                            <div class="project-setting-control">
+                                <select id="projectDefaultModel" onchange="ttsTab.updateProjectDefault('tts_model', this.value)">
+                                    <option value="chatterbox" ${this.projectDefaults.tts_model === 'chatterbox' ? 'selected' : ''}>Chatterbox (Standard)</option>
+                                    <option value="chatterbox_turbo" ${this.projectDefaults.tts_model === 'chatterbox_turbo' ? 'selected' : ''}>Chatterbox Turbo</option>
+                                </select>
+                            </div>
+                        </div>
                     </div>
                 </div>
             </div>
@@ -390,6 +406,10 @@ class TTSTab {
             document.querySelectorAll('[id^="voice_chunk_"]').forEach(el => {
                 el.value = value;
             });
+        } else if (key === 'tts_model') {
+            document.querySelectorAll('[id^="model_chunk_"]').forEach(el => {
+                el.value = value;
+            });
         }
 
         // Persist to server
@@ -403,7 +423,8 @@ class TTSTab {
                     voice_sample: this.projectDefaults.voice_sample,
                     temperature: this.projectDefaults.temperature,
                     seed: this.projectDefaults.seed || 0,
-                    ref_vad_trimming: this.projectDefaults.ref_vad_trimming || false
+                    ref_vad_trimming: this.projectDefaults.ref_vad_trimming || false,
+                    tts_model: this.projectDefaults.tts_model || 'chatterbox'
                 })
             });
             if (!resp.ok) console.warn('[TTS TAB] Failed to persist project default:', key);
@@ -544,6 +565,12 @@ class TTSTab {
                                 <span class="setting-label">Temperature</span>
                                 <span class="setting-value">${firstTake.temperature || this.projectDefaults.temperature}</span>
                             </div>
+                            ${firstTake.tts_model ? `
+                            <div class="setting-row">
+                                <span class="setting-label">Model</span>
+                                <span class="setting-value">${firstTake.tts_model === 'chatterbox_turbo' ? 'Turbo' : 'Standard'}</span>
+                            </div>
+                            ` : ''}
                             ${firstTake.audio_duration_seconds ? `
                             <div class="setting-row">
                                 <span class="setting-label">Duration</span>
@@ -597,6 +624,15 @@ class TTSTab {
                                     <input type="range" id="cfg_weight_chunk_${chunk.id}" min="0" max="1" step="0.1" value="${this.projectDefaults.cfg_weight}"
                                            oninput="document.getElementById('cfg_val_${chunkPreviewId}').textContent = this.value">
                                     <span class="setting-value" id="cfg_val_${chunkPreviewId}">${this.projectDefaults.cfg_weight}</span>
+                                </div>
+                            </div>
+                            <div class="setting-row">
+                                <span class="setting-label">TTS Model</span>
+                                <div class="setting-control">
+                                    <select id="model_chunk_${chunk.id}">
+                                        <option value="chatterbox" ${this.projectDefaults.tts_model === 'chatterbox' ? 'selected' : ''}>Chatterbox</option>
+                                        <option value="chatterbox_turbo" ${this.projectDefaults.tts_model === 'chatterbox_turbo' ? 'selected' : ''}>Turbo</option>
+                                    </select>
                                 </div>
                             </div>
                         </div>
@@ -665,6 +701,12 @@ class TTSTab {
                                     <span class="setting-label">Temperature</span>
                                     <span class="setting-value">${take.temperature || this.projectDefaults.temperature}</span>
                                 </div>
+                                ${take.tts_model ? `
+                                <div class="setting-row">
+                                    <span class="setting-label">Model</span>
+                                    <span class="setting-value">${take.tts_model === 'chatterbox_turbo' ? 'Turbo' : 'Standard'}</span>
+                                </div>
+                                ` : ''}
                                 ${take.audio_duration_seconds ? `
                                 <div class="setting-row">
                                     <span class="setting-label">Duration</span>
@@ -730,6 +772,15 @@ class TTSTab {
                                     <input type="range" id="cfg_weight_chunk_${chunk.id}" min="0" max="1" step="0.1" value="${this.projectDefaults.cfg_weight}"
                                            oninput="document.getElementById('cfg_val_${chunkPreviewId}').textContent = this.value">
                                     <span class="setting-value" id="cfg_val_${chunkPreviewId}">${this.projectDefaults.cfg_weight}</span>
+                                </div>
+                            </div>
+                            <div class="setting-row">
+                                <span class="setting-label">TTS Model</span>
+                                <div class="setting-control">
+                                    <select id="model_chunk_${chunk.id}">
+                                        <option value="chatterbox" ${this.projectDefaults.tts_model === 'chatterbox' ? 'selected' : ''}>Chatterbox</option>
+                                        <option value="chatterbox_turbo" ${this.projectDefaults.tts_model === 'chatterbox_turbo' ? 'selected' : ''}>Turbo</option>
+                                    </select>
                                 </div>
                             </div>
                         </div>
@@ -1025,6 +1076,14 @@ class TTSTab {
         const voice = document.getElementById(`voice_chunk_${chunkId}`)?.value || this.projectDefaults.voice_sample;
         const exaggeration = document.getElementById(`exaggeration_chunk_${chunkId}`)?.value || this.projectDefaults.exaggeration;
         const cfgWeight = document.getElementById(`cfg_weight_chunk_${chunkId}`)?.value || this.projectDefaults.cfg_weight;
+        let ttsModel = document.getElementById(`model_chunk_${chunkId}`)?.value || this.projectDefaults.tts_model || 'chatterbox';
+
+        // Auto-detect emotion tags in chunk text → force turbo
+        const hasEmotionTags = /\{[^}]*\|\s*\[(?:laugh|chuckle|cough|sigh|gasp|groan|sniff|clear throat|shush)\]\s*\}/.test(chunk.text);
+        if (hasEmotionTags) {
+            ttsModel = 'chatterbox_turbo';
+            console.log(`[TTS TAB] Emotion tags detected in chunk ${chunkId}, using Turbo model`);
+        }
 
         // NEVER allow generation with missing voice sample
         if (!voice) {
@@ -1057,11 +1116,11 @@ class TTSTab {
                 voice,
                 exaggeration,
                 cfgWeight,
-                // Store full context for multi-project queuing
+                ttsModel,
                 chapterId: this.currentChapter.id,
                 chunkText: chunk.text,
                 temperature: this.projectDefaults.temperature,
-                projectPath: currentProjectPath // From global state in app.html
+                projectPath: currentProjectPath
             });
             this.updateGenerationStatusToast();
             return;
@@ -1115,7 +1174,8 @@ class TTSTab {
                     voice_sample: voice,
                     exaggeration: parseFloat(exaggeration),
                     cfg_weight: parseFloat(cfgWeight),
-                    temperature: this.projectDefaults.temperature
+                    temperature: this.projectDefaults.temperature,
+                    tts_model: ttsModel
                 })
             });
 
@@ -1125,7 +1185,7 @@ class TTSTab {
                 throw new Error(data.error || `Server error: ${response.status}`);
             }
 
-            console.log('[TTS TAB] Audio generated successfully');
+            console.log(`[TTS TAB] Audio generated successfully (model: ${ttsModel})`);
 
             // Capture new audio file for transcription (fire-and-forget after UI reload)
             const newAudioFile = data.audio_file;
@@ -1276,7 +1336,7 @@ class TTSTab {
     }
 
     async generateChunkDirect(genContext) {
-        const { chunkId, voice, exaggeration, cfgWeight, chapterId, chunkText, temperature, projectPath } = genContext;
+        const { chunkId, voice, exaggeration, cfgWeight, chapterId, chunkText, temperature, projectPath, ttsModel } = genContext;
 
         console.log('[TTS TAB] Generating audio directly for chunk:', chunkId, 'from queued project');
 
@@ -1309,7 +1369,8 @@ class TTSTab {
                     voice_sample: voice,
                     exaggeration: parseFloat(exaggeration),
                     cfg_weight: parseFloat(cfgWeight),
-                    temperature: temperature
+                    temperature: temperature,
+                    tts_model: ttsModel || 'chatterbox'
                 })
             });
 
@@ -1927,6 +1988,59 @@ class TTSTab {
                 }
             }
         }
+    }
+    /**
+     * Update dirty indicators on take rows without full re-render.
+     * Called by gutenberg_tab after auto-save to instantly show red "text changed" icons.
+     */
+    updateDirtyIndicators(updatedChapters) {
+        if (!this.currentChapter || this.currentChapterIndex === null) return;
+
+        const updatedChapter = updatedChapters[this.currentChapterIndex];
+        if (!updatedChapter) return;
+
+        const updatedChunks = updatedChapter.chunks || [];
+
+        for (const chunk of updatedChunks) {
+            const rows = document.querySelectorAll(`.chunk-take-row[data-chunk-id="${chunk.id}"]`);
+            if (rows.length === 0) continue;
+
+            const audios = chunk.generated_audios || [];
+            const hasOutdated = audios.some(a => a.input_text && a.input_text !== chunk.text);
+
+            rows.forEach(row => {
+                // Toggle outdated-take class
+                if (hasOutdated) {
+                    row.classList.add('outdated-take');
+                } else {
+                    row.classList.remove('outdated-take');
+                }
+
+                // Add or remove the outdated icon in the chunk-left area
+                const chunkLeft = row.querySelector('.chunk-left');
+                if (!chunkLeft) return;
+
+                const existingIcon = chunkLeft.querySelector('.outdated-icon');
+                if (hasOutdated && !existingIcon) {
+                    const icon = document.createElement('span');
+                    icon.className = 'material-symbols-outlined outdated-icon';
+                    icon.title = 'Text changed since generation';
+                    icon.textContent = 'edit_off';
+                    // Insert after the add button
+                    const addBtn = chunkLeft.querySelector('.chunk-icon.add');
+                    if (addBtn) {
+                        addBtn.after(icon);
+                    } else {
+                        chunkLeft.prepend(icon);
+                    }
+                } else if (!hasOutdated && existingIcon) {
+                    existingIcon.remove();
+                }
+            });
+        }
+
+        // Update local chapter data
+        this.currentChapter = updatedChapter;
     }
 }
 

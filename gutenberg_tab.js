@@ -10,6 +10,11 @@
  *   [pause:1.5]          <- Pause marker
  *   </chunk>
  *   More text...
+ *
+ * Pronunciation/Emotion Markup:
+ *   {display|spoken}     <- Pronunciation override (purple highlight)
+ *   {display|[laugh]}    <- Emotion tag (auto-uses Turbo model)
+ *   {|[cough]}           <- Standalone emotion (no display text)
  */
 
 class GutenbergTab {
@@ -20,17 +25,207 @@ class GutenbergTab {
         this.defaultGutenbergUrl = '';
         this.parsingMethods = {};
         this.cleanViewActive = false;
+        this.chaptersLocked = false;
+
+        // Undo stack (max 5 levels)
+        this.undoStack = [];
+        this.maxUndoLevels = 5;
+
+        // Auto-save debounce
+        this._autoSaveTimer = null;
+        this._autoSaveDelay = 1500; // ms after last keystroke
+        this._lastSavedContent = '';
     }
 
     async init() {
-        // Load default Gutenberg URL from config
         await this.loadDefaultUrl();
-        // Load raw text from project if available
         await this.loadRawText();
-        // Load markdown content from project
         await this.loadMarkdown();
-        // Initialize parsing method selector
         await this.initParsingMethods();
+        await this.checkLockState();
+        this._setupEditorListeners();
+    }
+
+    /**
+     * Set up input listeners for live highlighting and auto-save
+     */
+    _setupEditorListeners() {
+        const editor = document.getElementById('pseudoXmlEditor');
+        if (!editor) return;
+
+        // Live re-highlight on input (preserves cursor position)
+        editor.addEventListener('input', () => {
+            if (this.cleanViewActive) return;
+            this._liveHighlight(editor);
+            this._scheduleAutoSave(editor);
+        });
+    }
+
+    /**
+     * Re-apply purple/yellow highlighting while preserving caret position.
+     * Uses a fast innerHTML swap with cursor save/restore.
+     */
+    _liveHighlight(editor) {
+        // Get plain text and cursor offset
+        const sel = window.getSelection();
+        if (!sel.rangeCount) return;
+
+        const range = sel.getRangeAt(0);
+        // Calculate text offset from start of editor
+        const preRange = document.createRange();
+        preRange.selectNodeContents(editor);
+        preRange.setEnd(range.startContainer, range.startOffset);
+        const cursorOffset = preRange.toString().length;
+
+        // Get raw text content
+        const raw = editor.textContent || editor.innerText;
+
+        // Build highlighted HTML
+        let escaped = raw
+            .replace(/&/g, '&amp;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;');
+
+        // Highlight pronunciation/emotion markup: {display|spoken} or {|[tag]}
+        escaped = escaped.replace(
+            /\{([^|}]*)\|([^}]*)\}/g,
+            '<span style="background:#ddd6fe;border-radius:3px;padding:0 2px">{$1|<span style="color:#7c3aed;font-weight:600">$2</span>}</span>'
+        );
+
+        // Highlight </chunk> tags
+        escaped = escaped.replace(
+            /&lt;\/chunk&gt;/g,
+            '<span style="background:#fde68a;color:#92400e;border-radius:3px;padding:0 3px;font-size:0.85em;">&lt;/chunk&gt;</span>'
+        );
+
+        editor.innerHTML = escaped;
+
+        // Restore cursor position
+        this._restoreCursor(editor, cursorOffset);
+    }
+
+    /**
+     * Restore cursor to a text offset within a contenteditable element
+     */
+    _restoreCursor(editor, targetOffset) {
+        const walker = document.createTreeWalker(editor, NodeFilter.SHOW_TEXT, null, false);
+        let offset = 0;
+        let node;
+        while ((node = walker.nextNode())) {
+            const len = node.textContent.length;
+            if (offset + len >= targetOffset) {
+                const sel = window.getSelection();
+                const range = document.createRange();
+                range.setStart(node, targetOffset - offset);
+                range.collapse(true);
+                sel.removeAllRanges();
+                sel.addRange(range);
+                return;
+            }
+            offset += len;
+        }
+    }
+
+    /**
+     * Schedule auto-save after debounce period
+     */
+    _scheduleAutoSave(editor) {
+        if (this._autoSaveTimer) clearTimeout(this._autoSaveTimer);
+        this._autoSaveTimer = setTimeout(async () => {
+            const currentText = editor.textContent || editor.innerText;
+            if (currentText === this._lastSavedContent) return;
+            if (currentText.length === 0) return;
+
+            // Push to undo stack before saving
+            if (this._lastSavedContent && this._lastSavedContent !== currentText) {
+                this.undoStack.push(this._lastSavedContent);
+                if (this.undoStack.length > this.maxUndoLevels) {
+                    this.undoStack.shift();
+                }
+                this._updateUndoButton();
+            }
+
+            console.log('[EDITOR] Auto-saving...');
+            await this._performSave(currentText);
+        }, this._autoSaveDelay);
+    }
+
+    /**
+     * Undo last edit (restore from undo stack)
+     */
+    async undo() {
+        if (this.undoStack.length === 0) {
+            showToast('Nothing to undo', 'error');
+            return;
+        }
+        const previous = this.undoStack.pop();
+        this._updateUndoButton();
+
+        const editor = document.getElementById('pseudoXmlEditor');
+        this.markdownContent = previous;
+        this._lastSavedContent = previous;
+        this.displayMarkdown();
+
+        // Save the reverted content
+        await this._performSave(previous);
+        showToast('Undone', 'success');
+    }
+
+    _updateUndoButton() {
+        const btn = document.getElementById('undoBtn');
+        if (btn) {
+            btn.disabled = this.undoStack.length === 0;
+            btn.title = this.undoStack.length > 0
+                ? `Undo (${this.undoStack.length} available)`
+                : 'Nothing to undo';
+        }
+    }
+
+    /**
+     * Internal save — sends markdown to server, refreshes TTS dirty indicators
+     */
+    async _performSave(markdownContent) {
+        try {
+            const response = await fetch(`${SERVER_URL}/api/project/save-markdown`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-API-Key': API_KEY
+                },
+                body: JSON.stringify({ markdown_content: markdownContent })
+            });
+
+            if (response.ok) {
+                this.markdownContent = markdownContent;
+                this._lastSavedContent = markdownContent;
+
+                // Refresh chapters data silently (no re-render of editor)
+                const chapResp = await fetch(`${SERVER_URL}/api/project/get-text-files`, {
+                    headers: { 'X-API-Key': API_KEY }
+                });
+                if (chapResp.ok) {
+                    const data = await chapResp.json();
+                    this.chapters = data.chapters || [];
+                }
+
+                // Notify TTS tab to update dirty indicators without full reload
+                if (typeof ttsTab !== 'undefined' && ttsTab.updateDirtyIndicators) {
+                    ttsTab.updateDirtyIndicators(this.chapters);
+                }
+
+                // Refresh Reader tab if available
+                if (typeof readerTab !== 'undefined' && readerTab.refresh) {
+                    readerTab.refresh();
+                }
+
+                console.log('[EDITOR] Auto-saved successfully');
+            } else {
+                const error = await response.json();
+                console.error('[EDITOR] Auto-save failed:', error.error);
+            }
+        } catch (error) {
+            console.error('[EDITOR] Auto-save error:', error);
+        }
     }
 
     async loadDefaultUrl() {
@@ -50,9 +245,7 @@ class GutenbergTab {
     async loadRawText() {
         try {
             const response = await fetch(`${SERVER_URL}/api/project/raw-text`, {
-                headers: {
-                    'X-API-Key': API_KEY
-                }
+                headers: { 'X-API-Key': API_KEY }
             });
 
             if (response.ok) {
@@ -77,9 +270,7 @@ class GutenbergTab {
     async loadMarkdown() {
         try {
             const response = await fetch(`${SERVER_URL}/api/project/get-text-files`, {
-                headers: {
-                    'X-API-Key': API_KEY
-                }
+                headers: { 'X-API-Key': API_KEY }
             });
 
             if (response.ok) {
@@ -88,13 +279,12 @@ class GutenbergTab {
 
                 console.log('[LOAD MARKDOWN] Loaded chapters:', this.chapters.length);
 
-                // Always generate markdown from chapters (chapters are the source of truth)
                 if (this.chapters.length > 0) {
-                    console.log('[LOAD MARKDOWN] Generating markdown from chapters...');
                     this.markdownContent = this.chaptersToMarkdown(this.chapters);
-                    console.log('[LOAD MARKDOWN] Generated markdown first 500 chars:', this.markdownContent.substring(0, 500));
+                    this._lastSavedContent = this.markdownContent;
                 } else {
                     this.markdownContent = '';
+                    this._lastSavedContent = '';
                 }
 
                 this.displayMarkdown();
@@ -106,7 +296,6 @@ class GutenbergTab {
 
     /**
      * Display markdown in the editor
-     * No escaping needed - text displays as-is
      */
     displayMarkdown() {
         const editor = document.getElementById('pseudoXmlEditor');
@@ -119,7 +308,7 @@ class GutenbergTab {
         if (this.cleanViewActive) {
             // Clean view: strip {display|spoken} → display text only, hide </chunk> tags
             let cleanText = this.markdownContent;
-            cleanText = cleanText.replace(/\{([^|}]+)\|[^}]*\}/g, '$1');
+            cleanText = cleanText.replace(/\{([^|}]*)\|[^}]*\}/g, '$1');
             cleanText = cleanText.replace(/<\/chunk>/g, '');
             const escaped = cleanText
                 .replace(/&/g, '&amp;')
@@ -134,9 +323,9 @@ class GutenbergTab {
                 .replace(/</g, '&lt;')
                 .replace(/>/g, '&gt;');
 
-            // Highlight pronunciation markup: {display|spoken}
+            // Highlight pronunciation/emotion markup: {display|spoken} or {|[tag]}
             escaped = escaped.replace(
-                /\{([^|}]+)\|([^}]*)\}/g,
+                /\{([^|}]*)\|([^}]*)\}/g,
                 '<span style="background:#ddd6fe;border-radius:3px;padding:0 2px">{$1|<span style="color:#7c3aed;font-weight:600">$2</span>}</span>'
             );
 
@@ -153,17 +342,6 @@ class GutenbergTab {
 
     /**
      * Convert chapters array to markdown format
-     * Format:
-     *   ## Chapter Title      <- This becomes chunk 0 when parsed
-     *   Chunk text here.</chunk>Next chunk text.</chunk>More text...
-     *   [pause:1.5]</chunk>
-     *   Text after pause...
-     *
-     * Notes:
-     * - </chunk> markers are inline, not on separate lines
-     * - Newlines in text represent real paragraph breaks (from <p> tags)
-     * - The ## header line is automatically added as chunk 0 by the parser,
-     *   so we skip outputting chunk 0 if its text matches the title.
      */
     chaptersToMarkdown(chapters) {
         let markdown = '';
@@ -173,13 +351,10 @@ class GutenbergTab {
             const title = chapter.title || chapter.name || 'Untitled';
             const isNonVoiced = chapter.non_voiced || false;
 
-            // Add blank line between chapters (except first)
             if (i > 0) {
                 markdown += '\n\n';
             }
 
-            // Chapter header (non-voiced uses ###)
-            // This header becomes chunk 0 when parsed
             if (isNonVoiced) {
                 markdown += `### ${title} [non-voiced]\n`;
             } else {
@@ -187,10 +362,9 @@ class GutenbergTab {
             }
 
             if (chapter.chunks && chapter.chunks.length > 0) {
-                // Determine starting index - skip chunk 0 if it's the title
                 let startIdx = 0;
                 if (chapter.chunks[0]?.type === 'text' && chapter.chunks[0]?.text === title) {
-                    startIdx = 1;  // Skip the title chunk since ## header represents it
+                    startIdx = 1;
                 }
 
                 for (let j = startIdx; j < chapter.chunks.length; j++) {
@@ -201,10 +375,8 @@ class GutenbergTab {
                     } else if (chunk.type === 'common_file') {
                         markdown += `[file:${chunk.path || ''}]</chunk>`;
                     } else {
-                        // Text chunk - no escaping needed!
                         const text = chunk.text || '';
                         markdown += text;
-                        // Add </chunk> after text (except for last chunk in chapter)
                         if (j < chapter.chunks.length - 1) {
                             markdown += '</chunk>';
                         }
@@ -216,53 +388,36 @@ class GutenbergTab {
         return markdown.trim();
     }
 
+    /**
+     * Manual save (kept for backward compat but auto-save handles most cases)
+     */
     async saveCode() {
-        try {
-            const editor = document.getElementById('pseudoXmlEditor');
-            const markdownContent = editor.textContent || editor.innerText;
+        const editor = document.getElementById('pseudoXmlEditor');
+        const markdownContent = editor.textContent || editor.innerText;
 
-            // Save the markdown content to the server
-            const response = await fetch(`${SERVER_URL}/api/project/save-markdown`, {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                    'X-API-Key': API_KEY
-                },
-                body: JSON.stringify({
-                    markdown_content: markdownContent
-                })
-            });
-
-            if (response.ok) {
-                const result = await response.json();
-                this.markdownContent = markdownContent;
-                await this.loadMarkdown();  // Reload to sync chapters
-
-                // Refresh TTS tab to pick up chunk text changes
-                if (typeof ttsTab !== 'undefined' && ttsTab.refreshChapters) {
-                    console.log('[MARKDOWN EDITOR] Refreshing TTS tab after save...');
-                    await ttsTab.refreshChapters();
-                    // Reload current chapter if one is selected
-                    if (ttsTab.currentChapterIndex !== null) {
-                        await ttsTab.loadChapter(ttsTab.currentChapterIndex);
-                    }
-                }
-
-                // Refresh Reader tab if available
-                if (typeof readerTab !== 'undefined' && readerTab.refresh) {
-                    console.log('[MARKDOWN EDITOR] Refreshing Reader tab after save...');
-                    await readerTab.refresh();
-                }
-
-                showToast('Saved successfully!', 'success');
-            } else {
-                const error = await response.json();
-                throw new Error(error.error || 'Failed to save');
+        // Push undo
+        if (this._lastSavedContent && this._lastSavedContent !== markdownContent) {
+            this.undoStack.push(this._lastSavedContent);
+            if (this.undoStack.length > this.maxUndoLevels) {
+                this.undoStack.shift();
             }
-        } catch (error) {
-            console.error('Error saving markdown:', error);
-            showToast('Error saving: ' + error.message, 'error');
+            this._updateUndoButton();
         }
+
+        await this._performSave(markdownContent);
+
+        // Full refresh of TTS and Reader tabs
+        if (typeof ttsTab !== 'undefined' && ttsTab.refreshChapters) {
+            await ttsTab.refreshChapters();
+            if (ttsTab.currentChapterIndex !== null) {
+                await ttsTab.loadChapter(ttsTab.currentChapterIndex);
+            }
+        }
+        if (typeof readerTab !== 'undefined' && readerTab.refresh) {
+            await readerTab.refresh();
+        }
+
+        showToast('Saved successfully!', 'success');
     }
 
     // Insert a new chapter break at cursor
@@ -296,11 +451,9 @@ class GutenbergTab {
             return;
         }
         const editor = document.getElementById('pseudoXmlEditor');
-        // Get selected text to pre-fill the display portion
         const selection = window.getSelection();
         const selectedText = selection.toString();
         if (selectedText) {
-            // Replace selection with markup template
             document.execCommand('insertText', false, `{${selectedText}|}`);
         } else {
             document.execCommand('insertText', false, '{|}');
@@ -308,7 +461,18 @@ class GutenbergTab {
         editor.focus();
     }
 
-    // Toggle between clean view (annotations hidden) and markup view
+    // Insert an emotion tag at cursor: {|[tag]}
+    insertEmotionTag(tag) {
+        if (this.cleanViewActive) {
+            showToast('Switch to Markup View to insert emotion tags', 'error');
+            return;
+        }
+        const editor = document.getElementById('pseudoXmlEditor');
+        document.execCommand('insertText', false, `{|[${tag}]}`);
+        editor.focus();
+    }
+
+    // Toggle between clean view and markup view
     toggleCleanView() {
         const editor = document.getElementById('pseudoXmlEditor');
         const btn = document.getElementById('cleanViewToggle');
@@ -322,7 +486,7 @@ class GutenbergTab {
                 btn.style.background = '#7c3aed';
             }
         } else {
-            // Switching back TO markup view: restore full markup
+            // Switching back TO markup view
             this.cleanViewActive = false;
             if (btn) {
                 btn.textContent = 'Clean View';
@@ -330,6 +494,93 @@ class GutenbergTab {
             }
         }
         this.displayMarkdown();
+    }
+
+    // ----------------------------------------------------------------
+    // Chapter Locking
+    // ----------------------------------------------------------------
+
+    async checkLockState() {
+        try {
+            const response = await fetch(`${SERVER_URL}/api/project/info`, {
+                headers: { 'X-API-Key': API_KEY }
+            });
+            if (response.ok) {
+                const info = await response.json();
+                this.chaptersLocked = info.metadata?.chapters_locked || false;
+                this._updateLockUI();
+            }
+        } catch (e) {
+            console.error('Error checking lock state:', e);
+        }
+    }
+
+    async lockChapters() {
+        if (this.chapters.length === 0) {
+            showToast('No chapters to lock', 'error');
+            return;
+        }
+        if (!confirm('Lock chapter divisions? This saves the original text with chapter boundaries. You can unlock later to re-parse.')) return;
+
+        try {
+            const response = await fetch(`${SERVER_URL}/api/project/lock-chapters`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', 'X-API-Key': API_KEY }
+            });
+            if (response.ok) {
+                this.chaptersLocked = true;
+                this._updateLockUI();
+                showToast('Chapters locked. Original text saved.', 'success');
+            } else {
+                const err = await response.json();
+                showToast('Lock failed: ' + (err.error || 'Unknown error'), 'error');
+            }
+        } catch (e) {
+            showToast('Lock error: ' + e.message, 'error');
+        }
+    }
+
+    async unlockChapters() {
+        if (!confirm('Unlock chapters? This allows re-parsing but will not restore the original text.')) return;
+
+        try {
+            const response = await fetch(`${SERVER_URL}/api/project/unlock-chapters`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', 'X-API-Key': API_KEY }
+            });
+            if (response.ok) {
+                this.chaptersLocked = false;
+                this._updateLockUI();
+                showToast('Chapters unlocked. You can now re-parse.', 'success');
+            } else {
+                const err = await response.json();
+                showToast('Unlock failed: ' + (err.error || 'Unknown error'), 'error');
+            }
+        } catch (e) {
+            showToast('Unlock error: ' + e.message, 'error');
+        }
+    }
+
+    _updateLockUI() {
+        const lockBtn = document.getElementById('lockChaptersBtn');
+        const unlockBtn = document.getElementById('unlockChaptersBtn');
+        const parsingPanel = document.getElementById('parsingMethodPanel');
+        const lockStatus = document.getElementById('chapterLockStatus');
+
+        if (this.chaptersLocked) {
+            if (lockBtn) lockBtn.style.display = 'none';
+            if (unlockBtn) unlockBtn.style.display = '';
+            if (parsingPanel) parsingPanel.style.display = 'none';
+            if (lockStatus) {
+                lockStatus.style.display = '';
+                lockStatus.textContent = '🔒 Chapters locked — editing text and pronunciation only';
+            }
+        } else {
+            if (lockBtn) lockBtn.style.display = '';
+            if (unlockBtn) unlockBtn.style.display = 'none';
+            if (parsingPanel) parsingPanel.style.display = '';
+            if (lockStatus) lockStatus.style.display = 'none';
+        }
     }
 
     async validateChunks() {
@@ -370,15 +621,13 @@ class GutenbergTab {
 
             const response = await fetch(`${SERVER_URL}/api/project/auto-rechunk`, {
                 method: 'POST',
-                headers: {
-                    'X-API-Key': API_KEY
-                }
+                headers: { 'X-API-Key': API_KEY }
             });
 
             if (response.ok) {
                 const result = await response.json();
                 alert(`Rechunking complete! Fixed ${result.chunks_fixed || 0} chunks.`);
-                await this.loadMarkdown();  // Reload markdown
+                await this.loadMarkdown();
             } else {
                 throw new Error('Failed to auto-rechunk');
             }
@@ -408,8 +657,7 @@ class GutenbergTab {
 
             if (response.ok) {
                 const result = await response.json();
-                console.log('[GUTENBERG] Success! Result:', result);
-                console.log('[GUTENBERG] Chapters received:', result.chapters?.length || 0);
+                console.log('[GUTENBERG] Success! Chapters received:', result.chapters?.length || 0);
 
                 // Show debug info in parse log
                 if (result.debug) {
@@ -434,7 +682,6 @@ class GutenbergTab {
                     this.appendToLog(logLines);
                 }
 
-                // Reload both raw text and markdown
                 await this.loadRawText();
                 await this.loadMarkdown();
                 this.displayRawText();
@@ -464,8 +711,6 @@ class GutenbergTab {
                 const text = await file.text();
                 this.rawText = text;
                 this.displayRawText();
-
-                // Save to project
                 await this.saveRawText();
                 alert('Text file loaded successfully!');
             } catch (error) {
@@ -485,9 +730,7 @@ class GutenbergTab {
                     'Content-Type': 'application/json',
                     'X-API-Key': API_KEY
                 },
-                body: JSON.stringify({
-                    raw_text: this.rawText
-                })
+                body: JSON.stringify({ raw_text: this.rawText })
             });
 
             if (!response.ok) {
@@ -505,7 +748,6 @@ class GutenbergTab {
             return;
         }
 
-        // Check if chapters already exist
         if (this.chapters.length > 0) {
             const overwrite = confirm(
                 `This project already has ${this.chapters.length} chapter(s).\n\n` +
@@ -519,31 +761,23 @@ class GutenbergTab {
         }
 
         try {
-            // Save the raw text first
             await this.saveRawText();
 
-            // Use a simple approach: create a text blob and upload it
             const blob = new Blob([this.rawText], { type: 'text/plain' });
             const formData = new FormData();
             formData.append('file', blob, 'manual_text.txt');
 
             const response = await fetch(`${SERVER_URL}/api/project/add-text-file`, {
                 method: 'POST',
-                headers: {
-                    'X-API-Key': API_KEY
-                },
+                headers: { 'X-API-Key': API_KEY },
                 body: formData
             });
 
             if (response.ok) {
                 await this.loadMarkdown();
-
-                // Refresh TTS tab chapters dropdown after processing
                 if (typeof ttsTab !== 'undefined' && ttsTab.refreshChapters) {
-                    console.log('[GUTENBERG] Refreshing TTS dropdown after chapter processing...');
                     await ttsTab.refreshChapters();
                 }
-
                 alert('Text processed successfully!');
             } else {
                 const error = await response.json();
@@ -560,7 +794,6 @@ class GutenbergTab {
     // ----------------------------------------------------------------
 
     async initParsingMethods() {
-        // Load method descriptions from server
         try {
             const response = await fetch(`${SERVER_URL}/api/project/parsing-methods`, {
                 headers: { 'X-API-Key': API_KEY }
@@ -575,7 +808,6 @@ class GutenbergTab {
             console.error('[GUTENBERG] Error loading parsing methods:', error);
         }
 
-        // Listen for dropdown changes
         const select = document.getElementById('parsingMethodSelect');
         if (select) {
             select.addEventListener('change', () => this.updateMethodDescription());
@@ -610,13 +842,12 @@ class GutenbergTab {
         const logContent = document.getElementById('parseLogContent');
         if (!logContent) return;
 
-        // Color-code log lines
         const colored = lines.map(line => {
             if (line.includes('ERROR') || line.includes('EXCEPTION')) {
                 return `<span style="color: #f38ba8;">${this.escapeHtml(line)}</span>`;
-            } else if (line.includes('✓') || line.includes('OK')) {
+            } else if (line.includes('\u2713') || line.includes('OK')) {
                 return `<span style="color: #a6e3a1;">${this.escapeHtml(line)}</span>`;
-            } else if (line.includes('✗') || line.includes('NOT FOUND')) {
+            } else if (line.includes('\u2717') || line.includes('NOT FOUND')) {
                 return `<span style="color: #fab387;">${this.escapeHtml(line)}</span>`;
             } else if (line.includes('[PARSE]')) {
                 return `<span style="color: #89b4fa;">${this.escapeHtml(line)}</span>`;
@@ -627,13 +858,10 @@ class GutenbergTab {
 
         logContent.innerHTML = colored;
 
-        // Auto-show log panel
         const panel = document.getElementById('parseLogPanel');
         const btn = document.getElementById('toggleLogBtn');
         if (panel) panel.style.display = 'block';
         if (btn) btn.textContent = 'Hide Log';
-
-        // Scroll to bottom
         if (panel) panel.scrollTop = panel.scrollHeight;
     }
 
@@ -642,13 +870,17 @@ class GutenbergTab {
     }
 
     async reparseChapters() {
+        if (this.chaptersLocked) {
+            showToast('Unlock chapters before re-parsing', 'error');
+            return;
+        }
+
         const select = document.getElementById('parsingMethodSelect');
         if (!select) return;
 
         const method = select.value;
         console.log(`[GUTENBERG] Re-parsing chapters with method: ${method}`);
 
-        // Show loading state
         const logContent = document.getElementById('parseLogContent');
         if (logContent) logContent.innerHTML = `<span style="color: #cba6f7;">Re-parsing with method "${method}"...</span>`;
         const panel = document.getElementById('parseLogPanel');
@@ -668,23 +900,17 @@ class GutenbergTab {
 
             const result = await response.json();
 
-            // Display log lines
             if (result.log && result.log.length > 0) {
                 this.appendToLog(result.log);
             }
 
             if (result.success) {
                 console.log(`[GUTENBERG] Re-parsed: ${result.chapter_count} chapters with method ${method}`);
-
-                // Reload markdown view
                 await this.loadMarkdown();
 
-                // Refresh TTS tab
                 if (typeof ttsTab !== 'undefined' && ttsTab.refreshChapters) {
                     await ttsTab.refreshChapters();
                 }
-
-                // Refresh Reader tab
                 if (typeof readerTab !== 'undefined' && readerTab.refresh) {
                     await readerTab.refresh();
                 }

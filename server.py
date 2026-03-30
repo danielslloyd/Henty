@@ -4,6 +4,12 @@ from flask_socketio import SocketIO, emit
 import os
 from pathlib import Path
 from chatterbox.tts import ChatterboxTTS
+try:
+    from chatterbox.tts_turbo import ChatterboxTurboTTS
+    HAS_TURBO = True
+except ImportError:
+    HAS_TURBO = False
+    print("WARNING: chatterbox.tts_turbo not available. Install chatterbox-tts >= 0.1.6 for Turbo support.")
 import torch
 import numpy as np
 from scipy.io import wavfile
@@ -79,6 +85,7 @@ auth_manager = AuthManager(api_key=config.API_KEY, require_auth=config.REQUIRE_A
 class TextToAudioConverter:
     def __init__(self):
         self.model = None
+        self.turbo_model = None
 
         # Detailed CUDA diagnostics
         print("\n" + "="*80)
@@ -235,6 +242,21 @@ class TextToAudioConverter:
 
             print(f"{'='*80}\n")
         return self.model
+
+    def load_turbo_model(self):
+        """Load the Chatterbox Turbo TTS model"""
+        if not HAS_TURBO:
+            raise RuntimeError("Chatterbox Turbo not available. Install chatterbox-tts >= 0.1.6")
+        if self.turbo_model is None:
+            print(f"\n{'='*80}")
+            print(f"Loading Chatterbox Turbo TTS model...")
+            print(f"Device: {self.device}")
+            print(f"{'='*80}\n")
+
+            self.turbo_model = ChatterboxTurboTTS.from_pretrained(device=self.device)
+            print(f"Chatterbox Turbo model loaded successfully on {self.device}")
+            print(f"{'='*80}\n")
+        return self.turbo_model
 
     def switch_device(self, new_device):
         """Switch between GPU and CPU, reloading the model if necessary"""
@@ -820,14 +842,22 @@ class TextToAudioConverter:
 
     def process_pronunciation_markup(self, text):
         """Replace {display|spoken} pronunciation markup with the spoken form for TTS.
+        Supports emotion tags: {display|[laugh]} or {|[cough]} — the square-bracket
+        tag is passed through verbatim for Chatterbox Turbo.
         If no pipe is present inside braces, returns the text unchanged.
         """
         def replacer(m):
             parts = m.group(1).split('|', 1)
             if len(parts) == 2:
-                return parts[1]  # spoken form
+                return parts[1]  # spoken form (may be [laugh], [cough], etc.)
             return m.group(0)    # no pipe = not a pronunciation marker, leave as-is
         return re.sub(r'\{([^}]+)\}', replacer, text)
+
+    def text_has_emotion_tags(self, text):
+        """Check if text contains Chatterbox Turbo emotion/paralinguistic tags."""
+        emotion_tags = ['laugh', 'chuckle', 'cough', 'sigh', 'gasp', 'groan', 'sniff', 'clear throat', 'shush']
+        pattern = r'\{[^}]*\|\s*\[(?:' + '|'.join(re.escape(t) for t in emotion_tags) + r')\]\s*\}'
+        return bool(re.search(pattern, text))
 
     def extract_display_text(self, text):
         """Replace {display|spoken} pronunciation markup with just the display form.
@@ -874,8 +904,8 @@ class TextToAudioConverter:
 
         return '\n'.join(xml_lines)
 
-    def generate_audio(self, text, output_path, audio_prompt_path=None, language_id="en", exaggeration=0.6, cfg_weight=0.4):
-        """Generate audio from text using Chatterbox TTS"""
+    def generate_audio(self, text, output_path, audio_prompt_path=None, language_id="en", exaggeration=0.6, cfg_weight=0.4, tts_model="chatterbox"):
+        """Generate audio from text using Chatterbox TTS or Chatterbox Turbo"""
         try:
             # Start timing and capture initial GPU stats
             start_time = time.time()
@@ -898,7 +928,11 @@ class TextToAudioConverter:
                     'estimated_time': self.current_generation['estimated_time']
                 })
 
-            model = self.load_model()
+            use_turbo = (tts_model == 'chatterbox_turbo')
+            if use_turbo:
+                model = self.load_turbo_model()
+            else:
+                model = self.load_model()
 
             # Prepare generation parameters
             gen_params = {
@@ -2677,6 +2711,12 @@ def generate_project_chunk_audio():
         cfg_weight = float(data.get('cfg_weight', 0.4))
         temperature = float(data.get('temperature', 0.8))
         language_id = data.get('language_id', 'en')
+        tts_model = data.get('tts_model', config.DEFAULT_TTS_MODEL if hasattr(config, 'DEFAULT_TTS_MODEL') else 'chatterbox')
+
+        # Auto-detect emotion tags → force turbo
+        if converter.text_has_emotion_tags(chunk_text):
+            tts_model = 'chatterbox_turbo'
+            print(f"[TTS] Emotion tags detected, forcing Chatterbox Turbo")
 
         # Construct voice sample path
         audio_prompt_path = None
@@ -2697,6 +2737,7 @@ def generate_project_chunk_audio():
         print(f"\n=== Generating audio for chunk {chunk_id} on {model_device} ===")
         print(f"Text file ID: {text_file_id}")
         print(f"Voice: {voice_sample}")
+        print(f"Model: {tts_model}")
         print(f"Exaggeration: {exaggeration}, CFG: {cfg_weight}, Temp: {temperature}")
 
         # Generate audio filename with timestamp and chunk ID
@@ -2716,7 +2757,8 @@ def generate_project_chunk_audio():
             audio_prompt_path=audio_prompt_path,
             language_id=language_id,
             exaggeration=exaggeration,
-            cfg_weight=cfg_weight
+            cfg_weight=cfg_weight,
+            tts_model=tts_model
         )
 
         # Extract path, duration, and generation time from result
@@ -2758,7 +2800,8 @@ def generate_project_chunk_audio():
                     'audio_duration_seconds': round(audio_duration, 2),
                     'possibly_truncated': possibly_truncated,
                     'generation_time_ms': generation_time_ms,
-                    'input_text': chunk_text  # Store the text used for generation to detect outdated takes
+                    'input_text': chunk_text,  # Store the text used for generation to detect outdated takes
+                    'tts_model': tts_model
                 }
                 chunk['generated_audios'].append(audio_entry)
 
@@ -3996,6 +4039,65 @@ def reparse_chapters():
         return jsonify({'error': str(e), 'log': [f"[REPARSE] EXCEPTION: {str(e)}"]}), 500
 
 
+@app.route('/api/project/lock-chapters', methods=['POST'])
+@auth_manager.require_api_key
+def lock_chapters():
+    """Lock chapter divisions and save original text with chapter boundaries."""
+    try:
+        if converter.current_project_path is None:
+            return jsonify({'error': 'No project loaded'}), 400
+
+        chapters = converter.current_project_metadata.get('chapters', [])
+        if not chapters:
+            return jsonify({'error': 'No chapters to lock'}), 400
+
+        # Save original text with chapter divisions
+        original_text_path = os.path.join(converter.current_project_path, 'chapters_original.txt')
+        with open(original_text_path, 'w', encoding='utf-8') as f:
+            for ch in chapters:
+                f.write(f"## {ch.get('title', 'Untitled')}\n\n")
+                for chunk in ch.get('chunks', []):
+                    if chunk.get('type') == 'text':
+                        f.write(chunk.get('text', '') + '\n')
+                f.write('\n---\n\n')
+
+        converter.current_project_metadata['chapters_locked'] = True
+        converter.current_project_metadata['last_modified'] = datetime.now().isoformat()
+
+        project_file = os.path.join(converter.current_project_path, 'project.json')
+        with open(project_file, 'w', encoding='utf-8') as f:
+            json.dump(converter.current_project_metadata, f, indent=2, ensure_ascii=False)
+
+        return jsonify({'success': True, 'message': 'Chapters locked'})
+
+    except Exception as e:
+        import traceback
+        print(f"Error locking chapters: {e}")
+        print(traceback.format_exc())
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/project/unlock-chapters', methods=['POST'])
+@auth_manager.require_api_key
+def unlock_chapters():
+    """Unlock chapter divisions to allow re-parsing."""
+    try:
+        if converter.current_project_path is None:
+            return jsonify({'error': 'No project loaded'}), 400
+
+        converter.current_project_metadata['chapters_locked'] = False
+        converter.current_project_metadata['last_modified'] = datetime.now().isoformat()
+
+        project_file = os.path.join(converter.current_project_path, 'project.json')
+        with open(project_file, 'w', encoding='utf-8') as f:
+            json.dump(converter.current_project_metadata, f, indent=2, ensure_ascii=False)
+
+        return jsonify({'success': True, 'message': 'Chapters unlocked'})
+
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
 @app.route('/api/project/chapter/generate-all', methods=['POST'])
 @auth_manager.require_api_key
 def generate_all_chapter_chunks():
@@ -4823,14 +4925,6 @@ def parse_markdown_to_chapters(markdown_content, existing_chapters):
 
         # Get content after the header line
         content = section[header_match.end():].strip()
-
-        # Move any </chunk> that falls inside a {display|spoken} annotation
-        # to after the closing brace, so pronunciation markup never gets split
-        content = re.sub(
-            r'(\{[^}]*)</chunk>([^}]*\})',
-            r'\1\2</chunk>',
-            content
-        )
 
         # Parse chunks from content by splitting on </chunk>
         raw_chunks = content.split('</chunk>')
