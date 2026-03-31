@@ -395,7 +395,8 @@ class GutenbergProcessor:
 
     PARSING_METHODS = {
         'epub_toc': 'EPUB Table of Contents — uses NCX/nav chapter titles from the EPUB to locate chapter boundaries in the plain text',
-        'epub_spine': 'EPUB Spine (TXT match) — walks the EPUB spine to get chapter order from NCX labels, then matches those titles directly in the plain text (no HTML parsing)',
+        'epub_spine': 'EPUB Spine (HTML match) — walks the EPUB spine, reads heading + first paragraph from each HTML file, matches in plain text',
+        'epub_spine_positional': 'EPUB Spine Positional — like EPUB Spine but uses first+last ~200 chars per section, position-ratio scoring, backwards matching, and TOC-immune candidate search',
         'regex_headings': 'Regex Heading Detection — scans plain text for "Chapter N", Roman numerals, "Part N", ALL-CAPS headings, etc.',
         'blank_line_sections': 'Blank-Line Section Breaks — splits on 3+ consecutive blank lines (common Gutenberg section separator)',
         'hybrid_epub_regex': 'Hybrid EPUB + Regex — tries EPUB TOC first; fills gaps and validates with regex heading detection',
@@ -416,12 +417,13 @@ class GutenbergProcessor:
         log.append(f"[PARSE] EPUB available: {epub_bytes is not None} ({len(epub_bytes):,} bytes)" if epub_bytes else "[PARSE] EPUB available: False")
 
         dispatch = {
-            'epub_toc':          self._method_epub_toc,
-            'epub_spine':        self._method_epub_spine,
-            'epub_spine_html':   self._method_epub_spine,  # legacy alias
-            'regex_headings':    self._method_regex_headings,
-            'blank_line_sections': self._method_blank_line_sections,
-            'hybrid_epub_regex': self._method_hybrid_epub_regex,
+            'epub_toc':               self._method_epub_toc,
+            'epub_spine':             self._method_epub_spine,
+            'epub_spine_html':        self._method_epub_spine,  # legacy alias
+            'epub_spine_positional':  self._method_epub_spine_positional,
+            'regex_headings':         self._method_regex_headings,
+            'blank_line_sections':    self._method_blank_line_sections,
+            'hybrid_epub_regex':      self._method_hybrid_epub_regex,
         }
 
         fn = dispatch.get(method)
@@ -997,6 +999,307 @@ class GutenbergProcessor:
             'match_line': all_lines[line_idx] if line_idx < len(all_lines) else '',
             'after': '\n'.join(all_lines[line_idx + 1:after_end + 1]),
         }
+
+    # ---------- Method 2b: EPUB Spine Positional ----------------------- #
+
+    def _method_epub_spine_positional(self, text: str, epub_bytes: Optional[bytes],
+                                      log: list) -> List[Tuple[str, str]]:
+        """Position-aware EPUB spine chapter detection.
+
+        Improvements over _method_epub_spine:
+        - Extracts first AND last ~200 chars of each EPUB section body text.
+        - Computes expected TXT positions from EPUB character ratios.
+        - Matches backwards (last chapter first) to narrow search windows.
+        - Scores candidates: 0.4 * position_score + 0.6 * quality_score.
+        - Naturally immune to TOC false matches: TOC has no body text, and
+          position scoring penalises early-in-text matches for late chapters.
+        """
+        import zipfile, io
+        log.append("[M2P-POSITIONAL] Starting positional EPUB spine method")
+
+        if not epub_bytes:
+            log.append("[M2P-POSITIONAL] No EPUB data — returning empty")
+            return []
+        if not HAS_BS4:
+            log.append("[M2P-POSITIONAL] beautifulsoup4 not available — returning empty")
+            return []
+
+        skip_kw = {'contents', 'table of contents', 'cover', 'copyright',
+                   'title page', 'half-title', 'dedication', 'epigraph',
+                   'acknowledgement', 'index', 'bibliography', 'about the',
+                   'project gutenberg'}
+
+        # ── Step 1: Extract spine items with heading + first/last body chars ──
+
+        spine_items: List[dict] = []  # {heading, ncx_label, first_body, last_body, epub_chars}
+
+        with zipfile.ZipFile(io.BytesIO(epub_bytes)) as zf:
+            names = set(zf.namelist())
+
+            # Locate OPF
+            opf_path = None
+            try:
+                c = zf.read('META-INF/container.xml').decode('utf-8', errors='replace')
+                rf = BeautifulSoup(c, 'html.parser').find('rootfile')
+                if rf:
+                    opf_path = rf.get('full-path')
+            except Exception:
+                pass
+            opf_path = opf_path or next((n for n in names if n.endswith('.opf')), None)
+            if not opf_path:
+                log.append("[M2P-POSITIONAL] No OPF — returning empty")
+                return []
+
+            opf_dir = os.path.dirname(opf_path)
+            opf_soup = BeautifulSoup(
+                zf.read(opf_path).decode('utf-8', errors='replace'), 'html.parser'
+            )
+
+            def abs_path(href: str) -> str:
+                href = href.split('#')[0]
+                if opf_dir:
+                    return opf_dir.rstrip('/') + '/' + href.lstrip('/')
+                return href
+
+            manifest = {
+                item.get('id', ''): abs_path(item.get('href', ''))
+                for item in opf_soup.find_all('item')
+            }
+            spine_ids = [ref.get('idref', '') for ref in opf_soup.find_all('itemref')]
+
+            # NCX labels as fallback titles
+            ncx_labels: dict = {}
+            ncx_item = opf_soup.find('item', attrs={'media-type': 'application/x-dtbncx+xml'})
+            if ncx_item:
+                try:
+                    ncx_soup = BeautifulSoup(
+                        zf.read(abs_path(ncx_item.get('href', ''))).decode('utf-8', errors='replace'),
+                        'html.parser'
+                    )
+                    for pt in ncx_soup.find_all('navPoint'):
+                        lbl = pt.find('navLabel')
+                        content_el = pt.find('content')
+                        if lbl and content_el:
+                            ncx_labels[abs_path(content_el.get('src', ''))] = lbl.get_text(strip=True)
+                except Exception:
+                    pass
+            else:
+                nav_item = next(
+                    (it for it in opf_soup.find_all('item') if 'nav' in it.get('properties', '')), None
+                )
+                if nav_item:
+                    try:
+                        nav_soup = BeautifulSoup(
+                            zf.read(abs_path(nav_item.get('href', ''))).decode('utf-8', errors='replace'),
+                            'html.parser'
+                        )
+                        nav_el = nav_soup.find('nav', attrs={'epub:type': 'toc'}) or nav_soup.find('nav')
+                        if nav_el:
+                            for a in nav_el.find_all('a'):
+                                href = a.get('href', '')
+                                if href:
+                                    ncx_labels[abs_path(href)] = a.get_text(strip=True)
+                    except Exception:
+                        pass
+
+            for idx, idref in enumerate(spine_ids):
+                fpath = manifest.get(idref, '')
+                if not fpath or fpath not in names:
+                    continue
+                try:
+                    html_bytes = zf.read(fpath)
+                except Exception:
+                    continue
+
+                soup = BeautifulSoup(html_bytes.decode('utf-8', errors='replace'), 'html.parser')
+                for img in soup.find_all('img'):
+                    img.decompose()
+
+                heading = ''
+                ht = soup.find(['h1', 'h2', 'h3'])
+                if ht:
+                    heading = ht.get_text(separator=' ', strip=True)
+                ncx_label = ncx_labels.get(fpath, '')
+                if not heading:
+                    heading = ncx_label
+
+                if any(kw in (heading or ncx_label).lower() for kw in skip_kw):
+                    continue
+
+                # Collect all paragraph text (images already removed)
+                all_para_text = ' '.join(
+                    p.get_text(separator=' ', strip=True)
+                    for p in soup.find_all('p')
+                    if len(p.get_text(strip=True)) > 5
+                )
+
+                first_body = all_para_text[:200].strip()
+                last_body = all_para_text[-200:].strip() if len(all_para_text) > 200 else ''
+                epub_chars = len(all_para_text)
+
+                if not heading and not first_body:
+                    continue
+
+                spine_items.append({
+                    'spine_idx': idx,
+                    'file': fpath,
+                    'heading': heading,
+                    'ncx_label': ncx_label,
+                    'first_body': first_body,
+                    'last_body': last_body,
+                    'epub_chars': epub_chars,
+                })
+
+        log.append(f"[M2P-POSITIONAL] Extracted {len(spine_items)} spine items")
+        if not spine_items:
+            return []
+
+        # ── Step 2: Compute expected TXT positions from EPUB char ratios ──
+
+        total_epub_chars = sum(it['epub_chars'] for it in spine_items)
+        txt_len = len(text)
+
+        cumulative = 0
+        for item in spine_items:
+            item['expected_ratio'] = cumulative / total_epub_chars if total_epub_chars > 0 else 0.0
+            item['expected_pos'] = int(item['expected_ratio'] * txt_len)
+            cumulative += item['epub_chars']
+
+        log.append(f"[M2P-POSITIONAL] Text length: {txt_len:,}, total EPUB chars: {total_epub_chars:,}")
+
+        # ── Step 3: Match backwards (last chapter first) with scoring ──
+
+        # search_end tracks the upper bound for the current (earlier) chapter.
+        # We set it as we lock in later chapters.
+        matched: List[Optional[Tuple[int, int, str]]] = [None] * len(spine_items)
+        search_end = txt_len  # upper bound; decreases as we lock in later chapters
+
+        window_fraction = 0.20  # ±20% of txt_len around expected_pos
+
+        for i in range(len(spine_items) - 1, -1, -1):
+            item = spine_items[i]
+            expected_pos = item['expected_pos']
+            window_half = max(int(txt_len * window_fraction), 5000)
+
+            search_start = max(0, expected_pos - window_half)
+            search_end_i = min(search_end, expected_pos + window_half)
+
+            # Ensure window is non-degenerate
+            if search_start >= search_end_i:
+                search_start = max(0, search_end_i - 10000)
+
+            heading = item['heading']
+            first_body = item['first_body']
+            last_body = item['last_body']
+            tag = f"[M2P[{i}]]"
+
+            best_pos = None
+            best_score = -1.0
+            best_strategy = ''
+
+            def score_candidate(pos: int, quality: float) -> float:
+                """Combined position + quality score."""
+                dist = abs(pos - expected_pos)
+                pos_score = max(0.0, 1.0 - dist / max(window_half, 1))
+                return 0.4 * pos_score + 0.6 * quality
+
+            def try_match(pattern_str: str, target: str, quality: float, strategy: str,
+                          use_last: bool = True) -> Optional[int]:
+                """Search text slice, return best matching position or None."""
+                nonlocal best_pos, best_score, best_strategy
+                slice_text = text[search_start:search_end_i]
+                try:
+                    matches = list(re.finditer(pattern_str, slice_text, re.IGNORECASE))
+                except re.error:
+                    return None
+                if not matches:
+                    return None
+                candidates = matches if not use_last else [matches[-1]]
+                for m in candidates:
+                    abs_pos = search_start + m.start()
+                    s = score_candidate(abs_pos, quality)
+                    if s > best_score:
+                        best_score = s
+                        best_pos = abs_pos
+                        best_strategy = strategy
+                return best_pos
+
+            # S1a: exact heading as standalone line
+            if heading:
+                escaped = re.escape(heading)
+                try_match(r'(?m)^[ \t]*' + escaped + r'[.!?]?[ \t]*$',
+                          heading, 1.0, 'S1a-exact-heading')
+
+            # S1b: normalized heading
+            if heading and best_score < 0.9:
+                words = re.sub(r'[^\w\s]', ' ', heading.lower()).split()
+                if words:
+                    try_match(r'(?m)^[ \t]*' + r'[\s.]*'.join(re.escape(w) for w in words) + r'[.!?]?[ \t]*$',
+                              heading, 0.9, 'S1b-norm-heading')
+
+            # S2: first body words[1:8] — skip word 0 for decorated initials
+            if first_body and best_score < 0.75:
+                words = first_body.split()
+                if len(words) >= 3:
+                    phrase = ' '.join(words[1:min(8, len(words))])
+                    try_match(re.escape(phrase), phrase, 0.7, 'S2-first-body[1:8]')
+
+            # S3: first body words[0:7] — try without skipping first word
+            if first_body and best_score < 0.75:
+                words = first_body.split()
+                phrase = ' '.join(words[0:min(7, len(words))])
+                try_match(re.escape(phrase), phrase, 0.65, 'S3-first-body[0:7]')
+
+            # S4: last body words[-8:] — use end of chapter as anchor
+            if last_body and best_score < 0.5:
+                words = last_body.split()
+                phrase = ' '.join(words[max(0, len(words) - 8):])
+                if len(phrase) > 10:
+                    try_match(re.escape(phrase), phrase, 0.55, 'S4-last-body')
+
+            if best_pos is not None:
+                # Backtrack to section start if body-text strategy was used
+                if best_strategy.startswith('S2') or best_strategy.startswith('S3') or best_strategy.startswith('S4'):
+                    actual_pos = self._backtrack_to_section_start(text, best_pos)
+                else:
+                    actual_pos = best_pos
+
+                title = heading or item['ncx_label'] or f"Chapter {i + 1}"
+                matched[i] = (actual_pos, actual_pos, title)
+                # Constrain search end for the chapter before this one
+                search_end = actual_pos
+                log.append(f"{tag} ✓ \"{title[:40]}\" at pos={actual_pos} "
+                            f"(expected={expected_pos}, score={best_score:.2f}, via {best_strategy})")
+            else:
+                log.append(f"{tag} ✗ \"{heading[:40] if heading else '?'}\" — no match in window "
+                            f"[{search_start}:{search_end_i}] (expected={expected_pos})")
+                # Don't tighten search_end so the previous chapter can still search here
+
+        # ── Step 4: Build chapters from matched positions ──
+
+        found = [(pos, content_start, title)
+                 for item in matched if item is not None
+                 for pos, content_start, title in [item]]
+        # Re-sort by position (should already be sorted due to backwards matching)
+        found.sort(key=lambda x: x[0])
+
+        if not found:
+            log.append("[M2P-POSITIONAL] No chapters matched — returning empty")
+            return []
+
+        chapters: List[Tuple[str, str]] = []
+        used_positions: set = set()
+        for i, (pos, content_start, title) in enumerate(found):
+            if pos in used_positions:
+                continue
+            used_positions.add(pos)
+            next_start = found[i + 1][0] if i + 1 < len(found) else len(text)
+            chapter_text = text[content_start:next_start].strip()
+            if chapter_text:
+                chapters.append((title, chapter_text))
+
+        log.append(f"[M2P-POSITIONAL] Built {len(chapters)} chapters")
+        return chapters
 
     # ---------- Method 3: Regex Heading Detection ---------------------- #
 
