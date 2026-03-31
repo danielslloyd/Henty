@@ -512,6 +512,8 @@ class TextToAudioConverter:
         1. Split on newlines first — each non-empty line is at least one chunk.
         2. Consecutive non-empty lines are NOT merged (newline forces boundary).
         3. If a line exceeds max_chunk_size, split by sentences.
+        4. max_chunk_size is a HARD limit — any text still over it is split at the
+           nearest word boundary (or hard-cut if no space exists).
         """
         if max_chunk_size is None:
             max_chunk_size = config.MAX_CHUNK_SIZE
@@ -524,13 +526,21 @@ class TextToAudioConverter:
             t = t.strip()
             if not t:
                 return
-            nickname = t[:50] + ('...' if len(t) > 50 else '')
-            chunks.append({
-                'id': chunk_id,
-                'text': t,
-                'nickname': nickname,
-            })
-            chunk_id += 1
+            # Hard-limit enforcement: split at word boundary until within limit
+            while len(t) > max_chunk_size:
+                split_at = t.rfind(' ', 0, max_chunk_size)
+                if split_at <= 0:
+                    split_at = max_chunk_size  # no space found — hard cut
+                part = t[:split_at].strip()
+                if part:
+                    nick = part[:50] + ('...' if len(part) > 50 else '')
+                    chunks.append({'id': chunk_id, 'text': part, 'nickname': nick})
+                    chunk_id += 1
+                t = t[split_at:].strip()
+            if t:
+                nick = t[:50] + ('...' if len(t) > 50 else '')
+                chunks.append({'id': chunk_id, 'text': t, 'nickname': nick})
+                chunk_id += 1
 
         for line in text.split('\n'):
             stripped = line.strip()
@@ -3775,21 +3785,112 @@ def process_gutenberg():
         print(traceback.format_exc())
         return jsonify({'error': str(e)}), 500
 
+def _find_chapter_lines_in_raw(raw_text, epub_titles):
+    """
+    Find where each EPUB chapter title appears in the raw text as a standalone line.
+    Uses the last occurrence to skip TOC hits.
+    Returns [{line: N, title: str}, ...] sorted by line number.
+    """
+    lines = raw_text.split('\n')
+    positions = []
+    used_lines = set()
+
+    for title in epub_titles:
+        if not title.strip():
+            continue
+        title_norm = re.sub(r'\s+', ' ', title.strip().lower())
+        last_line = None
+
+        for i, raw_line in enumerate(lines):
+            line_norm = re.sub(r'\s+', ' ', raw_line.strip().lower())
+            if line_norm == title_norm:
+                last_line = i
+
+        if last_line is not None and last_line not in used_lines:
+            positions.append({'line': last_line, 'title': title.strip()})
+            used_lines.add(last_line)
+
+    return sorted(positions, key=lambda x: x['line'])
+
+
+def _build_stage1_book_file(raw_text, boilerplate_regions, chapter_positions):
+    """
+    Build stage-1 annotated book.txt from raw Gutenberg text.
+
+    Format produced:
+        <delete>                         ← boilerplate open
+        ...header/footer text...
+        </delete>
+        plain text line by line
+        <chapter title="Chapter I"/>     ← self-closing chapter break marker
+        more text
+        <delete>
+        ...footer...
+        </delete>
+
+    boilerplate_regions: [{start_line, end_line, type}, ...] (0-indexed, inclusive)
+    chapter_positions:   [{line, title}, ...] (0-indexed line number in raw_text)
+    """
+    lines = raw_text.split('\n')
+
+    # Build per-line sets for quick lookup
+    delete_starts = {r['start_line']: r for r in boilerplate_regions}
+    delete_ends   = {r['end_line']   for r in boilerplate_regions}
+
+    # Which lines are inside any delete region (for suppressing chapter markers)
+    delete_line_set = set()
+    for r in boilerplate_regions:
+        for i in range(r['start_line'], r['end_line'] + 1):
+            delete_line_set.add(i)
+
+    chapter_by_line = {c['line']: c['title'] for c in chapter_positions}
+
+    result = []
+    in_delete = False
+
+    for i, line in enumerate(lines):
+        # Open delete block
+        if i in delete_starts and not in_delete:
+            result.append('<delete>')
+            in_delete = True
+
+        # Insert chapter marker BEFORE this line (not inside a delete region)
+        if i in chapter_by_line and not in_delete:
+            title = chapter_by_line[i].replace('"', '&quot;')
+            result.append(f'<chapter title="{title}"/>')
+
+        result.append(line)
+
+        # Close delete block
+        if i in delete_ends and in_delete:
+            result.append('</delete>')
+            in_delete = False
+
+    if in_delete:
+        result.append('</delete>')
+
+    return '\n'.join(result)
+
+
 @app.route('/api/project/add-gutenberg-url', methods=['POST'])
 @auth_manager.require_api_key
 def add_gutenberg_url_to_project():
-    """Add Project Gutenberg content directly to current project with XML chapter structure"""
+    """
+    Load a Gutenberg book into the current project as a stage-1 annotated book.txt.
+
+    Stage 1 keeps the raw plain text intact but wraps boilerplate in <delete> tags
+    and inserts self-closing <chapter title="..."/> markers at detected chapter starts.
+    The user then adjusts the structure in the editor before confirming.
+    """
     try:
         import json
         from datetime import datetime
-        import uuid
 
         if converter.current_project_path is None:
             return jsonify({'error': 'No project loaded'}), 400
 
         data = request.json
         url = data.get('url', '').strip()
-
         if not url:
             return jsonify({'error': 'url is required'}), 400
 
@@ -3797,44 +3898,36 @@ def add_gutenberg_url_to_project():
         if re.match(r'^\d+$', url):
             book_id = url
             url = f"https://www.gutenberg.org/ebooks/{book_id}"
-            print(f"\n=== Plain integer ID detected; constructed URL: {url} ===")
         elif 'gutenberg.org' not in url.lower():
-            return jsonify({'error': f'Input does not appear to be a Gutenberg URL or book ID: {url}'}), 400
+            return jsonify({'error': f'Not a Gutenberg URL or book ID: {url}'}), 400
 
-        print(f"\n=== Adding Gutenberg content to project: {url} ===")
+        print(f"\n=== Loading Gutenberg book (stage-1): {url} ===")
 
         processor = GutenbergProcessor(output_dir=converter.current_project_path)
-
-        # Extract numeric book ID from whatever URL format was given
         book_id = processor.get_gutenberg_book_id(url)
         if not book_id:
-            return jsonify({'error': f'Could not extract a Gutenberg book ID from: {url}'}), 400
-        print(f"Book ID: {book_id}")
+            return jsonify({'error': f'Could not extract a book ID from: {url}'}), 400
 
-        # Always download the canonical plain text for content
         gutenberg_urls = build_gutenberg_url_metadata(book_id, url, processor)
         plain_text_url = gutenberg_urls['gutenberg_txt_url']
-        print(f"DEBUG [A] Downloading plain text: {plain_text_url}")
+
+        # --- Download raw plain text (do NOT strip or process) ---
+        print(f"[STAGE1] Downloading plain text: {plain_text_url}")
         raw_content = processor.download_text(plain_text_url)
-        print(f"DEBUG [A] Plain text downloaded: {len(raw_content):,} characters")
+        print(f"[STAGE1] Downloaded {len(raw_content):,} chars")
 
-        # Extract title and strip Gutenberg header/footer
         title = processor.extract_title(raw_content) or processor.extract_book_name(url)
-        print(f"Title: {title}")
-        text = processor.strip_gutenberg_metadata(raw_content, title)
-        text = processor.process_carriage_returns(text)
-        text = text.replace('<<<SECTION_BREAK>>>', '\n\n')
-        print(f"DEBUG [A] Processed text: {len(text):,} characters")
+        print(f"[STAGE1] Title: {title}")
 
+        # Save the raw (unstripped) content as raw_text.txt
         raw_text_file = os.path.join(converter.current_project_path, 'raw_text.txt')
         with open(raw_text_file, 'w', encoding='utf-8') as f:
-            f.write(text)
+            f.write(raw_content)
 
-        detected_chapters = None
         debug_info = {
             'book_id': book_id,
             'txt_url': plain_text_url,
-            'txt_chars': len(text),
+            'txt_chars': len(raw_content),
             'epub_downloaded': False,
             'epub_bytes': 0,
             'epub_titles': [],
@@ -3842,125 +3935,95 @@ def add_gutenberg_url_to_project():
             'chapter_source': None,
         }
 
-        # Download EPUB for chapter titles, then split plain text at those positions
-        print(f"[INIT] Downloading EPUB for book {book_id}")
+        # --- Download EPUB for chapter title list ---
+        epub_bytes = None
+        epub_cache = os.path.join(converter.current_project_path, 'source.epub')
+        print(f"[STAGE1] Downloading EPUB for chapter titles")
         epub_bytes = processor.download_epub(book_id)
         if epub_bytes:
-            # Cache the EPUB so reparse-chapters can reuse it
-            epub_cache = os.path.join(converter.current_project_path, 'source.epub')
             try:
                 with open(epub_cache, 'wb') as ef:
                     ef.write(epub_bytes)
-                print(f"[INIT] EPUB cached: {epub_cache} ({len(epub_bytes):,} bytes)")
                 debug_info['epub_downloaded'] = True
                 debug_info['epub_bytes'] = len(epub_bytes)
             except Exception as e:
-                print(f"[INIT] ERROR caching EPUB: {e}")
+                print(f"[STAGE1] EPUB cache write failed: {e}")
+
+        # --- Detect boilerplate regions in the raw text ---
+        boilerplate = []
+        try:
+            boilerplate = processor.detect_boilerplate(raw_content)
+            print(f"[STAGE1] Boilerplate regions found: {len(boilerplate)}")
+        except Exception as e:
+            print(f"[STAGE1] Boilerplate detection failed: {e}")
+
+        # --- Find chapter positions directly in the raw text ---
+        chapter_positions = []
+        epub_titles = []
+        if epub_bytes:
             try:
-                print("DEBUG [B] Parsing EPUB chapter titles...")
-                chapter_titles = processor.get_epub_chapter_titles(epub_bytes)
-                debug_info['epub_titles'] = chapter_titles
-                print(f"DEBUG [B] EPUB titles found: {len(chapter_titles)}")
-                if chapter_titles:
-                    print("DEBUG [C] Matching EPUB titles in plain text...")
-                    epub_splits = processor.split_text_by_chapter_titles(text, chapter_titles)
-                    debug_info['epub_titles_matched'] = len(epub_splits)
-                    print(f"DEBUG [C] Plain text split into {len(epub_splits)} chapters via EPUB")
-                    if epub_splits:
-                        debug_info['chapter_source'] = 'epub'
-                        detected_chapters = [
-                            {
-                                'id': str(uuid.uuid4()),
-                                'title': ch_title or f"Chapter {i + 1}",
-                                'order': i,
-                                'text': ch_text,
-                            }
-                            for i, (ch_title, ch_text) in enumerate(epub_splits)
-                        ]
-            except Exception as epub_err:
-                print(f"EPUB chapter extraction failed ({epub_err}), falling back")
-                debug_info['epub_error'] = str(epub_err)
-        else:
-            print(f"[INIT] EPUB download returned None/empty")
+                epub_titles = processor.get_epub_chapter_titles(epub_bytes)
+                debug_info['epub_titles'] = epub_titles
+                print(f"[STAGE1] EPUB titles: {len(epub_titles)}")
+                if epub_titles:
+                    chapter_positions = _find_chapter_lines_in_raw(raw_content, epub_titles)
+                    debug_info['epub_titles_matched'] = len(chapter_positions)
+                    debug_info['chapter_source'] = 'epub'
+                    print(f"[STAGE1] Chapters matched in raw text: {len(chapter_positions)}")
+            except Exception as e:
+                print(f"[STAGE1] EPUB title extraction failed: {e}")
+                debug_info['epub_error'] = str(e)
 
-        # Fall back to plain-text chapter detection if EPUB didn't produce results
-        if not detected_chapters:
-            print("Falling back to plain-text chapter detection")
-            debug_info['chapter_source'] = 'plain-text-fallback'
-            detected_chapters = converter.detect_chapters(text)
+        # Fallback: regex chapter detection on the stripped text
+        if not chapter_positions:
+            print("[STAGE1] Falling back to regex chapter detection on stripped text")
+            debug_info['chapter_source'] = 'regex-fallback'
+            try:
+                stripped = processor.strip_gutenberg_metadata(raw_content, title)
+                stripped = processor.process_carriage_returns(stripped)
+                stripped = stripped.replace('<<<SECTION_BREAK>>>', '\n\n')
+                detected = converter.detect_chapters(stripped)
+                # Map titles back to raw text lines
+                for ch in detected:
+                    ch_title = ch.get('title', '')
+                    if ch_title:
+                        found = _find_chapter_lines_in_raw(raw_content, [ch_title])
+                        chapter_positions.extend(found)
+                chapter_positions = sorted(chapter_positions, key=lambda x: x['line'])
+            except Exception as e:
+                print(f"[STAGE1] Regex fallback failed: {e}")
 
-        print(f"Final chapter count: {len(detected_chapters)}")
-        debug_info['final_chapter_count'] = len(detected_chapters)
+        debug_info['final_chapter_count'] = len(chapter_positions)
 
-        # Generate XML content
-        xml_content = converter.text_to_xml_content(text, detected_chapters)
+        # --- Build stage-1 annotated book.txt ---
+        book_content = _build_stage1_book_file(raw_content, boilerplate, chapter_positions)
+        book_file_path = os.path.join(converter.current_project_path, 'book.txt')
+        with open(book_file_path, 'w', encoding='utf-8') as f:
+            f.write(book_content)
+        print(f"[STAGE1] book.txt written: {len(book_content):,} chars, "
+              f"{len(chapter_positions)} chapter markers, {len(boilerplate)} delete regions")
 
-        # Initialize chapters structure if not present
-        if 'chapters' not in converter.current_project_metadata:
-            converter.current_project_metadata['chapters'] = []
-
-        # Create chapters with chunks for each detected chapter
-        new_chapters = []
-        for detected_chapter in detected_chapters:
-            # Chunk the chapter text
-            chunks = converter.smart_chunk_text(detected_chapter['text'])
-
-            # Add chunk structure with dirty flag and generated_audios
-            for chunk in chunks:
-                chunk['dirty'] = False
-                chunk['generated_audios'] = []
-
-            # Create chapter entry
-            chapter_entry = {
-                'id': detected_chapter['id'],
-                'title': detected_chapter['title'],
-                'order': detected_chapter['order'],
-                'chunks': chunks,
-                'audio_output': None,
-                'added_at': datetime.now().isoformat(),
-                'source': 'gutenberg',
-                'source_url': url
-            }
-
-            new_chapters.append(chapter_entry)
-            converter.current_project_metadata['chapters'].append(chapter_entry)
-
-        # Store/update XML content
-        converter.current_project_metadata['content_xml'] = xml_content
+        # --- Update project metadata (no chapters array yet — stage 1) ---
         converter.current_project_metadata['original_filename'] = f"{title}.txt"
         converter.current_project_metadata.update(gutenberg_urls)
         converter.current_project_metadata['last_modified'] = datetime.now().isoformat()
         converter.current_project_metadata['version'] = '3.0'
-        converter.current_project_metadata['book_file_stage'] = 3
+        converter.current_project_metadata['book_file_stage'] = 1
+        # Clear any stale chapters from a previous load
+        converter.current_project_metadata['chapters'] = []
 
-        # Generate book.txt (single-file representation)
-        try:
-            book_content = generate_book_file(new_chapters)
-            book_file_path = os.path.join(converter.current_project_path, 'book.txt')
-            with open(book_file_path, 'w', encoding='utf-8') as f:
-                f.write(book_content)
-            print(f"[INIT] Generated book.txt ({len(book_content)} chars)")
-        except Exception as bf_err:
-            print(f"[INIT] Warning: Failed to generate book.txt: {bf_err}")
-
-        # Save to file
         project_file = os.path.join(converter.current_project_path, 'project.json')
         with open(project_file, 'w', encoding='utf-8') as f:
             json.dump(converter.current_project_metadata, f, indent=2, ensure_ascii=False)
-
-        print(f"Successfully added {len(new_chapters)} chapters from Gutenberg to project")
 
         return jsonify({
             'success': True,
             'title': title,
             'url': url,
-            'chapters': new_chapters,
-            'chapter_count': len(new_chapters),
-            'content_xml': xml_content,
-            'debug': {
-                **debug_info,
-                'epub_url': gutenberg_urls['gutenberg_epub_url'],
-            },
+            'stage': 1,
+            'chapter_marker_count': len(chapter_positions),
+            'boilerplate_region_count': len(boilerplate),
+            'debug': {**debug_info, 'epub_url': gutenberg_urls['gutenberg_epub_url']},
         })
 
     except Exception as e:
@@ -4181,6 +4244,126 @@ def unlock_chapters():
         return jsonify({'success': True, 'message': 'Chapters unlocked'})
 
     except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/project/confirm-structure', methods=['POST'])
+@auth_manager.require_api_key
+def confirm_structure():
+    """
+    Convert a stage-1 annotated book.txt to stage-2 chapter-structured format.
+
+    Stage-1 format (input):
+        <delete>...</delete>              boilerplate to discard
+        plain text
+        <chapter title="Chapter I"/>      self-closing chapter break marker
+
+    Stage-2 format (output):
+        <chapter title="Chapter I">
+        text of that chapter
+        </chapter>
+
+    Body: {"content": "<stage-1 book.txt content>"}
+    If content is omitted the current book.txt is used.
+    """
+    try:
+        from datetime import datetime
+
+        if converter.current_project_path is None:
+            return jsonify({'error': 'No project loaded'}), 400
+
+        data = request.json or {}
+        content = data.get('content', '').strip()
+
+        if not content:
+            # Load current book.txt
+            book_file_path = os.path.join(converter.current_project_path, 'book.txt')
+            if not os.path.exists(book_file_path):
+                return jsonify({'error': 'No book.txt found'}), 400
+            with open(book_file_path, 'r', encoding='utf-8') as f:
+                content = f.read()
+
+        # ------------------------------------------------------------------ #
+        # 1. Remove <delete> blocks                                           #
+        # ------------------------------------------------------------------ #
+        cleaned = re.sub(r'<delete>.*?</delete>', '', content, flags=re.DOTALL)
+
+        # ------------------------------------------------------------------ #
+        # 2. Split on self-closing <chapter title="..."/> markers             #
+        # ------------------------------------------------------------------ #
+        chapter_marker_re = re.compile(r'<chapter\s+title="([^"]*)"[^/]*/>', re.IGNORECASE)
+        parts = chapter_marker_re.split(cleaned)
+
+        # parts alternates: [text_before_first_chapter, title1, body1, title2, body2, ...]
+        stage2_lines = []
+
+        # Text before the first chapter marker (discard or treat as preamble)
+        # We silently drop any pre-chapter text so the output starts cleanly.
+        # (Indices: parts[0] = pre-chapter, parts[1::2] = titles, parts[2::2] = bodies)
+        if len(parts) < 3:
+            return jsonify({
+                'error': 'No <chapter title="..."/> markers found in the content. '
+                         'Add chapter breaks before confirming.'
+            }), 400
+
+        titles  = parts[1::2]
+        bodies  = parts[2::2]
+
+        new_chapters_stage2 = []
+        for title, body in zip(titles, bodies):
+            title = title.strip()
+            body  = body.strip()
+            stage2_lines.append(f'<chapter title="{title}">')
+            stage2_lines.append(body)
+            stage2_lines.append('</chapter>')
+            stage2_lines.append('')
+            new_chapters_stage2.append((title, body))
+
+        stage2_content = '\n'.join(stage2_lines).strip()
+
+        # ------------------------------------------------------------------ #
+        # 3. Write stage-2 book.txt                                           #
+        # ------------------------------------------------------------------ #
+        book_file_path = os.path.join(converter.current_project_path, 'book.txt')
+        with open(book_file_path, 'w', encoding='utf-8') as f:
+            f.write(stage2_content)
+
+        # ------------------------------------------------------------------ #
+        # 4. Build chapters array (no chunks yet — user will auto-chunk)      #
+        # ------------------------------------------------------------------ #
+        import uuid
+        new_chapters = []
+        for i, (ch_title, ch_body) in enumerate(new_chapters_stage2):
+            new_chapters.append({
+                'id': str(uuid.uuid4()),
+                'title': ch_title,
+                'name':  ch_title,
+                'order': i,
+                'chunks': [],
+                'non_voiced': False,
+            })
+
+        converter.current_project_metadata['chapters'] = new_chapters
+        converter.current_project_metadata['book_file_stage'] = 2
+        converter.current_project_metadata['last_modified'] = datetime.now().isoformat()
+
+        project_file = os.path.join(converter.current_project_path, 'project.json')
+        with open(project_file, 'w', encoding='utf-8') as f:
+            json.dump(converter.current_project_metadata, f, indent=2, ensure_ascii=False)
+
+        print(f"[CONFIRM-STRUCTURE] Stage-2 book.txt written: "
+              f"{len(new_chapters)} chapters, {len(stage2_content)} chars")
+
+        return jsonify({
+            'success': True,
+            'stage': 2,
+            'chapter_count': len(new_chapters),
+        })
+
+    except Exception as e:
+        import traceback
+        print(f"Error in confirm-structure: {e}")
+        print(traceback.format_exc())
         return jsonify({'error': str(e)}), 500
 
 
