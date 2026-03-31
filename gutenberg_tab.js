@@ -17,6 +17,350 @@
  *   {|[cough]}           <- Standalone emotion (no display text)
  */
 
+/**
+ * StructureEditor — stage-1 interactive editor.
+ *
+ * Parses a stage-1 annotated book.txt (with <delete>…</delete> blocks and
+ * self-closing <chapter title="…"/> markers) and renders it as an interactive
+ * DOM view where:
+ *   • <delete> blocks are shown in red and can be toggled (keep / discard)
+ *   • <chapter/> markers are draggable horizontal bars
+ *   • Between every paragraph an "Add chapter break here" affordance appears
+ *     on hover (or when a drag is in progress)
+ */
+class StructureEditor {
+    constructor(containerEl) {
+        this.container = containerEl;
+        this.blocks = [];      // [{type, ...}]
+        this._dragIdx = null;  // index of block being dragged
+        this._dropIdx = null;  // target insertion index
+        this._dragGhost = null;
+        this._boundMouseMove = this._onMouseMove.bind(this);
+        this._boundMouseUp   = this._onMouseUp.bind(this);
+    }
+
+    // ------------------------------------------------------------------ //
+    //  Parse stage-1 content into a blocks array                         //
+    // ------------------------------------------------------------------ //
+    parse(content) {
+        this.blocks = [];
+        // Match <delete>...</delete> and <chapter title="..."/>
+        const re = /(<delete>[\s\S]*?<\/delete>|<chapter\s+title="([^"]*)"[^/]*\/>)/g;
+        let lastIndex = 0;
+        let m;
+
+        while ((m = re.exec(content)) !== null) {
+            if (m.index > lastIndex) {
+                const raw = content.slice(lastIndex, m.index);
+                this._pushTextBlock(raw);
+            }
+            if (m[0].startsWith('<delete>')) {
+                const inner = m[0].replace(/^<delete>/, '').replace(/<\/delete>$/, '');
+                this.blocks.push({ type: 'delete', content: inner, active: true });
+            } else {
+                const title = (m[2] || '').replace(/&quot;/g, '"');
+                this.blocks.push({ type: 'chapter', title });
+            }
+            lastIndex = re.lastIndex;
+        }
+        if (lastIndex < content.length) {
+            this._pushTextBlock(content.slice(lastIndex));
+        }
+    }
+
+    _pushTextBlock(raw) {
+        // Split raw text on blank lines → individual paragraph strings
+        const paras = raw.split(/\n{2,}/).map(p => p.trim()).filter(Boolean);
+        if (paras.length) {
+            this.blocks.push({ type: 'text', paragraphs: paras });
+        }
+    }
+
+    // ------------------------------------------------------------------ //
+    //  Serialise back to stage-1 format                                  //
+    // ------------------------------------------------------------------ //
+    serialise() {
+        return this.blocks.map(b => {
+            if (b.type === 'delete') {
+                return b.active ? `<delete>${b.content}</delete>` : b.content;
+            }
+            if (b.type === 'chapter') {
+                const t = b.title.replace(/"/g, '&quot;');
+                return `<chapter title="${t}"/>`;
+            }
+            // text
+            return b.paragraphs.join('\n\n');
+        }).join('\n\n');
+    }
+
+    // ------------------------------------------------------------------ //
+    //  Render                                                             //
+    // ------------------------------------------------------------------ //
+    render() {
+        this.container.innerHTML = '';
+        this.blocks.forEach((block, idx) => {
+            this.container.appendChild(this._makeEl(block, idx));
+        });
+        // Trailing drop zone
+        this.container.appendChild(this._makeDropZone(this.blocks.length));
+    }
+
+    _makeEl(block, idx) {
+        if (block.type === 'delete')  return this._makeDeleteEl(block, idx);
+        if (block.type === 'chapter') return this._makeChapterEl(block, idx);
+        return this._makeTextEl(block, idx);
+    }
+
+    _makeDeleteEl(block, idx) {
+        const wrap = document.createElement('div');
+        wrap.className = 'se-delete-block' + (block.active ? '' : ' se-delete-kept');
+        wrap.dataset.idx = idx;
+
+        const header = document.createElement('div');
+        header.className = 'se-delete-header';
+        const badge = document.createElement('span');
+        badge.className = 'se-delete-badge';
+        badge.textContent = block.active ? 'WILL DELETE' : 'KEPT';
+        const toggleBtn = document.createElement('button');
+        toggleBtn.className = 'se-delete-toggle';
+        toggleBtn.textContent = block.active ? 'Keep instead' : 'Mark for deletion';
+        toggleBtn.onclick = () => {
+            block.active = !block.active;
+            wrap.classList.toggle('se-delete-kept', !block.active);
+            badge.textContent    = block.active ? 'WILL DELETE' : 'KEPT';
+            toggleBtn.textContent = block.active ? 'Keep instead' : 'Mark for deletion';
+        };
+        header.appendChild(badge);
+        header.appendChild(toggleBtn);
+
+        const pre = document.createElement('pre');
+        pre.className = 'se-delete-content';
+        const preview = block.content.trim();
+        pre.textContent = preview.length > 500 ? preview.slice(0, 500) + '\n…' : preview;
+
+        wrap.appendChild(header);
+        wrap.appendChild(pre);
+        return wrap;
+    }
+
+    _makeChapterEl(block, idx) {
+        const wrap = document.createElement('div');
+        wrap.className = 'se-chapter-marker';
+        wrap.dataset.idx = idx;
+
+        const handle = document.createElement('span');
+        handle.className = 'se-drag-handle';
+        handle.title = 'Drag to move chapter break';
+        handle.textContent = '⠿';
+        handle.addEventListener('mousedown', (e) => this._startDrag(e, idx));
+
+        const input = document.createElement('input');
+        input.type  = 'text';
+        input.className = 'se-chapter-title-input';
+        input.value = block.title;
+        input.addEventListener('change', () => { block.title = input.value; });
+
+        const removeBtn = document.createElement('button');
+        removeBtn.className = 'se-chapter-remove';
+        removeBtn.textContent = '×';
+        removeBtn.title = 'Remove chapter break';
+        removeBtn.onclick = () => {
+            this.blocks.splice(idx, 1);
+            this._mergeAdjacentText();
+            this.render();
+        };
+
+        wrap.appendChild(handle);
+        wrap.appendChild(input);
+        wrap.appendChild(removeBtn);
+
+        // Drop zone below this chapter marker
+        wrap.appendChild(this._makeDropZone(idx + 1));
+        return wrap;
+    }
+
+    _makeTextEl(block, idx) {
+        const wrap = document.createElement('div');
+        wrap.className = 'se-text-block';
+        wrap.dataset.idx = idx;
+
+        block.paragraphs.forEach((para, pIdx) => {
+            // Drop zone before each paragraph
+            const dz = this._makeDropZone(idx, pIdx);
+            wrap.appendChild(dz);
+
+            const p = document.createElement('p');
+            p.className = 'se-paragraph';
+            p.textContent = para;
+            wrap.appendChild(p);
+        });
+        // Drop zone after last paragraph
+        wrap.appendChild(this._makeDropZone(idx, block.paragraphs.length));
+        return wrap;
+    }
+
+    _makeDropZone(blockIdx, paraIdx) {
+        const dz = document.createElement('div');
+        dz.className = 'se-drop-zone';
+        dz.dataset.blockIdx = blockIdx;
+        if (paraIdx !== undefined) dz.dataset.paraIdx = paraIdx;
+
+        dz.addEventListener('mouseenter', () => {
+            if (this._dragIdx !== null) dz.classList.add('se-drop-zone-active');
+        });
+        dz.addEventListener('mouseleave', () => {
+            dz.classList.remove('se-drop-zone-active');
+        });
+        // Click to add a new chapter break
+        dz.addEventListener('click', () => {
+            if (this._dragIdx !== null) return; // ignore during drag
+            const title = prompt('Chapter title:', 'New Chapter');
+            if (title === null) return; // cancelled
+            const pIdx = paraIdx !== undefined ? paraIdx : 0;
+            this.addChapterMarker(title, blockIdx, pIdx);
+        });
+        return dz;
+    }
+
+    // ------------------------------------------------------------------ //
+    //  Drag logic                                                         //
+    // ------------------------------------------------------------------ //
+    _startDrag(e, idx) {
+        e.preventDefault();
+        this._dragIdx = idx;
+
+        // Ghost label
+        this._dragGhost = document.createElement('div');
+        this._dragGhost.className = 'se-drag-ghost';
+        this._dragGhost.textContent = '↕ ' + (this.blocks[idx].title || 'Chapter');
+        document.body.appendChild(this._dragGhost);
+        this._moveDragGhost(e);
+
+        document.addEventListener('mousemove', this._boundMouseMove);
+        document.addEventListener('mouseup',   this._boundMouseUp);
+
+        // Show all drop zones
+        this.container.classList.add('se-dragging');
+    }
+
+    _onMouseMove(e) {
+        if (this._dragIdx === null) return;
+        this._moveDragGhost(e);
+
+        // Highlight nearest drop zone
+        document.querySelectorAll('.se-drop-zone-active').forEach(el =>
+            el.classList.remove('se-drop-zone-active'));
+
+        const best = this._nearestDropZone(e.clientX, e.clientY);
+        if (best) {
+            best.classList.add('se-drop-zone-active');
+            this._dropIdx = { blockIdx: parseInt(best.dataset.blockIdx),
+                              paraIdx:  best.dataset.paraIdx !== undefined
+                                        ? parseInt(best.dataset.paraIdx) : null };
+        }
+    }
+
+    _onMouseUp(e) {
+        document.removeEventListener('mousemove', this._boundMouseMove);
+        document.removeEventListener('mouseup',   this._boundMouseUp);
+        this.container.classList.remove('se-dragging');
+        document.querySelectorAll('.se-drop-zone-active').forEach(el =>
+            el.classList.remove('se-drop-zone-active'));
+        if (this._dragGhost) { this._dragGhost.remove(); this._dragGhost = null; }
+
+        if (this._dragIdx !== null && this._dropIdx !== null) {
+            this._dropChapterMarker(this._dragIdx, this._dropIdx);
+        }
+        this._dragIdx = null;
+        this._dropIdx = null;
+    }
+
+    _moveDragGhost(e) {
+        if (!this._dragGhost) return;
+        this._dragGhost.style.left = (e.clientX + 12) + 'px';
+        this._dragGhost.style.top  = (e.clientY + 4)  + 'px';
+    }
+
+    _nearestDropZone(x, y) {
+        let best = null, bestDist = Infinity;
+        this.container.querySelectorAll('.se-drop-zone').forEach(el => {
+            const r = el.getBoundingClientRect();
+            const cy = (r.top + r.bottom) / 2;
+            const dist = Math.abs(y - cy);
+            if (dist < bestDist) { bestDist = dist; best = el; }
+        });
+        return best;
+    }
+
+    /**
+     * Move a chapter marker (at blocks[fromIdx]) to the position described by dropTarget.
+     * dropTarget = {blockIdx, paraIdx}
+     *   blockIdx — the text block to drop into (or boundary between blocks)
+     *   paraIdx  — if not null, split the text block at this paragraph index
+     */
+    _dropChapterMarker(fromIdx, dropTarget) {
+        const movedBlock = this.blocks.splice(fromIdx, 1)[0];
+
+        // After removal, adjust indices
+        let { blockIdx, paraIdx } = dropTarget;
+        if (fromIdx < blockIdx) blockIdx--;
+
+        const target = this.blocks[blockIdx];
+
+        if (target && target.type === 'text' && paraIdx !== null && paraIdx > 0
+                && paraIdx < target.paragraphs.length) {
+            // Split the text block at paraIdx
+            const before = { type: 'text', paragraphs: target.paragraphs.slice(0, paraIdx) };
+            const after  = { type: 'text', paragraphs: target.paragraphs.slice(paraIdx) };
+            this.blocks.splice(blockIdx, 1, before, movedBlock, after);
+        } else {
+            // Insert before the target block (or at end)
+            const insertAt = Math.min(Math.max(blockIdx, 0), this.blocks.length);
+            this.blocks.splice(insertAt, 0, movedBlock);
+        }
+
+        this._mergeAdjacentText();
+        this.render();
+    }
+
+    /** Merge consecutive text blocks that ended up adjacent */
+    _mergeAdjacentText() {
+        const merged = [];
+        for (const b of this.blocks) {
+            const prev = merged[merged.length - 1];
+            if (b.type === 'text' && prev && prev.type === 'text') {
+                prev.paragraphs = prev.paragraphs.concat(b.paragraphs);
+            } else {
+                merged.push(b);
+            }
+        }
+        this.blocks = merged;
+    }
+
+    /** Add a new chapter marker before a given text-block paragraph */
+    addChapterMarker(title, blockIdx, paraIdx) {
+        const target = this.blocks[blockIdx];
+        const newMarker = { type: 'chapter', title: title || 'New Chapter' };
+        if (target && target.type === 'text' && paraIdx > 0
+                && paraIdx < target.paragraphs.length) {
+            const before = { type: 'text', paragraphs: target.paragraphs.slice(0, paraIdx) };
+            const after  = { type: 'text', paragraphs: target.paragraphs.slice(paraIdx) };
+            this.blocks.splice(blockIdx, 1, before, newMarker, after);
+        } else {
+            this.blocks.splice(blockIdx, 0, newMarker);
+        }
+        this._mergeAdjacentText();
+        this.render();
+    }
+
+    _esc(s) {
+        return String(s || '')
+            .replace(/&/g, '&amp;').replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+    }
+}
+
+
 class GutenbergTab {
     constructor() {
         this.rawText = '';
@@ -36,6 +380,9 @@ class GutenbergTab {
         this._autoSaveTimer = null;
         this._autoSaveDelay = 1500; // ms after last keystroke
         this._lastSavedContent = '';
+
+        // Structure editor (stage 1)
+        this.structureEditor = null;
     }
 
     async init() {
@@ -349,11 +696,32 @@ class GutenbergTab {
         }
     }
 
+    /** True when we are in stage-1 structure editing mode */
+    _isStage1() {
+        return this._bookFileStage === 1;
+    }
+
     /**
-     * Display markdown in the editor
+     * Display markdown in the editor (or structure editor at stage 1)
      */
     displayMarkdown() {
-        const editor = document.getElementById('pseudoXmlEditor');
+        const structureContainer = document.getElementById('structureEditorContainer');
+        const editorContainer    = document.getElementById('markdownEditorContainer');
+        const editor             = document.getElementById('pseudoXmlEditor');
+
+        if (this._isStage1()) {
+            // Show structure editor, hide markdown editor
+            if (structureContainer) structureContainer.style.display = '';
+            if (editorContainer)    editorContainer.style.display    = 'none';
+            this._showStage1Toolbar(true);
+            this._renderStructureEditor();
+            return;
+        }
+
+        // Normal markdown editor
+        if (structureContainer) structureContainer.style.display = 'none';
+        if (editorContainer)    editorContainer.style.display    = '';
+        this._showStage1Toolbar(false);
 
         if (!this.markdownContent) {
             editor.innerHTML = '<div class="xml-empty-state">No content. Load a Project Gutenberg text or upload a file to begin.</div>';
@@ -532,21 +900,27 @@ class GutenbergTab {
         editor.focus();
     }
 
-    // Insert a pronunciation override at cursor: {display|spoken}
+    // Insert a pronunciation override: requires highlighted text.
+    // Creates {display|spoken} where spoken defaults to the same as display.
+    // The user then edits only the spoken part (after the |).
     insertPronunciation() {
         if (this.cleanViewActive) {
             showToast('Switch to Markup View to insert pronunciation markers', 'error');
             return;
         }
-        const editor = document.getElementById('pseudoXmlEditor');
-        const selection = window.getSelection();
-        const selectedText = selection.toString();
-        if (selectedText) {
-            document.execCommand('insertText', false, `{${selectedText}|}`);
-        } else {
-            document.execCommand('insertText', false, '{|}');
+        if (this._isStage1()) {
+            showToast('Confirm the chapter structure first before adding pronunciation', 'error');
+            return;
         }
-        editor.focus();
+        const selection = window.getSelection();
+        const selectedText = selection ? selection.toString() : '';
+        if (!selectedText) {
+            showToast('Select the word or phrase to annotate first, then click Pronunciation', 'error');
+            return;
+        }
+        // Default: spoken text = display text (user edits spoken part after insertion)
+        document.execCommand('insertText', false, `{${selectedText}|${selectedText}}`);
+        document.getElementById('pseudoXmlEditor').focus();
     }
 
     // Insert a paralinguistic tag at cursor: {|[tag]}
@@ -722,6 +1096,107 @@ class GutenbergTab {
         }
     }
 
+    // ------------------------------------------------------------------ //
+    //  Stage-1 structure editor helpers                                   //
+    // ------------------------------------------------------------------ //
+
+    _renderStructureEditor() {
+        const container = document.getElementById('structureEditorContainer');
+        if (!container) return;
+
+        if (!this.structureEditor) {
+            this.structureEditor = new StructureEditor(container);
+        } else {
+            // Re-use existing instance but point at possibly-new container
+            this.structureEditor.container = container;
+        }
+
+        this.structureEditor.parse(this.markdownContent || '');
+        this.structureEditor.render();
+    }
+
+    _showStage1Toolbar(show) {
+        const s1 = document.getElementById('stage1Toolbar');
+        const s2 = document.getElementById('markdownToolbar');
+        if (s1) s1.style.display = show ? '' : 'none';
+        if (s2) s2.style.display = show ? 'none' : '';
+
+        // Show/hide the confirm-structure button in the pane header
+        const confirmBtn = document.getElementById('confirmStructureBtn');
+        if (confirmBtn) confirmBtn.style.display = show ? '' : 'none';
+
+        // Update pane subtitle
+        const subtitle = document.getElementById('markdownPaneSubtitle');
+        if (subtitle) {
+            subtitle.textContent = show
+                ? 'Step 1 of 3 — Review structure, then click Confirm'
+                : '';
+        }
+    }
+
+    /** Save current structure-editor state back to book.txt */
+    async _saveStructureEditorContent() {
+        if (!this.structureEditor) return;
+        const content = this.structureEditor.serialise();
+        this.markdownContent = content;
+        this._lastSavedContent = content;
+        await this._performSave(content);
+    }
+
+    /**
+     * Confirm the stage-1 structure: convert to stage-2 chapter-wrapped format.
+     * Called when user clicks "OK / Confirm Structure".
+     */
+    async confirmStructure() {
+        if (!this.structureEditor) {
+            showToast('No structure to confirm', 'error');
+            return;
+        }
+
+        // Save any unsaved drag changes first
+        await this._saveStructureEditorContent();
+
+        // Retrieve current book.txt content (already saved above)
+        const content = this.markdownContent;
+
+        // Count chapter markers before confirming
+        const markerCount = (content.match(/<chapter\s+title="/g) || []).length;
+        if (markerCount === 0) {
+            showToast('No chapter breaks found. Add at least one chapter break before confirming.', 'error');
+            return;
+        }
+
+        if (!confirm(
+            `Confirm structure?\n\n` +
+            `• ${markerCount} chapter(s) will be created\n` +
+            `• Sections marked for deletion will be removed\n\n` +
+            `You can still edit text and pronunciation after this step.`
+        )) return;
+
+        try {
+            const resp = await fetch(`${SERVER_URL}/api/project/confirm-structure`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', 'X-API-Key': API_KEY },
+                body: JSON.stringify({ content })
+            });
+            const result = await resp.json();
+            if (!resp.ok || result.error) {
+                showToast('Confirm failed: ' + (result.error || 'Unknown error'), 'error');
+                return;
+            }
+
+            // Reload with the new stage-2 content
+            this._bookFileStage = 2;
+            await this.loadMarkdown();
+            if (typeof ttsTab !== 'undefined' && ttsTab.refreshChapters) {
+                await ttsTab.refreshChapters();
+            }
+            showToast(`Structure confirmed — ${result.chapter_count} chapters created. Now run "Tag Chunks" to prepare for TTS.`, 'success');
+        } catch (e) {
+            showToast('Error confirming structure: ' + e.message, 'error');
+        }
+    }
+
     async loadGutenbergUrl() {
         const url = prompt('Enter Project Gutenberg URL:', this.defaultGutenbergUrl);
         if (!url) return;
@@ -742,7 +1217,8 @@ class GutenbergTab {
 
             if (response.ok) {
                 const result = await response.json();
-                console.log('[GUTENBERG] Success! Chapters received:', result.chapters?.length || 0);
+                const markerCount = result.chapter_marker_count || 0;
+                console.log('[GUTENBERG] Stage-1 book loaded, chapter markers:', markerCount);
 
                 // Show debug info in parse log
                 if (result.debug) {
@@ -754,17 +1230,17 @@ class GutenbergTab {
                         `[LOAD] Plain text: ${d.txt_chars?.toLocaleString()} chars`,
                         `[LOAD] EPUB downloaded: ${d.epub_downloaded} (${d.epub_bytes?.toLocaleString()} bytes)`,
                         `[LOAD] EPUB titles found: ${d.epub_titles?.length || 0}`,
+                        `[LOAD] Chapter markers placed: ${markerCount}`,
+                        `[LOAD] Boilerplate regions tagged: ${result.boilerplate_region_count || 0}`,
+                        `[LOAD] Chapter source: ${d.chapter_source || 'unknown'}`,
                     ];
                     if (d.epub_titles?.length) {
                         d.epub_titles.forEach((t, i) => logLines.push(`[LOAD]   title[${i}]: "${t}"`));
                     }
-                    logLines.push(`[LOAD] Titles matched in text: ${d.epub_titles_matched || 0}`);
-                    logLines.push(`[LOAD] Chapter source: ${d.chapter_source || 'unknown'}`);
-                    logLines.push(`[LOAD] Final chapters: ${d.final_chapter_count || result.chapters?.length || 0}`);
                     if (d.epub_error) {
                         logLines.push(`[LOAD] EPUB error: ${d.epub_error}`);
                     }
-                    logLines.push(`[LOAD] Use "Re-Parse Chapters" with different methods to try alternative parsing.`);
+                    logLines.push(`[LOAD] Adjust chapter breaks and deletions, then click "Confirm Structure".`);
                     this.appendToLog(logLines);
                 }
 
@@ -773,7 +1249,11 @@ class GutenbergTab {
                 this.displayRawText();
                 this.displayMarkdown();
 
-                showToast(`Loaded! ${result.chapters?.length || 0} chapters created. Try different parsing methods if needed.`, 'success');
+                showToast(
+                    `Loaded! ${markerCount} chapter breaks placed. ` +
+                    `Drag to adjust, then click "Confirm Structure".`,
+                    'success'
+                );
             } else {
                 const error = await response.json();
                 throw new Error(error.error || 'Failed to load Gutenberg text');
