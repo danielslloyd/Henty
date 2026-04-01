@@ -363,12 +363,9 @@ class StructureEditor {
 
 class GutenbergTab {
     constructor() {
-        this.rawText = '';
         this.markdownContent = '';
         this.chapters = [];
         this.defaultGutenbergUrl = '';
-        this.projectGutenberg = {};
-        this.parsingMethods = {};
         this.cleanViewActive = false;
         this.chaptersLocked = false;
 
@@ -383,14 +380,14 @@ class GutenbergTab {
 
         // Structure editor (stage 1)
         this.structureEditor = null;
+
+        // Stage 3 text lock
+        this._textUnlocked = false;
     }
 
     async init() {
         await this.loadDefaultUrl();
-        await this.loadRawText();
         await this.loadMarkdown();
-        await this.initParsingMethods();
-        await this.checkLockState();
         this._setupEditorListeners();
     }
 
@@ -462,10 +459,14 @@ class GutenbergTab {
             '<span style="background:#ddd6fe;border-radius:3px;padding:0 2px">{$1|<span style="color:#7c3aed;font-weight:600">$2</span>}</span>'
         );
 
-        // Highlight </chunk> tags
+        // Highlight new <chunk id="..."> open tags and all </chunk> tags
         escaped = escaped.replace(
-            /&lt;\/chunk&gt;/g,
-            '<span style="background:#fde68a;color:#92400e;border-radius:3px;padding:0 3px;font-size:0.85em;">&lt;/chunk&gt;</span>'
+            /(&lt;chunk\s+[^&]*&gt;)/g,
+            '<span style="background:#fde68a;color:#92400e;border-radius:3px;padding:0 3px;font-size:0.85em;">$1</span>'
+        );
+        escaped = escaped.replace(
+            /(&lt;\/chunk&gt;)/g,
+            '<span style="background:#fde68a;color:#92400e;border-radius:3px;padding:0 3px;font-size:0.85em;">$1</span>'
         );
 
         editor.innerHTML = escaped;
@@ -502,6 +503,9 @@ class GutenbergTab {
     _scheduleAutoSave(editor) {
         if (this._autoSaveTimer) clearTimeout(this._autoSaveTimer);
         this._autoSaveTimer = setTimeout(async () => {
+            // Don't auto-save at stage 3 when text is locked
+            if (this._isStage3() && !this._textUnlocked) return;
+
             const currentText = editor.textContent || editor.innerText;
             if (currentText === this._lastSavedContent) return;
             if (currentText.length === 0) return;
@@ -620,31 +624,6 @@ class GutenbergTab {
         }
     }
 
-    async loadRawText() {
-        try {
-            const response = await fetch(`${SERVER_URL}/api/project/raw-text`, {
-                headers: { 'X-API-Key': API_KEY }
-            });
-
-            if (response.ok) {
-                const data = await response.json();
-                this.rawText = data.raw_text || '';
-                this.displayRawText();
-            }
-        } catch (error) {
-            console.error('Error loading raw text:', error);
-        }
-    }
-
-    displayRawText() {
-        const display = document.getElementById('rawTextDisplay');
-        if (this.rawText) {
-            display.textContent = this.rawText;
-        } else {
-            display.innerHTML = '<div style="color: #999; padding: 20px;">No text loaded. Load a Project Gutenberg text or upload a file to begin.</div>';
-        }
-    }
-
     async loadMarkdown() {
         try {
             // Try book-file (new format) first
@@ -696,10 +675,9 @@ class GutenbergTab {
         }
     }
 
-    /** True when we are in stage-1 structure editing mode */
-    _isStage1() {
-        return this._bookFileStage === 1;
-    }
+    _isStage1() { return this._bookFileStage === 1; }
+    _isStage2() { return this._bookFileStage === 2; }
+    _isStage3() { return this._bookFileStage >= 3; }
 
     /**
      * Display markdown in the editor (or structure editor at stage 1)
@@ -709,38 +687,38 @@ class GutenbergTab {
         const editorContainer    = document.getElementById('markdownEditorContainer');
         const editor             = document.getElementById('pseudoXmlEditor');
 
+        this._updateStageToolbar();
+
         if (this._isStage1()) {
             // Show structure editor, hide markdown editor
             if (structureContainer) structureContainer.style.display = '';
             if (editorContainer)    editorContainer.style.display    = 'none';
-            this._showStage1Toolbar(true);
             this._renderStructureEditor();
             return;
         }
 
-        // Normal markdown editor
+        // Normal markdown editor (stages 0, 2, 3)
         if (structureContainer) structureContainer.style.display = 'none';
         if (editorContainer)    editorContainer.style.display    = '';
-        this._showStage1Toolbar(false);
 
-        if (!this.markdownContent) {
-            editor.innerHTML = '<div class="xml-empty-state">No content. Load a Project Gutenberg text or upload a file to begin.</div>';
+        if (!this.markdownContent || this._bookFileStage === 0) {
+            editor.innerHTML = '<div class="xml-empty-state">No content. Click Load Book to begin.</div>';
+            editor.contentEditable = 'false';
             return;
         }
 
+        // Stage 3: locked unless explicitly unlocked
+        const editable = !this._isStage3() || this._textUnlocked;
+
         if (this.cleanViewActive) {
-            // Clean view: strip all tags and markup, show plain readable text
             let cleanText = this.markdownContent;
-            // Remove <delete>...</delete> blocks entirely
             cleanText = cleanText.replace(/<delete>[\s\S]*?<\/delete>/g, '');
-            // Remove chapter open/close tags but keep content
             cleanText = cleanText.replace(/<chapter[^>]*>\n?/g, '');
             cleanText = cleanText.replace(/<\/chapter>/g, '');
-            // Strip {display|spoken} → display text only
             cleanText = cleanText.replace(/\{([^|}]*)\|[^}]*\}/g, '$1');
-            // Remove </chunk> markers
+            // Strip both old </chunk> and new <chunk id="...">...</chunk> formats
+            cleanText = cleanText.replace(/<chunk[^>]*>/g, '');
             cleanText = cleanText.replace(/<\/chunk>/g, '');
-            // Remove legacy markdown chapter headers
             cleanText = cleanText.replace(/^#{2,3}\s+.+$/gm, '');
             const escaped = cleanText
                 .replace(/&/g, '&amp;')
@@ -749,25 +727,22 @@ class GutenbergTab {
             editor.innerHTML = escaped;
             editor.contentEditable = 'false';
         } else {
-            // Markup view: highlight all tags with color
             let escaped = this.markdownContent
                 .replace(/&/g, '&amp;')
                 .replace(/</g, '&lt;')
                 .replace(/>/g, '&gt;');
 
-            // Highlight <delete>...</delete> blocks (red background)
+            // Highlight <delete>...</delete> blocks (red)
             escaped = escaped.replace(
                 /(&lt;delete&gt;)([\s\S]*?)(&lt;\/delete&gt;)/g,
                 '<span style="background:#fee2e2;color:#991b1b;border-radius:3px;padding:0 2px">$1$2$3</span>'
             );
 
-            // Highlight <chapter title="..."> tags (blue/teal)
+            // Highlight <chapter ...> and </chapter> tags (blue)
             escaped = escaped.replace(
                 /(&lt;chapter[^&]*&gt;)/g,
                 '<span style="background:#dbeafe;color:#1e40af;border-radius:3px;padding:0 3px;font-weight:600">$1</span>'
             );
-
-            // Highlight </chapter> tags (blue/teal)
             escaped = escaped.replace(
                 /(&lt;\/chapter&gt;)/g,
                 '<span style="background:#dbeafe;color:#1e40af;border-radius:3px;padding:0 3px;font-weight:600">$1</span>'
@@ -779,20 +754,26 @@ class GutenbergTab {
                 '<span style="background:#dbeafe;color:#1e40af;font-weight:600">$1</span>'
             );
 
-            // Highlight pronunciation/paralinguistic markup: {display|spoken} or {|[tag]}
+            // Highlight pronunciation/paralinguistic markup: {display|spoken}
             escaped = escaped.replace(
                 /\{([^|}]*)\|([^}]*)\}/g,
                 '<span style="background:#ddd6fe;border-radius:3px;padding:0 2px">{$1|<span style="color:#7c3aed;font-weight:600">$2</span>}</span>'
             );
 
-            // Highlight </chunk> tags
+            // Highlight new <chunk id="..."> open tags (yellow-orange)
             escaped = escaped.replace(
-                /&lt;\/chunk&gt;/g,
-                '<span style="background:#fde68a;color:#92400e;border-radius:3px;padding:0 3px;font-size:0.85em;">&lt;/chunk&gt;</span>'
+                /(&lt;chunk\s+[^&]*&gt;)/g,
+                '<span style="background:#fde68a;color:#92400e;border-radius:3px;padding:0 3px;font-size:0.85em;">$1</span>'
+            );
+
+            // Highlight </chunk> tags (old separator format or closing tag)
+            escaped = escaped.replace(
+                /(&lt;\/chunk&gt;)/g,
+                '<span style="background:#fde68a;color:#92400e;border-radius:3px;padding:0 3px;font-size:0.85em;">$1</span>'
             );
 
             editor.innerHTML = escaped;
-            editor.contentEditable = 'true';
+            editor.contentEditable = editable ? 'true' : 'false';
         }
     }
 
@@ -1115,22 +1096,57 @@ class GutenbergTab {
         this.structureEditor.render();
     }
 
-    _showStage1Toolbar(show) {
-        const s1 = document.getElementById('stage1Toolbar');
-        const s2 = document.getElementById('markdownToolbar');
-        if (s1) s1.style.display = show ? '' : 'none';
-        if (s2) s2.style.display = show ? 'none' : '';
+    /** Show the correct toolbar and header buttons for the current stage. */
+    _updateStageToolbar() {
+        const stage = this._bookFileStage || 0;
 
-        // Show/hide the confirm-structure button in the pane header
-        const confirmBtn = document.getElementById('confirmStructureBtn');
-        if (confirmBtn) confirmBtn.style.display = show ? '' : 'none';
+        // Toolbar divs
+        const toolbars = {
+            stage0Toolbar:   stage === 0,
+            stage1Toolbar:   stage === 1,
+            stage2Toolbar:   stage === 2,
+            stage3Toolbar:   stage >= 3,
+            markdownToolbar: stage === 2,  // shows text-editing tips alongside stage2 toolbar
+        };
+        for (const [id, visible] of Object.entries(toolbars)) {
+            const el = document.getElementById(id);
+            if (el) el.style.display = visible ? '' : 'none';
+        }
 
-        // Update pane subtitle
+        // Header buttons
+        const btns = {
+            loadBookBtn:       stage === 0,
+            confirmStructureBtn: stage === 1,
+            runChunkingBtn:    stage === 2,
+            editTextBtn:       stage >= 3,
+            saveBtn:           stage >= 3,
+            undoBtn:           stage >= 3,
+        };
+        for (const [id, visible] of Object.entries(btns)) {
+            const el = document.getElementById(id);
+            if (el) el.style.display = visible ? '' : 'none';
+        }
+
+        // Edit Text button label
+        const editBtn = document.getElementById('editTextBtn');
+        if (editBtn) {
+            editBtn.textContent = this._textUnlocked ? 'Lock Text' : 'Edit Text';
+            editBtn.style.background = this._textUnlocked ? '#dc2626' : '#f59e0b';
+        }
+
+        // Lock badge in stage3 toolbar
+        const badge = document.getElementById('textLockBadge');
+        if (badge) {
+            badge.textContent = this._textUnlocked ? 'UNLOCKED' : 'LOCKED';
+            badge.style.background = this._textUnlocked ? '#fee2e2' : '#fef9c3';
+            badge.style.color = this._textUnlocked ? '#991b1b' : '#854d0e';
+        }
+
+        // Pane subtitle
         const subtitle = document.getElementById('markdownPaneSubtitle');
         if (subtitle) {
-            subtitle.textContent = show
-                ? 'Step 1 of 3 — Review structure, then click Confirm'
-                : '';
+            const labels = { 0: '', 1: 'Step 1 — Review structure', 2: 'Step 2 — Run Chunking', 3: 'Step 3 — Pronunciation & TTS' };
+            subtitle.textContent = labels[Math.min(stage, 3)] || '';
         }
     }
 
@@ -1197,6 +1213,119 @@ class GutenbergTab {
         }
     }
 
+    /** Toggle text lock at stage 3 */
+    toggleTextLock() {
+        this._textUnlocked = !this._textUnlocked;
+        const editor = document.getElementById('pseudoXmlEditor');
+        if (editor) {
+            editor.contentEditable = this._textUnlocked ? 'true' : 'false';
+        }
+        this._updateStageToolbar();
+        if (this._textUnlocked) {
+            showToast('Text unlocked — be careful not to break chunk boundaries', 'warning');
+        } else {
+            showToast('Text locked', 'success');
+        }
+    }
+
+    /** Run chunking on stage-2 book.txt, advancing to stage 3 */
+    async runChunking() {
+        if (!confirm('Run automatic chunking? This will split each chapter into TTS-sized segments.')) return;
+
+        try {
+            const resp = await fetch(`${SERVER_URL}/api/project/tag-chunks`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', 'X-API-Key': API_KEY }
+            });
+            const result = await resp.json();
+            if (!resp.ok || result.error) {
+                showToast('Chunking failed: ' + (result.error || 'Unknown error'), 'error');
+                return;
+            }
+            this._bookFileStage = 3;
+            this._textUnlocked = false;
+            await this.loadMarkdown();
+            if (typeof ttsTab !== 'undefined' && ttsTab.refreshChapters) {
+                await ttsTab.refreshChapters();
+            }
+            showToast(`Chunking complete — ${result.chapter_count} chapters ready for TTS.`, 'success');
+        } catch (e) {
+            showToast('Error running chunking: ' + e.message, 'error');
+        }
+    }
+
+    /**
+     * Split the chunk at cursor position (stage 3).
+     * Reads the cursor's character offset in the editor, maps it to a chunk ID
+     * and offset within that chunk, then calls the server split-chunk endpoint.
+     */
+    async splitChunkAtCursor() {
+        if (!this._isStage3()) {
+            showToast('Chunking must be complete before splitting', 'error');
+            return;
+        }
+
+        const editor = document.getElementById('pseudoXmlEditor');
+        const sel = window.getSelection();
+        if (!sel || sel.rangeCount === 0) {
+            showToast('Position cursor inside a chunk first', 'error');
+            return;
+        }
+
+        // Get cursor offset in the plain text
+        const range = sel.getRangeAt(0);
+        const preRange = document.createRange();
+        preRange.selectNodeContents(editor);
+        preRange.setEnd(range.startContainer, range.startOffset);
+        const globalOffset = preRange.toString().length;
+
+        // Parse the raw text to find which chunk we're in and where
+        const raw = editor.textContent || editor.innerText;
+        // Match new-format chunks: <chunk id="XXXXXXXX">text</chunk>
+        const chunkRe = /<chunk\s+id="([a-f0-9]{8})"[^>]*>([\s\S]*?)<\/chunk>/g;
+        let m;
+        let found = null;
+        let pos = 0;
+
+        while ((m = chunkRe.exec(raw)) !== null) {
+            const tagStart = m.index;
+            const contentStart = tagStart + m[0].indexOf('>') + 1;
+            const contentEnd = contentStart + m[2].length;
+
+            // Approximate: map global offset to within this chunk
+            // (editor shows escaped/highlighted content, so use raw text positions)
+            if (globalOffset >= contentStart && globalOffset <= contentEnd) {
+                found = {
+                    hex_id: m[1],
+                    char_offset: globalOffset - contentStart
+                };
+                break;
+            }
+        }
+
+        if (!found) {
+            showToast('Cursor must be inside a chunk (between <chunk> tags)', 'error');
+            return;
+        }
+
+        try {
+            const resp = await fetch(`${SERVER_URL}/api/project/split-chunk`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', 'X-API-Key': API_KEY },
+                body: JSON.stringify({ hex_id: found.hex_id, char_offset: found.char_offset })
+            });
+            const result = await resp.json();
+            if (!resp.ok || result.error) {
+                showToast('Split failed: ' + (result.error || 'Unknown error'), 'error');
+                return;
+            }
+            await this.loadMarkdown();
+            showToast('Chunk split successfully', 'success');
+        } catch (e) {
+            showToast('Error splitting chunk: ' + e.message, 'error');
+        }
+    }
+
     async loadGutenbergUrl() {
         const url = prompt('Enter Project Gutenberg URL:', this.defaultGutenbergUrl);
         if (!url) return;
@@ -1220,34 +1349,14 @@ class GutenbergTab {
                 const markerCount = result.chapter_marker_count || 0;
                 console.log('[GUTENBERG] Stage-1 book loaded, chapter markers:', markerCount);
 
-                // Show debug info in parse log
                 if (result.debug) {
                     const d = result.debug;
-                    const logLines = [
-                        `[LOAD] Book ID: ${d.book_id}`,
-                        `[LOAD] Plain text URL: ${d.txt_url}`,
-                        `[LOAD] EPUB URL: ${d.epub_url}`,
-                        `[LOAD] Plain text: ${d.txt_chars?.toLocaleString()} chars`,
-                        `[LOAD] EPUB downloaded: ${d.epub_downloaded} (${d.epub_bytes?.toLocaleString()} bytes)`,
-                        `[LOAD] EPUB titles found: ${d.epub_titles?.length || 0}`,
-                        `[LOAD] Chapter markers placed: ${markerCount}`,
-                        `[LOAD] Boilerplate regions tagged: ${result.boilerplate_region_count || 0}`,
-                        `[LOAD] Chapter source: ${d.chapter_source || 'unknown'}`,
-                    ];
-                    if (d.epub_titles?.length) {
-                        d.epub_titles.forEach((t, i) => logLines.push(`[LOAD]   title[${i}]: "${t}"`));
-                    }
-                    if (d.epub_error) {
-                        logLines.push(`[LOAD] EPUB error: ${d.epub_error}`);
-                    }
-                    logLines.push(`[LOAD] Adjust chapter breaks and deletions, then click "Confirm Structure".`);
-                    this.appendToLog(logLines);
+                    console.log('[LOAD] Book ID:', d.book_id, '| Markers:', markerCount,
+                        '| EPUB titles:', d.epub_titles?.length || 0,
+                        '| Source:', d.chapter_source);
                 }
 
-                await this.loadRawText();
                 await this.loadMarkdown();
-                this.displayRawText();
-                this.displayMarkdown();
 
                 showToast(
                     `Loaded! ${markerCount} chapter breaks placed. ` +
@@ -1264,499 +1373,6 @@ class GutenbergTab {
         }
     }
 
-    async uploadTextFile() {
-        const input = document.createElement('input');
-        input.type = 'file';
-        input.accept = '.txt';
-
-        input.onchange = async (e) => {
-            const file = e.target.files[0];
-            if (!file) return;
-
-            try {
-                const text = await file.text();
-                this.rawText = text;
-                this.displayRawText();
-                await this.saveRawText();
-                alert('Text file loaded successfully!');
-            } catch (error) {
-                console.error('Error loading file:', error);
-                alert('Error loading file: ' + error.message);
-            }
-        };
-
-        input.click();
-    }
-
-    async saveRawText() {
-        try {
-            const response = await fetch(`${SERVER_URL}/api/project/raw-text`, {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                    'X-API-Key': API_KEY
-                },
-                body: JSON.stringify({ raw_text: this.rawText })
-            });
-
-            if (!response.ok) {
-                throw new Error('Failed to save raw text');
-            }
-        } catch (error) {
-            console.error('Error saving raw text:', error);
-            alert('Failed to save raw text: ' + error.message);
-        }
-    }
-
-    async processText() {
-        if (!this.rawText) {
-            alert('Please load text first');
-            return;
-        }
-
-        if (this.chapters.length > 0) {
-            const overwrite = confirm(
-                `This project already has ${this.chapters.length} chapter(s).\n\n` +
-                'Processing the text will REPLACE all existing chapters with a new single chapter.\n\n' +
-                'Are you sure you want to continue?'
-            );
-            if (!overwrite) return;
-        } else {
-            const confirmation = confirm('Process text into chapters and chunks? This will create a new chapter structure.');
-            if (!confirmation) return;
-        }
-
-        try {
-            await this.saveRawText();
-
-            const blob = new Blob([this.rawText], { type: 'text/plain' });
-            const formData = new FormData();
-            formData.append('file', blob, 'manual_text.txt');
-
-            const response = await fetch(`${SERVER_URL}/api/project/add-text-file`, {
-                method: 'POST',
-                headers: { 'X-API-Key': API_KEY },
-                body: formData
-            });
-
-            if (response.ok) {
-                await this.loadMarkdown();
-                if (typeof ttsTab !== 'undefined' && ttsTab.refreshChapters) {
-                    await ttsTab.refreshChapters();
-                }
-                alert('Text processed successfully!');
-            } else {
-                const error = await response.json();
-                throw new Error(error.error || 'Failed to process text');
-            }
-        } catch (error) {
-            console.error('Error processing text:', error);
-            alert('Error processing text: ' + error.message);
-        }
-    }
-
-    // ----------------------------------------------------------------
-    // Chapter Parsing Method Selector & Verbose Log
-    // ----------------------------------------------------------------
-
-    async initParsingMethods() {
-        try {
-            const response = await fetch(`${SERVER_URL}/api/project/parsing-methods`, {
-                headers: { 'X-API-Key': API_KEY }
-            });
-            if (response.ok) {
-                const data = await response.json();
-                this.parsingMethods = data.methods || {};
-                console.log('[GUTENBERG] Parsing methods loaded:', Object.keys(this.parsingMethods));
-                this.updateMethodDescription();
-            }
-        } catch (error) {
-            console.error('[GUTENBERG] Error loading parsing methods:', error);
-        }
-
-        const select = document.getElementById('parsingMethodSelect');
-        if (select) {
-            select.addEventListener('change', () => this.updateMethodDescription());
-        }
-    }
-
-    updateMethodDescription() {
-        const select = document.getElementById('parsingMethodSelect');
-        const descDiv = document.getElementById('parsingMethodDesc');
-        if (!select || !descDiv) return;
-
-        const method = select.value;
-        const desc = this.parsingMethods?.[method] || '';
-        descDiv.textContent = desc;
-    }
-
-    toggleParseLog() {
-        const panel = document.getElementById('parseLogPanel');
-        const btn = document.getElementById('toggleLogBtn');
-        if (!panel) return;
-
-        if (panel.style.display === 'none') {
-            panel.style.display = 'block';
-            if (btn) btn.textContent = 'Hide Log';
-        } else {
-            panel.style.display = 'none';
-            if (btn) btn.textContent = 'Show Log';
-        }
-    }
-
-    appendToLog(lines) {
-        const logContent = document.getElementById('parseLogContent');
-        if (!logContent) return;
-
-        const colored = lines.map(line => {
-            if (line.includes('ERROR') || line.includes('EXCEPTION')) {
-                return `<span style="color: #f38ba8;">${this.escapeHtml(line)}</span>`;
-            } else if (line.includes('\u2713') || line.includes('OK')) {
-                return `<span style="color: #a6e3a1;">${this.escapeHtml(line)}</span>`;
-            } else if (line.includes('\u2717') || line.includes('NOT FOUND')) {
-                return `<span style="color: #fab387;">${this.escapeHtml(line)}</span>`;
-            } else if (line.includes('[PARSE]')) {
-                return `<span style="color: #89b4fa;">${this.escapeHtml(line)}</span>`;
-            } else {
-                return this.escapeHtml(line);
-            }
-        }).join('\n');
-
-        logContent.innerHTML = colored;
-
-        const panel = document.getElementById('parseLogPanel');
-        const btn = document.getElementById('toggleLogBtn');
-        if (panel) panel.style.display = 'block';
-        if (btn) btn.textContent = 'Hide Log';
-        if (panel) panel.scrollTop = panel.scrollHeight;
-    }
-
-    escapeHtml(text) {
-        return text.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
-    }
-
-    async reparseChapters() {
-        if (this.chaptersLocked) {
-            showToast('Unlock chapters before re-parsing', 'error');
-            return;
-        }
-
-        const select = document.getElementById('parsingMethodSelect');
-        if (!select) return;
-
-        const method = select.value;
-        console.log(`[GUTENBERG] Re-parsing chapters with method: ${method}`);
-
-        const logContent = document.getElementById('parseLogContent');
-        if (logContent) logContent.innerHTML = `<span style="color: #cba6f7;">Re-parsing with method "${method}"...</span>`;
-        const panel = document.getElementById('parseLogPanel');
-        const btn = document.getElementById('toggleLogBtn');
-        if (panel) panel.style.display = 'block';
-        if (btn) btn.textContent = 'Hide Log';
-
-        try {
-            const response = await fetch(`${SERVER_URL}/api/project/reparse-chapters`, {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                    'X-API-Key': API_KEY
-                },
-                body: JSON.stringify({ method })
-            });
-
-            const result = await response.json();
-
-            if (result.log && result.log.length > 0) {
-                this.appendToLog(result.log);
-            }
-
-            if (result.success) {
-                console.log(`[GUTENBERG] Re-parsed: ${result.chapter_count} chapters with method ${method}`);
-                await this.loadMarkdown();
-
-                if (typeof ttsTab !== 'undefined' && ttsTab.refreshChapters) {
-                    await ttsTab.refreshChapters();
-                }
-                if (typeof readerTab !== 'undefined' && readerTab.refresh) {
-                    await readerTab.refresh();
-                }
-
-                showToast(`Re-parsed: ${result.chapter_count} chapters (${method})`, 'success');
-            } else {
-                const errMsg = result.error || 'Unknown error';
-                console.error('[GUTENBERG] Re-parse failed:', errMsg);
-                showToast('Re-parse failed: ' + errMsg, 'error');
-            }
-        } catch (error) {
-            console.error('[GUTENBERG] Re-parse error:', error);
-            this.appendToLog([`[REPARSE] Network/JS error: ${error.message}`]);
-            showToast('Error re-parsing: ' + error.message, 'error');
-        }
-    }
-
-    generateId() {
-        return 'id_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9);
-    }
-
-    // ------------------------------------------------------------------ //
-    //  Parse Wizard (3-step interactive chapter placement)                //
-    // ------------------------------------------------------------------ //
-
-    switchParseStep(step) {
-        document.querySelectorAll('.parse-wizard-panel').forEach(p => p.classList.remove('active'));
-        document.querySelectorAll('.parse-wizard-tab').forEach(t => t.classList.remove('active'));
-        const panel = document.getElementById(`parse-wizard-panel-${step}`);
-        if (panel) panel.classList.add('active');
-        document.querySelectorAll(`.parse-wizard-tab[data-step="${step}"]`).forEach(t => t.classList.add('active'));
-    }
-
-    // Step 1: EPUB Spine Preview
-    async loadSpinePreview() {
-        const btn = document.getElementById('spinePreviewBtn');
-        const el = document.getElementById('epub-spine-list');
-        if (btn) btn.textContent = 'Loading…';
-        if (el) el.innerHTML = '<p style="color:#64748b; font-size:13px;">Loading EPUB preview…</p>';
-        try {
-            const res = await fetch(`${SERVER_URL}/api/project/epub-spine-preview`, {
-                headers: { 'X-API-Key': API_KEY }
-            });
-            const data = await res.json();
-            if (data.error) {
-                if (el) el.innerHTML = `<p style="color:#dc2626; font-size:13px;">⚠ ${this._esc(data.error)}</p>`;
-                return;
-            }
-            if (data.epub_url || data.txt_url) {
-                this.projectGutenberg = {
-                    ...this.projectGutenberg,
-                    epub_url: data.epub_url || this.projectGutenberg.epub_url,
-                    txt_url: data.txt_url || this.projectGutenberg.txt_url,
-                };
-            }
-            this._renderSpinePreview(data.items || []);
-        } catch (e) {
-            if (el) el.innerHTML = `<p style="color:#dc2626; font-size:13px;">⚠ ${this._esc(e.message)}</p>`;
-        } finally {
-            if (btn) btn.textContent = 'Reload';
-        }
-    }
-
-    _renderSpinePreview(items) {
-        const el = document.getElementById('epub-spine-list');
-        if (!el) return;
-        if (!items.length) {
-            el.innerHTML = '<p style="color:#64748b; font-size:13px;">No content spine items found in EPUB.</p>';
-            return;
-        }
-        el.innerHTML = `
-            <table class="spine-preview-table">
-                <thead><tr><th>#</th><th>Heading</th><th>NCX Label</th><th>Body Preview</th></tr></thead>
-                <tbody>${items.map(item => `
-                    <tr>
-                        <td style="color:#94a3b8;">${item.idx}</td>
-                        <td style="font-weight:600;">${this._esc(item.heading)}</td>
-                        <td style="color:#6d28d9;">${this._esc(item.ncx_label)}</td>
-                        <td style="color:#64748b; max-width:280px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;" title="${this._esc(item.body_preview)}">${this._esc(item.body_preview.substring(0, 120))}…</td>
-                    </tr>`).join('')}
-                </tbody>
-            </table>`;
-    }
-
-    // Step 2: Detect and remove boilerplate
-    async detectBoilerplate() {
-        const el = document.getElementById('boilerplate-list');
-        if (el) el.innerHTML = '<p style="color:#64748b; font-size:13px;">Detecting…</p>';
-        try {
-            const res = await fetch(`${SERVER_URL}/api/project/detect-boilerplate`, {
-                headers: { 'X-API-Key': API_KEY }
-            });
-            const data = await res.json();
-            if (data.error) {
-                if (el) el.innerHTML = `<p style="color:#dc2626; font-size:13px;">⚠ ${this._esc(data.error)}</p>`;
-                return;
-            }
-            this._renderBoilerplate(data.sections || [], data.total_lines || 0);
-        } catch (e) {
-            if (el) el.innerHTML = `<p style="color:#dc2626; font-size:13px;">⚠ ${this._esc(e.message)}</p>`;
-        }
-    }
-
-    _renderBoilerplate(sections, totalLines) {
-        const el = document.getElementById('boilerplate-list');
-        const applyBtn = document.getElementById('applyDeletionsBtn');
-        if (!el) return;
-        if (!sections.length) {
-            el.innerHTML = '<p style="color:#16a34a; font-size:13px;">✓ No boilerplate detected.</p>';
-            if (applyBtn) applyBtn.style.display = 'none';
-            return;
-        }
-        this._pendingBoilerplateSections = sections;
-        el.innerHTML = sections.map((s, i) => `
-            <div class="boilerplate-item">
-                <label style="display:flex; align-items:flex-start; gap:8px; cursor:pointer;">
-                    <input type="checkbox" class="boilerplate-check" data-idx="${i}" checked style="margin-top:3px; flex-shrink:0;">
-                    <div style="min-width:0;">
-                        <span class="boilerplate-type-badge ${this._esc(s.type)}">${this._esc(s.type.toUpperCase())}</span>
-                        <span style="font-size:12px; color:#92400e;"> lines ${s.start_line}–${s.end_line}</span>
-                        <pre>${this._esc(s.preview)}</pre>
-                    </div>
-                </label>
-            </div>`).join('');
-        if (applyBtn) applyBtn.style.display = '';
-    }
-
-    async applyDeletions() {
-        const checks = document.querySelectorAll('.boilerplate-check:checked');
-        if (!checks.length) { showToast('Nothing selected', 'error'); return; }
-        const regions = [];
-        checks.forEach(cb => {
-            const s = (this._pendingBoilerplateSections || [])[parseInt(cb.dataset.idx)];
-            if (s) regions.push({ start_line: s.start_line, end_line: s.end_line });
-        });
-        try {
-            const res = await fetch(`${SERVER_URL}/api/project/delete-text-lines`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json', 'X-API-Key': API_KEY },
-                body: JSON.stringify({ regions })
-            });
-            const data = await res.json();
-            if (data.error) { showToast(data.error, 'error'); return; }
-            showToast(`Removed ${data.deleted_lines} lines. Text now ${data.line_count} lines.`, 'success');
-            document.getElementById('boilerplate-list').innerHTML =
-                '<p style="color:#16a34a; font-size:13px;">✓ Deletions applied. Run detection again to check.</p>';
-            const applyBtn = document.getElementById('applyDeletionsBtn');
-            if (applyBtn) applyBtn.style.display = 'none';
-        } catch (e) {
-            showToast('Error: ' + e.message, 'error');
-        }
-    }
-
-    // Step 3: Detect and confirm chapter break positions
-    async detectCandidates() {
-        const btn = document.getElementById('detectCandidatesBtn');
-        const listEl = document.getElementById('chapter-candidates-list');
-        if (btn) btn.textContent = 'Searching…';
-        if (listEl) listEl.innerHTML = '<p style="color:#64748b; font-size:13px;">Running strategies…</p>';
-        try {
-            const res = await fetch(`${SERVER_URL}/api/project/chapter-candidates`, {
-                headers: { 'X-API-Key': API_KEY }
-            });
-            const data = await res.json();
-            if (data.error) {
-                if (listEl) listEl.innerHTML = `<p style="color:#dc2626; font-size:13px;">⚠ ${this._esc(data.error)}</p>`;
-                return;
-            }
-            if (data.log && data.log.length) this.appendToLog(data.log);
-            this._renderCandidates(data.candidates || []);
-        } catch (e) {
-            if (listEl) listEl.innerHTML = `<p style="color:#dc2626; font-size:13px;">⚠ ${this._esc(e.message)}</p>`;
-        } finally {
-            if (btn) btn.textContent = 'Re-Search';
-        }
-    }
-
-    _renderCandidates(candidates) {
-        this._pendingCandidates = candidates;
-        const el = document.getElementById('chapter-candidates-list');
-        const applyBtn = document.getElementById('applyChaptersBtn');
-        if (!el) return;
-        if (!candidates.length) {
-            el.innerHTML = '<p style="color:#64748b; font-size:13px;">No candidates found. Check EPUB is loaded and text is cleaned.</p>';
-            if (applyBtn) applyBtn.style.display = 'none';
-            return;
-        }
-        el.innerHTML = candidates.map((c, i) => {
-            const ctx = c.context;
-            const contextHtml = ctx ? `<div class="candidate-context">${
-                this._esc(ctx.before) + (ctx.before ? '\n' : '')
-            }<span class="ctx-match">▶ ${this._esc(ctx.match_line)}</span>${
-                ctx.after ? '\n' + this._esc(ctx.after) : ''
-            }</div>` : '';
-            return `<div class="candidate-item${c.matched ? '' : ' unmatched'}">
-                <label style="display:flex; align-items:flex-start; gap:8px; cursor:pointer;">
-                    <input type="checkbox" class="candidate-check" data-idx="${i}" ${c.matched ? 'checked' : ''} style="margin-top:4px; flex-shrink:0;">
-                    <div style="flex:1; min-width:0;">
-                        <div style="display:flex; align-items:center; gap:6px; flex-wrap:wrap; margin-bottom:4px;">
-                            <input type="text" class="candidate-title-input" data-idx="${i}"
-                                value="${this._esc(c.title)}"
-                                style="font-weight:600; font-size:13px; border:1px solid #c7d2fe; border-radius:4px; padding:2px 7px; flex:1; min-width:120px;">
-                            <span class="strategy-badge ${c.matched ? '' : 'unmatched-badge'}">${c.matched ? this._esc(c.strategy || '?') : 'no match'}</span>
-                            ${c.matched ? `<span style="font-size:11px; color:#94a3b8;">line ${c.line_num}</span>` : ''}
-                        </div>
-                        ${c.matched ? contextHtml : `
-                            <div style="display:flex; gap:6px; margin-top:4px;">
-                                <input type="text" class="candidate-search-input" data-idx="${i}"
-                                    placeholder="Enter a phrase from the chapter start to search manually…"
-                                    style="flex:1; font-size:12px; padding:4px 8px; border:1px solid #fecaca; border-radius:4px;">
-                                <button onclick="gutenbergTab.searchCandidate(${i})"
-                                    style="font-size:12px; padding:4px 10px; background:#4f46e5; color:white; border:none; border-radius:4px; cursor:pointer;">Search</button>
-                            </div>`}
-                    </div>
-                </label>
-            </div>`;
-        }).join('');
-        if (applyBtn) applyBtn.style.display = '';
-    }
-
-    async searchCandidate(idx) {
-        const input = document.querySelector(`.candidate-search-input[data-idx="${idx}"]`);
-        if (!input || !input.value.trim()) return;
-        try {
-            const res = await fetch(`${SERVER_URL}/api/project/search-text-position`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json', 'X-API-Key': API_KEY },
-                body: JSON.stringify({ phrase: input.value.trim() })
-            });
-            const data = await res.json();
-            if (!data.found) { showToast('Phrase not found in text', 'error'); return; }
-            const c = this._pendingCandidates[idx];
-            c.matched = true;
-            c.position = data.position;
-            c.line_num = data.line_num;
-            c.context = data.context;
-            c.strategy = 'manual';
-            this._renderCandidates(this._pendingCandidates);
-        } catch (e) {
-            showToast('Error: ' + e.message, 'error');
-        }
-    }
-
-    async applyChapterBreaks() {
-        if (!this._pendingCandidates) { showToast('No candidates loaded', 'error'); return; }
-        const breaks = [];
-        document.querySelectorAll('.candidate-check:checked').forEach(cb => {
-            const i = parseInt(cb.dataset.idx);
-            const c = this._pendingCandidates[i];
-            if (c && c.matched && c.position !== null) {
-                const titleInput = document.querySelector(`.candidate-title-input[data-idx="${i}"]`);
-                breaks.push({ title: titleInput ? titleInput.value.trim() : c.title, position: c.position });
-            }
-        });
-        if (!breaks.length) { showToast('No confirmed chapter breaks selected', 'error'); return; }
-        try {
-            const res = await fetch(`${SERVER_URL}/api/project/apply-chapter-breaks`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json', 'X-API-Key': API_KEY },
-                body: JSON.stringify({ breaks })
-            });
-            const data = await res.json();
-            if (data.error) { showToast(data.error, 'error'); return; }
-            await this.loadMarkdown();
-            if (typeof ttsTab !== 'undefined' && ttsTab.refreshChapters) await ttsTab.refreshChapters();
-            if (typeof readerTab !== 'undefined' && readerTab.refresh) await readerTab.refresh();
-            showToast(`Applied ${data.chapter_count} chapters`, 'success');
-        } catch (e) {
-            showToast('Error: ' + e.message, 'error');
-        }
-    }
-
-    _esc(str) {
-        if (!str) return '';
-        return String(str)
-            .replace(/&/g, '&amp;')
-            .replace(/</g, '&lt;')
-            .replace(/>/g, '&gt;')
-            .replace(/"/g, '&quot;');
-    }
 }
 
 // Create global instance
@@ -1765,14 +1381,6 @@ const gutenbergTab = new GutenbergTab();
 // Global helper functions for onclick handlers
 function loadGutenbergText() {
     gutenbergTab.loadGutenbergUrl();
-}
-
-function uploadTextFile() {
-    gutenbergTab.uploadTextFile();
-}
-
-function processText() {
-    gutenbergTab.processText();
 }
 
 function validateChunks() {

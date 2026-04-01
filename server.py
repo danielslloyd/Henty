@@ -4470,13 +4470,17 @@ def tag_chunks():
             content = f.read()
 
         def rechunk_chapter_body(body_text):
-            """Re-chunk a chapter body using smart_chunk_text."""
-            # Remove existing </chunk> markers first
-            body_text = body_text.replace('</chunk>', '')
+            """Re-chunk a chapter body using smart_chunk_text, writing new wrapping format."""
+            # Strip both old </chunk> separators and new <chunk id="...">...</chunk> tags
+            body_text = re.sub(r'<chunk\s+id="[a-f0-9]{8}"[^>]*>|</chunk>', '', body_text)
             chunks = converter.smart_chunk_text(body_text)
             if not chunks:
                 return body_text
-            return '\n</chunk>\n'.join(c['text'] for c in chunks) + '\n</chunk>'
+            parts = []
+            for c in chunks:
+                hex_id = uuid.uuid4().hex[:8]
+                parts.append(f'<chunk id="{hex_id}">{c["text"]}</chunk>')
+            return '\n'.join(parts)
 
         # Replace chapter bodies with re-chunked versions
         def replace_body(m):
@@ -4511,6 +4515,92 @@ def tag_chunks():
             'content': new_content,
             'chapter_count': len(new_chapters)
         })
+
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/project/split-chunk', methods=['POST'])
+@auth_manager.require_api_key
+def split_chunk():
+    """
+    Split a chunk at the given character offset.
+    Body: { "hex_id": "a3f2c1b8", "char_offset": 145 }
+    Finds the chunk in book.txt by hex_id, splits text at the nearest word
+    boundary (or sentence boundary) at/before char_offset, assigns two new
+    hex IDs, preserves all other chunks unchanged.
+    """
+    try:
+        if converter.current_project_path is None:
+            return jsonify({'error': 'No project loaded'}), 400
+
+        data = request.get_json() or {}
+        hex_id = data.get('hex_id', '')
+        char_offset = int(data.get('char_offset', 0))
+
+        if not hex_id:
+            return jsonify({'error': 'hex_id is required'}), 400
+
+        book_file_path = os.path.join(converter.current_project_path, 'book.txt')
+        if not os.path.exists(book_file_path):
+            return jsonify({'error': 'No book.txt found'}), 400
+
+        with open(book_file_path, 'r', encoding='utf-8') as f:
+            content = f.read()
+
+        # Find the chunk with this hex_id
+        chunk_re = re.compile(r'<chunk\s+id="' + re.escape(hex_id) + r'"[^>]*>([\s\S]*?)</chunk>')
+        m = chunk_re.search(content)
+        if not m:
+            return jsonify({'error': f'Chunk {hex_id} not found'}), 404
+
+        text = m.group(1)
+
+        # Clamp offset
+        char_offset = max(0, min(char_offset, len(text)))
+
+        # Find split point: prefer sentence boundary, then word boundary
+        split_at = char_offset
+        # Look for sentence end (. ! ?) within 30 chars before offset
+        sentence_re = re.compile(r'[.!?]\s+', re.DOTALL)
+        best_sentence = None
+        for sm in sentence_re.finditer(text):
+            if sm.end() <= char_offset:
+                best_sentence = sm.end()
+        if best_sentence and best_sentence > max(0, char_offset - 60):
+            split_at = best_sentence
+        else:
+            # Fall back to word boundary
+            space_pos = text.rfind(' ', 0, char_offset)
+            if space_pos > 0:
+                split_at = space_pos + 1
+
+        part_a = text[:split_at].strip()
+        part_b = text[split_at:].strip()
+
+        if not part_a or not part_b:
+            return jsonify({'error': 'Cannot split: one part would be empty'}), 400
+
+        new_id_a = uuid.uuid4().hex[:8]
+        new_id_b = uuid.uuid4().hex[:8]
+        replacement = f'<chunk id="{new_id_a}">{part_a}</chunk>\n<chunk id="{new_id_b}">{part_b}</chunk>'
+
+        new_content = chunk_re.sub(replacement, content, count=1)
+
+        with open(book_file_path, 'w', encoding='utf-8') as f:
+            f.write(new_content)
+
+        # Re-parse to update project.json
+        existing_chapters = converter.current_project_metadata.get('chapters', [])
+        new_chapters = parse_book_file(new_content, existing_chapters)
+        converter.current_project_metadata['chapters'] = new_chapters
+        converter.current_project_metadata['last_modified'] = datetime.now().isoformat()
+
+        project_file = os.path.join(converter.current_project_path, 'project.json')
+        with open(project_file, 'w', encoding='utf-8') as f:
+            json.dump(converter.current_project_metadata, f, indent=2, ensure_ascii=False)
+
+        return jsonify({'success': True, 'new_ids': [new_id_a, new_id_b]})
 
     except Exception as e:
         return jsonify({'error': str(e)}), 500
@@ -5706,23 +5796,78 @@ def parse_markdown_to_chapters(markdown_content, existing_chapters):
     return new_chapters
 
 
+def _parse_chunk_segments(chapter_content):
+    """
+    Parse chunk segments from chapter body text.
+    Supports two formats:
+      New: <chunk id="XXXXXXXX">text</chunk>  (and self-closing variants)
+      Old: text</chunk>text</chunk>...  (separator format, backward compat)
+    Returns list of dicts: {type, text/duration/path, hex_id (new format only)}
+    """
+    parsed_chunks = []
+
+    # Detect new format by presence of <chunk id="...">
+    if re.search(r'<chunk\s+id="[a-f0-9]{8}"', chapter_content):
+        # New wrapping format
+        chunk_re = re.compile(
+            r'<chunk\s+id="([a-f0-9]{8})"([^>]*)>([\s\S]*?)</chunk>|'
+            r'<chunk\s+id="([a-f0-9]{8})"([^/]*)/>', re.DOTALL
+        )
+        for m in chunk_re.finditer(chapter_content):
+            if m.group(1):  # wrapping tag
+                hex_id = m.group(1)
+                attrs = m.group(2)
+                text = m.group(3).strip()
+                pause_match = re.match(r'^\[pause:(\d+\.?\d*)\]\s*$', text)
+                file_match = re.match(r'^\[file:(.+?)\]\s*$', text)
+                if pause_match:
+                    parsed_chunks.append({'type': 'pause', 'duration': float(pause_match.group(1)), 'hex_id': hex_id})
+                elif file_match:
+                    parsed_chunks.append({'type': 'common_file', 'path': file_match.group(1), 'hex_id': hex_id})
+                elif text:
+                    parsed_chunks.append({'type': 'text', 'text': text, 'hex_id': hex_id})
+            else:  # self-closing
+                hex_id = m.group(4)
+                attrs = m.group(5)
+                ctype_m = re.search(r'type="([^"]*)"', attrs)
+                dur_m = re.search(r'duration="([^"]*)"', attrs)
+                path_m = re.search(r'path="([^"]*)"', attrs)
+                ctype = ctype_m.group(1) if ctype_m else 'text'
+                if ctype == 'pause':
+                    parsed_chunks.append({'type': 'pause', 'duration': float(dur_m.group(1)) if dur_m else 1.0, 'hex_id': hex_id})
+                elif ctype == 'file':
+                    parsed_chunks.append({'type': 'common_file', 'path': path_m.group(1) if path_m else '', 'hex_id': hex_id})
+    else:
+        # Old separator format: split on </chunk>
+        raw_segments = chapter_content.split('</chunk>')
+        for seg in raw_segments:
+            seg = seg.strip()
+            if not seg:
+                continue
+            pause_match = re.match(r'^\[pause:(\d+\.?\d*)\]\s*$', seg)
+            if pause_match:
+                parsed_chunks.append({'type': 'pause', 'duration': float(pause_match.group(1))})
+                continue
+            file_match = re.match(r'^\[file:(.+?)\]\s*$', seg)
+            if file_match:
+                parsed_chunks.append({'type': 'common_file', 'path': file_match.group(1)})
+                continue
+            parsed_chunks.append({'type': 'text', 'text': seg})
+
+    return parsed_chunks
+
+
 def parse_book_file(content, existing_chapters):
     """
     Parse book.txt content into a chapters array.
 
-    Format:
-        <delete>...</delete>          - boilerplate (ignored)
-        <chapter title="...">         - chapter start (on own line)
-        ...chunk text...
-        </chunk>                      - chunk boundary
-        [pause:X]                     - pause chunk (must be sole content of chunk segment)
-        [file:path]                   - common-file chunk (must be sole content of chunk segment)
-        {display|spoken}              - pronunciation markup (preserved as-is)
-        </chapter>                    - chapter end (on own line)
+    Supports two chunk formats:
+      New: <chunk id="XXXXXXXX">text</chunk>  (preferred)
+      Old: text</chunk>text</chunk>...        (backward compat, migrates on next save)
 
-    Text outside <delete> and <chapter> tags is orphaned (skipped with warning).
-    The last text segment before </chapter> is implicitly a chunk even without </chunk>.
-    Preserves existing audio data by matching chapters by title and chunks by index/text.
+    Preserves existing audio data by matching:
+      1. By hex_id if present (stable across edits)
+      2. By chunk index (fallback)
     """
 
     # Build lookup of existing chapters by title
@@ -5731,12 +5876,9 @@ def parse_book_file(content, existing_chapters):
         title = ch.get('title') or ch.get('name', '')
         existing_chapter_map[title] = ch
 
-    # Remove delete blocks
-    cleaned = re.sub(r'<delete>.*?</delete>', '', content, flags=re.DOTALL)
-
     # Find all chapter blocks
     chapter_pattern = re.compile(
-        r'<chapter\s+title="([^"]*)"(?:\s+non-voiced="true")?\s*>(.*?)</chapter>',
+        r'<chapter\s+title="([^"]*)"([^>]*)>(.*?)</chapter>',
         re.DOTALL
     )
     non_voiced_pattern = re.compile(r'non-voiced="true"')
@@ -5745,43 +5887,35 @@ def parse_book_file(content, existing_chapters):
 
     for m in chapter_pattern.finditer(content):
         title = m.group(1)
-        chapter_content = m.group(2)
-        is_non_voiced = bool(non_voiced_pattern.search(m.group(0).split('>')[0]))
+        attrs = m.group(2)
+        chapter_content = m.group(3)
+        is_non_voiced = bool(non_voiced_pattern.search(attrs))
 
-        # Split on </chunk> markers — last segment may be implicit chunk
-        raw_segments = chapter_content.split('</chunk>')
-
-        parsed_chunks = []
-        for seg in raw_segments:
-            seg = seg.strip()
-            if not seg:
-                continue
-
-            # Pause chunk
-            pause_match = re.match(r'^\[pause:(\d+\.?\d*)\]\s*$', seg)
-            if pause_match:
-                parsed_chunks.append({'type': 'pause', 'duration': float(pause_match.group(1))})
-                continue
-
-            # File chunk
-            file_match = re.match(r'^\[file:(.+?)\]\s*$', seg)
-            if file_match:
-                parsed_chunks.append({'type': 'common_file', 'path': file_match.group(1)})
-                continue
-
-            # Text chunk — preserve internal newlines
-            parsed_chunks.append({'type': 'text', 'text': seg})
+        parsed_chunks = _parse_chunk_segments(chapter_content)
 
         # Get existing chapter to preserve audio
         existing_chapter = existing_chapter_map.get(title)
         existing_chunks = existing_chapter.get('chunks', []) if existing_chapter else []
 
-        # Build chunk list with audio preservation
+        # Build hex_id → existing_chunk lookup for stable matching
+        hex_id_map = {}
+        for ec in existing_chunks:
+            hid = ec.get('hex_id')
+            if hid:
+                hex_id_map[hid] = ec
+
         new_chunk_list = []
         chunk_id = 0
 
         for i, chunk_data in enumerate(parsed_chunks):
-            existing_chunk = existing_chunks[i] if i < len(existing_chunks) else {}
+            # Try to find existing chunk: first by hex_id, then by index
+            hex_id = chunk_data.get('hex_id')
+            if hex_id and hex_id in hex_id_map:
+                existing_chunk = hex_id_map[hex_id]
+            elif i < len(existing_chunks):
+                existing_chunk = existing_chunks[i]
+            else:
+                existing_chunk = {}
 
             if chunk_data['type'] == 'text':
                 old_text = existing_chunk.get('text', '')
@@ -5789,6 +5923,7 @@ def parse_book_file(content, existing_chapters):
                 has_audio = len(existing_chunk.get('generated_audios', [])) > 0
                 chunk = {
                     'id': existing_chunk.get('id', chunk_id),
+                    'hex_id': hex_id or existing_chunk.get('hex_id') or uuid.uuid4().hex[:8],
                     'type': 'text',
                     'text': new_text,
                     'nickname': new_text[:50].strip() + ('...' if len(new_text) > 50 else ''),
@@ -5798,6 +5933,7 @@ def parse_book_file(content, existing_chapters):
             elif chunk_data['type'] == 'pause':
                 chunk = {
                     'id': existing_chunk.get('id', chunk_id),
+                    'hex_id': hex_id or existing_chunk.get('hex_id') or uuid.uuid4().hex[:8],
                     'type': 'pause',
                     'duration': chunk_data['duration'],
                     'generated_audios': existing_chunk.get('generated_audios', [])
@@ -5805,6 +5941,7 @@ def parse_book_file(content, existing_chapters):
             elif chunk_data['type'] == 'common_file':
                 chunk = {
                     'id': existing_chunk.get('id', chunk_id),
+                    'hex_id': hex_id or existing_chunk.get('hex_id') or uuid.uuid4().hex[:8],
                     'type': 'common_file',
                     'path': chunk_data['path'],
                     'generated_audios': existing_chunk.get('generated_audios', [])
@@ -5830,7 +5967,8 @@ def parse_book_file(content, existing_chapters):
 def generate_book_file(chapters):
     """
     Convert chapters array back into book.txt format.
-    Produces Stage 3 content (with <chapter>, </chunk> but no <delete> blocks).
+    Produces Stage 3 content using the new wrapping chunk format:
+      <chunk id="XXXXXXXX">text</chunk>
     """
     lines = []
     for chapter in chapters:
@@ -5842,13 +5980,16 @@ def generate_book_file(chapters):
         chunks = chapter.get('chunks', [])
         for chunk in chunks:
             ctype = chunk.get('type', 'text')
+            hex_id = chunk.get('hex_id') or uuid.uuid4().hex[:8]
             if ctype == 'text':
-                lines.append(chunk.get('text', ''))
+                text = chunk.get('text', '')
+                lines.append(f'<chunk id="{hex_id}">{text}</chunk>')
             elif ctype == 'pause':
-                lines.append(f"[pause:{chunk.get('duration', 1.0)}]")
+                dur = chunk.get('duration', 1.0)
+                lines.append(f'<chunk id="{hex_id}" type="pause" duration="{dur}"/>')
             elif ctype == 'common_file':
-                lines.append(f"[file:{chunk.get('path', '')}]")
-            lines.append('</chunk>')
+                path = chunk.get('path', '')
+                lines.append(f'<chunk id="{hex_id}" type="file" path="{path}"/>')
 
         lines.append('</chapter>')
         lines.append('')
