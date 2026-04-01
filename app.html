@@ -1629,14 +1629,6 @@
         <div class="pane-toggles">
         <div class="toggle-group">
             <div class="toggle-item">
-                <input type="checkbox" id="toggle-raw" onchange="updatePaneVisibility()">
-                <label for="toggle-raw"><span class="material-symbols-outlined">description</span> Raw Text</label>
-            </div>
-            <div class="toggle-item">
-                <input type="checkbox" id="toggle-parse" checked onchange="updatePaneVisibility()">
-                <label for="toggle-parse"><span class="material-symbols-outlined">account_tree</span> Chapter Parsing</label>
-            </div>
-            <div class="toggle-item">
                 <input type="checkbox" id="toggle-xml" checked onchange="updatePaneVisibility()">
                 <label for="toggle-xml"><span class="material-symbols-outlined">edit_note</span> Markdown</label>
             </div>
@@ -1662,108 +1654,65 @@
     </div>
 
     <!-- Panes Container -->
-    <div class="panes-container panes-3" id="panesContainer">
-        <!-- Pane 1: Raw Text -->
-        <div class="pane hidden" id="pane-raw">
-            <div class="pane-header">
-                <h2>Raw Text</h2>
-                <div class="pane-actions">
-                    <button class="pane-btn" onclick="loadGutenbergText()">Load from URL</button>
-                    <button class="pane-btn" onclick="uploadTextFile()">Upload File</button>
-                </div>
-            </div>
-            <div class="pane-content">
-                <div class="text-display selectable" id="rawTextDisplay">
-                    No text loaded. Load a Project Gutenberg text or upload a file to begin.
-                </div>
-            </div>
-        </div>
-
-        <!-- Pane 2: Chapter Parsing -->
-        <div class="pane" id="pane-parse">
-            <div class="pane-header">
-                <h2>Chapter Parsing</h2>
-                <div class="pane-actions">
-                    <button class="pane-btn" id="lockChaptersBtn" onclick="gutenbergTab.lockChapters()" style="background: #059669;" title="Lock chapter divisions and save original text">Lock Chapters</button>
-                    <button class="pane-btn" id="unlockChaptersBtn" onclick="gutenbergTab.unlockChapters()" style="background: #dc2626; display: none;" title="Unlock to allow re-parsing">Unlock</button>
-                </div>
-            </div>
-            <div class="pane-content" style="padding: 15px; display: flex; flex-direction: column; gap: 10px; min-height: 0;">
-                <div id="chapterLockStatus" style="display: none; background: #ecfdf5; border: 1px solid #6ee7b7; border-radius: 6px; padding: 8px 12px; font-size: 13px; color: #065f46; font-weight: 500;"></div>
-
-                <!-- 3-step Parse Wizard -->
-                <div class="parse-wizard">
-                    <!-- Step tabs -->
-                    <div class="parse-wizard-tabs">
-                        <button class="parse-wizard-tab active" data-step="1" onclick="gutenbergTab.switchParseStep(1)">1. EPUB Preview</button>
-                        <button class="parse-wizard-tab" data-step="2" onclick="gutenbergTab.switchParseStep(2)">2. Clean Text</button>
-                        <button class="parse-wizard-tab" data-step="3" onclick="gutenbergTab.switchParseStep(3)">3. Chapter Breaks</button>
-                    </div>
-
-                    <!-- Step 1: EPUB Spine Preview -->
-                    <div class="parse-wizard-panel active" id="parse-wizard-panel-1">
-                        <div style="display: flex; align-items: center; gap: 8px; flex-wrap: wrap;">
-                            <span style="font-size: 13px; color: #4338ca; font-weight: 500; flex: 1;">EPUB chapter order and first paragraph text</span>
-                            <button class="pane-btn" onclick="gutenbergTab.loadSpinePreview()" id="spinePreviewBtn" style="background: #4f46e5;">Load Preview</button>
-                            <button class="pane-btn" onclick="gutenbergTab.switchParseStep(2)" style="background: #059669;">Next →</button>
-                        </div>
-                        <div id="epub-spine-list" style="overflow-y: auto; max-height: 400px;"><p style="color:#64748b; font-size:13px;">Click <strong>Load Preview</strong> to see the EPUB chapter list. Make sure a Gutenberg book has been loaded first.</p></div>
-                    </div>
-
-                    <!-- Step 2: Clean Text (remove boilerplate) -->
-                    <div class="parse-wizard-panel" id="parse-wizard-panel-2">
-                        <div style="display: flex; align-items: center; gap: 8px; flex-wrap: wrap;">
-                            <span style="font-size: 13px; color: #4338ca; font-weight: 500; flex: 1;">Remove header, footer, and table of contents</span>
-                            <button class="pane-btn" onclick="gutenbergTab.detectBoilerplate()" style="background: #4f46e5;">Detect</button>
-                            <button class="pane-btn" id="applyDeletionsBtn" onclick="gutenbergTab.applyDeletions()" style="background: #dc2626; display: none;">Delete Selected</button>
-                            <button class="pane-btn" onclick="gutenbergTab.switchParseStep(3)" style="background: #059669;">Next →</button>
-                        </div>
-                        <div id="boilerplate-list" style="display: flex; flex-direction: column; gap: 6px; overflow-y: auto; max-height: 400px;"></div>
-                    </div>
-
-                    <!-- Step 3: Review Chapter Breaks -->
-                    <div class="parse-wizard-panel" id="parse-wizard-panel-3">
-                        <div style="display: flex; align-items: center; gap: 8px; flex-wrap: wrap;">
-                            <span style="font-size: 13px; color: #4338ca; font-weight: 500; flex: 1;">Confirm chapter break positions</span>
-                            <button class="pane-btn" onclick="gutenbergTab.detectCandidates()" id="detectCandidatesBtn" style="background: #4f46e5;">Find Breaks</button>
-                            <button class="pane-btn" id="applyChaptersBtn" onclick="gutenbergTab.applyChapterBreaks()" style="background: #059669; display: none;">Apply Chapters</button>
-                        </div>
-                        <div id="chapter-candidates-list" style="display: flex; flex-direction: column; gap: 6px; overflow-y: auto; max-height: 500px;"></div>
-                    </div>
-                </div>
-
-                <!-- Log toggle + panel -->
-                <div style="display: flex; gap: 6px; align-items: center; flex-shrink: 0;">
-                    <button class="pane-btn" onclick="gutenbergTab.toggleParseLog()" style="background: #6366f1;" id="toggleLogBtn">Show Log</button>
-                </div>
-                <div id="parseLogPanel" style="display: none; background: #1e1e2e; color: #cdd6f4; border-radius: 8px; padding: 10px; max-height: 300px; overflow-y: auto; font-family: 'Consolas', 'Monaco', monospace; font-size: 12px; line-height: 1.6; flex-shrink: 0;">
-                    <div id="parseLogContent" style="white-space: pre-wrap;">No parse log yet.</div>
-                </div>
-            </div>
-        </div>
-
-        <!-- Pane 3: Markdown / Structure Editor -->
+    <div class="panes-container panes-2" id="panesContainer">
+        <!-- Pane 1: Markdown / Structure Editor -->
         <div class="pane" id="pane-xml">
             <div class="pane-header">
                 <h2>Markdown <span id="markdownPaneSubtitle" style="font-size:12px;font-weight:400;color:#64748b;margin-left:6px;"></span></h2>
                 <div class="pane-actions">
-                    <!-- Stage-1 actions (structure editing) -->
+                    <!-- Stage 0: Load book -->
+                    <button class="pane-btn" id="loadBookBtn"
+                            onclick="gutenbergTab.loadGutenbergUrl()"
+                            style="display:none; background:#4f46e5; font-weight:600;"
+                            title="Load a book from Project Gutenberg">
+                        Load Book
+                    </button>
+                    <!-- Stage 1: Confirm structure -->
                     <button class="pane-btn" id="confirmStructureBtn"
                             onclick="gutenbergTab.confirmStructure()"
                             style="display:none; background:#059669; font-weight:600;"
-                            title="Confirm chapter structure and advance to text editing">
-                        ✓ Confirm Structure
+                            title="Confirm chapter structure and advance to chunking">
+                        ✓ Lock Chapters
                     </button>
-                    <!-- Stage-2+ actions (text editing) -->
-                    <button class="pane-btn" onclick="gutenbergTab.processText()">Process Text</button>
-                    <button class="pane-btn" onclick="gutenbergTab.saveCode()">Save</button>
-                    <button class="pane-btn" id="undoBtn" onclick="gutenbergTab.undo()" disabled title="Nothing to undo" style="background: #64748b;">Undo</button>
-                    <button class="pane-btn" onclick="gutenbergTab.validateChunks()">Validate</button>
+                    <!-- Stage 2: Run chunking -->
+                    <button class="pane-btn" id="runChunkingBtn"
+                            onclick="gutenbergTab.runChunking()"
+                            style="display:none; background:#7c3aed; font-weight:600;"
+                            title="Split chapters into TTS chunks">
+                        ▶ Run Chunking
+                    </button>
+                    <!-- Stage 3: Edit text + save/undo -->
+                    <button class="pane-btn" id="editTextBtn"
+                            onclick="gutenbergTab.toggleTextLock()"
+                            style="display:none; background:#f59e0b; font-weight:600;"
+                            title="Unlock editor to edit underlying text">
+                        Edit Text
+                    </button>
+                    <button class="pane-btn" id="saveBtn"
+                            onclick="gutenbergTab.saveCode()"
+                            style="display:none;"
+                            title="Save">
+                        Save
+                    </button>
+                    <button class="pane-btn" id="undoBtn"
+                            onclick="gutenbergTab.undo()"
+                            disabled
+                            style="display:none; background:#64748b;"
+                            title="Nothing to undo">
+                        Undo
+                    </button>
                 </div>
             </div>
             <div class="pane-content" style="padding: 0; display: flex; flex-direction: column; overflow: hidden;">
 
-                <!-- ─── Stage-1 toolbar (shown only during structure editing) ─── -->
+                <!-- ─── Stage-0 toolbar (no book loaded) ─── -->
+                <div id="stage0Toolbar" style="display:none; padding: 20px; text-align:center; color:#64748b; flex-shrink:0;">
+                    <div style="font-size:32px; margin-bottom:8px;">📖</div>
+                    <div style="font-size:14px; font-weight:500; margin-bottom:4px;">No book loaded</div>
+                    <div style="font-size:12px;">Click <strong>Load Book</strong> to load a Project Gutenberg text.</div>
+                </div>
+
+                <!-- ─── Stage-1 toolbar (structure editing) ─── -->
                 <div id="stage1Toolbar" style="display:none; padding: 10px 15px; background:#eff6ff; border-bottom:1px solid #bfdbfe; flex-shrink:0;">
                     <div style="font-size:13px; color:#1e40af; font-weight:600; margin-bottom:6px;">
                         Structure Editing Mode
@@ -1774,11 +1723,50 @@
                     </div>
                 </div>
 
-                <!-- ─── Stage-2+ toolbar (text / pronunciation editing) ─── -->
-                <div id="markdownToolbar" class="xml-tips" style="padding: 10px 15px; flex-shrink:0;">
+                <!-- ─── Stage-2 toolbar (pre-chunking) ─── -->
+                <div id="stage2Toolbar" style="display:none; padding: 10px 15px; background:#f0fdf4; border-bottom:1px solid #bbf7d0; flex-shrink:0;">
+                    <div style="font-size:13px; color:#166534; font-weight:600; margin-bottom:4px;">
+                        Chapters confirmed — ready to chunk
+                    </div>
+                    <div style="font-size:12px; color:#15803d; line-height:1.5;">
+                        Review the chapter text, then click <strong>Run Chunking</strong> to split into TTS segments.
+                    </div>
+                </div>
+
+                <!-- ─── Stage-3 toolbar (pronunciation & annotation) ─── -->
+                <div id="stage3Toolbar" style="display:none; padding: 8px 15px; background:#fafafa; border-bottom:1px solid #e2e8f0; flex-shrink:0;">
+                    <span id="textLockBadge" style="font-size:11px; font-weight:700; padding:2px 7px; border-radius:10px; background:#fef9c3; color:#854d0e; margin-right:8px;">LOCKED</span>
+                    <button class="xml-btn" onclick="gutenbergTab.insertPronunciation()"
+                            style="background:#7c3aed;color:white;"
+                            title="Select a word first, then click to add pronunciation annotation">
+                        + Pronunciation
+                    </button>
+                    <select onchange="if(this.value) { gutenbergTab.insertParalinguisticTag(this.value); this.value=''; }"
+                            style="padding: 4px 8px; border-radius: 4px; border: 1px solid #a78bfa; font-size: 12px; background: #ede9fe; cursor: pointer;">
+                        <option value="">+ Paralinguistic Tag</option>
+                        <option value="laugh">[laugh]</option>
+                        <option value="chuckle">[chuckle]</option>
+                        <option value="cough">[cough]</option>
+                        <option value="sigh">[sigh]</option>
+                        <option value="gasp">[gasp]</option>
+                        <option value="groan">[groan]</option>
+                        <option value="sniff">[sniff]</option>
+                        <option value="clear throat">[clear throat]</option>
+                        <option value="shush">[shush]</option>
+                    </select>
+                    <button class="xml-btn" onclick="gutenbergTab.splitChunkAtCursor()"
+                            title="Split the chunk at cursor position">
+                        ✂ Split Chunk
+                    </button>
+                    <span style="margin-left: auto;">
+                        <button class="xml-btn" id="cleanViewToggle" onclick="gutenbergTab.toggleCleanView()" title="Toggle between clean text and markup view">Clean View</button>
+                    </span>
+                </div>
+
+                <!-- ─── Stage-2 markdown toolbar (text editing) ─── -->
+                <div id="markdownToolbar" class="xml-tips" style="display:none; padding: 10px 15px; flex-shrink:0;">
                     <strong>Editing:</strong>
                     <button class="xml-btn" onclick="gutenbergTab.insertChapterBreak()">+ Chapter</button>
-                    <button class="xml-btn" onclick="gutenbergTab.insertChunkBreak()">+ Chunk Break</button>
                     <button class="xml-btn" onclick="gutenbergTab.insertPause()">+ Pause</button>
                     <button class="xml-btn" onclick="gutenbergTab.insertPronunciation()"
                             style="background:#7c3aed;color:white;"
@@ -1799,7 +1787,7 @@
                         <option value="shush">[shush]</option>
                     </select>
                     <span style="margin-left: auto;">
-                        <button class="xml-btn" id="cleanViewToggle" onclick="gutenbergTab.toggleCleanView()" title="Toggle between clean text and markup view">Clean View</button>
+                        <button class="xml-btn" id="cleanViewToggle2" onclick="gutenbergTab.toggleCleanView()" title="Toggle between clean text and markup view">Clean View</button>
                     </span>
                 </div>
 
@@ -1998,22 +1986,18 @@
         }
 
         function updatePaneVisibility() {
-            const rawVisible = document.getElementById('toggle-raw').checked;
-            const parseVisible = document.getElementById('toggle-parse').checked;
             const xmlVisible = document.getElementById('toggle-xml').checked;
             const ttsVisible = document.getElementById('toggle-tts').checked;
             const readerVisible = document.getElementById('toggle-reader').checked;
 
-            document.getElementById('pane-raw').classList.toggle('hidden', !rawVisible);
-            document.getElementById('pane-parse').classList.toggle('hidden', !parseVisible);
             document.getElementById('pane-xml').classList.toggle('hidden', !xmlVisible);
             document.getElementById('pane-tts').classList.toggle('hidden', !ttsVisible);
             document.getElementById('pane-reader').classList.toggle('hidden', !readerVisible);
 
             // Update grid layout
-            const visibleCount = [rawVisible, parseVisible, xmlVisible, ttsVisible, readerVisible].filter(v => v).length;
+            const visibleCount = [xmlVisible, ttsVisible, readerVisible].filter(v => v).length;
             const container = document.getElementById('panesContainer');
-            container.className = `panes-container panes-${visibleCount}`;
+            container.className = `panes-container panes-${Math.max(1, visibleCount)}`;
         }
 
         // Project loading logic
