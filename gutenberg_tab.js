@@ -181,8 +181,18 @@ class StructureEditor {
 
     _makeTextEl(block, idx) {
         const wrap = document.createElement('div');
-        wrap.className = 'se-text-block';
+        const totalChars = block.paragraphs.join(' ').length;
+        const isShort = totalChars <= 120;
+        wrap.className = 'se-text-block' + (isShort ? ' se-short-block' : '');
         wrap.dataset.idx = idx;
+
+        if (isShort) {
+            const badge = document.createElement('span');
+            badge.className = 'se-short-badge';
+            badge.title = 'Short block — likely a section heading. Delete the break above to merge it into the previous chapter.';
+            badge.textContent = 'heading?';
+            wrap.appendChild(badge);
+        }
 
         block.paragraphs.forEach((para, pIdx) => {
             // Drop zone before each paragraph
@@ -351,6 +361,72 @@ class StructureEditor {
         }
         this._mergeAdjacentText();
         this.render();
+    }
+
+    /**
+     * Auto-collapse headings: remove chapter breaks that separate short text
+     * blocks from their adjacent content.  A "short block" is any text block
+     * with ≤ 120 chars total.
+     *
+     * Pattern removed:
+     *   [chapter marker]  ← delete this marker when the text block that follows
+     *   [short text block] ← this (heading) gets merged into previous block
+     *
+     * Merged text blocks are joined with a blank line so the heading is still
+     * visible in the body text.  The chapter marker BEFORE the long block that
+     * comes after the heading is renamed to include the heading text.
+     *
+     * Returns the number of markers removed.
+     */
+    autoCollapseHeadings() {
+        const SHORT = 120;
+
+        const totalChars = (block) =>
+            block.type === 'text' ? block.paragraphs.join(' ').length : Infinity;
+
+        let removed = 0;
+        let changed = true;
+
+        // Keep iterating until nothing more to collapse (handles chained headings)
+        while (changed) {
+            changed = false;
+            for (let i = 0; i < this.blocks.length - 2; i++) {
+                const marker = this.blocks[i];
+                const textBlock = this.blocks[i + 1];
+
+                // Pattern: [chapter] [short-text] [chapter] [any-text]
+                // → remove the first [chapter], absorb short-text into prev block
+                if (marker.type === 'chapter'
+                        && textBlock.type === 'text'
+                        && totalChars(textBlock) <= SHORT) {
+
+                    // Remove the chapter marker and absorb short text into
+                    // the previous text block (or just remove both if at start)
+                    const prevBlock = i > 0 ? this.blocks[i - 1] : null;
+                    if (prevBlock && prevBlock.type === 'text') {
+                        prevBlock.paragraphs.push(...textBlock.paragraphs);
+                        this.blocks.splice(i, 2);  // remove marker + short block
+                    } else if (i === 0) {
+                        // Very first block is a short heading — remove its marker,
+                        // keep the text so it's visible in the editor
+                        this.blocks.splice(i, 1);  // remove only the marker
+                    } else {
+                        // Previous block is a chapter marker — just remove this marker
+                        // and let the short text sit under the previous chapter
+                        this.blocks.splice(i, 1);
+                    }
+                    removed++;
+                    changed = true;
+                    break;  // restart scan after splice
+                }
+            }
+        }
+
+        if (removed > 0) {
+            this._mergeAdjacentText();
+            this.render();
+        }
+        return removed;
     }
 
     _esc(s) {
@@ -1150,6 +1226,18 @@ class GutenbergTab {
         }
     }
 
+    /** Auto-collapse heading blocks in the structure editor */
+    autoCollapseHeadings() {
+        if (!this.structureEditor) return;
+        const removed = this.structureEditor.autoCollapseHeadings();
+        if (removed > 0) {
+            showToast(`Collapsed ${removed} heading block${removed === 1 ? '' : 's'}`, 'success');
+            this._saveStructureEditorContent();
+        } else {
+            showToast('No short heading blocks found to collapse', 'info');
+        }
+    }
+
     /** Save current structure-editor state back to book.txt */
     async _saveStructureEditorContent() {
         if (!this.structureEditor) return;
@@ -1347,7 +1435,8 @@ class GutenbergTab {
             if (response.ok) {
                 const result = await response.json();
                 const markerCount = result.chapter_marker_count || 0;
-                console.log('[GUTENBERG] Stage-1 book loaded, chapter markers:', markerCount);
+                const shortCount  = result.short_block_count || 0;
+                console.log('[GUTENBERG] Stage-1 book loaded, blocks:', markerCount, 'short:', shortCount);
 
                 if (result.debug) {
                     const d = result.debug;
@@ -1359,8 +1448,9 @@ class GutenbergTab {
                 await this.loadMarkdown();
 
                 showToast(
-                    `Loaded! ${markerCount} chapter breaks placed. ` +
-                    `Drag to adjust, then click "Confirm Structure".`,
+                    `Loaded! ${markerCount} blocks detected ` +
+                    `(${shortCount} short headings highlighted in yellow). ` +
+                    `Click ⚡ Collapse Headings, then review and lock.`,
                     'success'
                 );
             } else {

@@ -3785,91 +3785,94 @@ def process_gutenberg():
         print(traceback.format_exc())
         return jsonify({'error': str(e)}), 500
 
-def _find_chapter_lines_in_raw(raw_text, epub_titles):
+SHORT_BLOCK_CHARS = 120  # blocks ≤ this many chars are flagged as potential headings
+
+
+def _build_stage1_from_newlines(raw_text, boilerplate_regions):
     """
-    Find where each EPUB chapter title appears in the raw text as a standalone line.
-    Uses the last occurrence to skip TOC hits.
-    Returns [{line: N, title: str}, ...] sorted by line number.
+    Build stage-1 annotated book.txt using newline-based chapter splitting.
+
+    Rules applied to non-boilerplate text:
+      - Carriage returns normalised first (\\r\\n → \\n, \\r → \\n)
+      - Single newline within a text run → joined with a space (hard-wrap removal)
+      - 2+ consecutive newlines → chapter break (self-closing <chapter/> marker)
+
+    Every resulting text block gets a preceding <chapter title="..."/> marker.
+    Short blocks (≤ SHORT_BLOCK_CHARS) become their own chapter title.
+    Long blocks use the first 8 words as the auto-title.
+
+    Returns (content: str, block_count: int, short_count: int)
     """
+    # Normalise line endings
+    raw_text = raw_text.replace('\r\n', '\n').replace('\r', '\n')
+
     lines = raw_text.split('\n')
-    positions = []
-    used_lines = set()
+    n = len(lines)
 
-    for title in epub_titles:
-        if not title.strip():
-            continue
-        title_norm = re.sub(r'\s+', ' ', title.strip().lower())
-        last_line = None
+    # Sort boilerplate ranges for sequential scanning
+    bp_ranges = sorted(boilerplate_regions, key=lambda r: r['start_line'])
 
-        for i, raw_line in enumerate(lines):
-            line_norm = re.sub(r'\s+', ' ', raw_line.strip().lower())
-            if line_norm == title_norm:
-                last_line = i
+    # Build a set of all boilerplate line indices for O(1) lookup
+    bp_set = set()
+    for r in bp_ranges:
+        bp_set.update(range(r['start_line'], r['end_line'] + 1))
 
-        if last_line is not None and last_line not in used_lines:
-            positions.append({'line': last_line, 'title': title.strip()})
-            used_lines.add(last_line)
-
-    return sorted(positions, key=lambda x: x['line'])
-
-
-def _build_stage1_book_file(raw_text, boilerplate_regions, chapter_positions):
-    """
-    Build stage-1 annotated book.txt from raw Gutenberg text.
-
-    Format produced:
-        <delete>                         ← boilerplate open
-        ...header/footer text...
-        </delete>
-        plain text line by line
-        <chapter title="Chapter I"/>     ← self-closing chapter break marker
-        more text
-        <delete>
-        ...footer...
-        </delete>
-
-    boilerplate_regions: [{start_line, end_line, type}, ...] (0-indexed, inclusive)
-    chapter_positions:   [{line, title}, ...] (0-indexed line number in raw_text)
-    """
-    lines = raw_text.split('\n')
-
-    # Build per-line sets for quick lookup
-    delete_starts = {r['start_line']: r for r in boilerplate_regions}
-    delete_ends   = {r['end_line']   for r in boilerplate_regions}
-
-    # Which lines are inside any delete region (for suppressing chapter markers)
-    delete_line_set = set()
-    for r in boilerplate_regions:
-        for i in range(r['start_line'], r['end_line'] + 1):
-            delete_line_set.add(i)
-
-    chapter_by_line = {c['line']: c['title'] for c in chapter_positions}
+    # Partition lines into (type, text) pieces in document order
+    pieces = []
+    i = 0
+    while i < n:
+        if i in bp_set:
+            region_end = next(
+                r['end_line'] for r in bp_ranges
+                if r['start_line'] <= i <= r['end_line']
+            )
+            pieces.append(('bp', '\n'.join(lines[i:region_end + 1])))
+            i = region_end + 1
+        else:
+            next_bp = next(
+                (r['start_line'] for r in bp_ranges if r['start_line'] > i), n
+            )
+            pieces.append(('text', '\n'.join(lines[i:next_bp])))
+            i = next_bp
 
     result = []
-    in_delete = False
+    block_count = 0
+    short_count = 0
 
-    for i, line in enumerate(lines):
-        # Open delete block
-        if i in delete_starts and not in_delete:
-            result.append('<delete>')
-            in_delete = True
+    for ptype, ptext in pieces:
+        if ptype == 'bp':
+            result.append(f'<delete>\n{ptext}\n</delete>')
+            continue
 
-        # Insert chapter marker BEFORE this line (not inside a delete region)
-        if i in chapter_by_line and not in_delete:
-            title = chapter_by_line[i].replace('"', '&quot;')
-            result.append(f'<chapter title="{title}"/>')
+        # Split on 2+ consecutive newlines → each becomes a separate block
+        raw_blocks = re.split(r'\n{2,}', ptext)
 
-        result.append(line)
+        for raw_block in raw_blocks:
+            # Join single-newline line-wraps with a space
+            normalized = raw_block.replace('\n', ' ').strip()
+            # Collapse accidental multiple spaces
+            normalized = re.sub(r' {2,}', ' ', normalized)
+            # Skip decorative lines (only dashes, dots, asterisks, whitespace)
+            if not normalized or re.fullmatch(r'[-–—*_.=~\s]+', normalized):
+                continue
 
-        # Close delete block
-        if i in delete_ends and in_delete:
-            result.append('</delete>')
-            in_delete = False
+            block_count += 1
+            is_short = len(normalized) <= SHORT_BLOCK_CHARS
+            if is_short:
+                short_count += 1
 
-    if in_delete:
-        result.append('</delete>')
+            # Build the chapter marker title
+            if is_short:
+                title = normalized
+            else:
+                words = normalized.split()
+                title = ' '.join(words[:8]) + ('…' if len(words) > 8 else '')
 
-    return '\n'.join(result)
+            safe_title = title.replace('"', '&quot;')
+            result.append(f'<chapter title="{safe_title}"/>')
+            result.append(normalized)
+
+    return '\n\n'.join(result), block_count, short_count
 
 
 @app.route('/api/project/add-gutenberg-url', methods=['POST'])
@@ -3935,19 +3938,23 @@ def add_gutenberg_url_to_project():
             'chapter_source': None,
         }
 
-        # --- Download EPUB for chapter title list ---
+        # --- Cache EPUB (for future reference; no longer used for chapter detection) ---
         epub_bytes = None
         epub_cache = os.path.join(converter.current_project_path, 'source.epub')
-        print(f"[STAGE1] Downloading EPUB for chapter titles")
-        epub_bytes = processor.download_epub(book_id)
-        if epub_bytes:
+        if not os.path.exists(epub_cache):
+            print(f"[STAGE1] Downloading EPUB for cache")
             try:
-                with open(epub_cache, 'wb') as ef:
-                    ef.write(epub_bytes)
-                debug_info['epub_downloaded'] = True
-                debug_info['epub_bytes'] = len(epub_bytes)
+                epub_bytes = processor.download_epub(book_id)
+                if epub_bytes:
+                    with open(epub_cache, 'wb') as ef:
+                        ef.write(epub_bytes)
+                    debug_info['epub_downloaded'] = True
+                    debug_info['epub_bytes'] = len(epub_bytes)
             except Exception as e:
-                print(f"[STAGE1] EPUB cache write failed: {e}")
+                print(f"[STAGE1] EPUB download failed (non-fatal): {e}")
+        else:
+            debug_info['epub_downloaded'] = True
+            debug_info['epub_bytes'] = os.path.getsize(epub_cache)
 
         # --- Detect boilerplate regions in the raw text ---
         boilerplate = []
@@ -3957,51 +3964,22 @@ def add_gutenberg_url_to_project():
         except Exception as e:
             print(f"[STAGE1] Boilerplate detection failed: {e}")
 
-        # --- Find chapter positions directly in the raw text ---
-        chapter_positions = []
-        epub_titles = []
-        if epub_bytes:
-            try:
-                epub_titles = processor.get_epub_chapter_titles(epub_bytes)
-                debug_info['epub_titles'] = epub_titles
-                print(f"[STAGE1] EPUB titles: {len(epub_titles)}")
-                if epub_titles:
-                    chapter_positions = _find_chapter_lines_in_raw(raw_content, epub_titles)
-                    debug_info['epub_titles_matched'] = len(chapter_positions)
-                    debug_info['chapter_source'] = 'epub'
-                    print(f"[STAGE1] Chapters matched in raw text: {len(chapter_positions)}")
-            except Exception as e:
-                print(f"[STAGE1] EPUB title extraction failed: {e}")
-                debug_info['epub_error'] = str(e)
+        # --- Build stage-1 annotated book.txt using newline-based splitting ---
+        # Single newlines (hard-wrap) → spaces; 2+ newlines → chapter break.
+        # Short text blocks (≤ {SHORT_BLOCK_CHARS} chars) are potential headings.
+        book_content, block_count, short_count = _build_stage1_from_newlines(
+            raw_content, boilerplate
+        )
+        debug_info['chapter_source'] = 'newline-split'
+        debug_info['block_count'] = block_count
+        debug_info['short_block_count'] = short_count
 
-        # Fallback: regex chapter detection on the stripped text
-        if not chapter_positions:
-            print("[STAGE1] Falling back to regex chapter detection on stripped text")
-            debug_info['chapter_source'] = 'regex-fallback'
-            try:
-                stripped = processor.strip_gutenberg_metadata(raw_content, title)
-                stripped = processor.process_carriage_returns(stripped)
-                stripped = stripped.replace('<<<SECTION_BREAK>>>', '\n\n')
-                detected = converter.detect_chapters(stripped)
-                # Map titles back to raw text lines
-                for ch in detected:
-                    ch_title = ch.get('title', '')
-                    if ch_title:
-                        found = _find_chapter_lines_in_raw(raw_content, [ch_title])
-                        chapter_positions.extend(found)
-                chapter_positions = sorted(chapter_positions, key=lambda x: x['line'])
-            except Exception as e:
-                print(f"[STAGE1] Regex fallback failed: {e}")
-
-        debug_info['final_chapter_count'] = len(chapter_positions)
-
-        # --- Build stage-1 annotated book.txt ---
-        book_content = _build_stage1_book_file(raw_content, boilerplate, chapter_positions)
         book_file_path = os.path.join(converter.current_project_path, 'book.txt')
         with open(book_file_path, 'w', encoding='utf-8') as f:
             f.write(book_content)
         print(f"[STAGE1] book.txt written: {len(book_content):,} chars, "
-              f"{len(chapter_positions)} chapter markers, {len(boilerplate)} delete regions")
+              f"{block_count} blocks ({short_count} short/heading), "
+              f"{len(boilerplate)} delete regions")
 
         # --- Update project metadata (no chapters array yet — stage 1) ---
         converter.current_project_metadata['original_filename'] = f"{title}.txt"
@@ -4021,7 +3999,8 @@ def add_gutenberg_url_to_project():
             'title': title,
             'url': url,
             'stage': 1,
-            'chapter_marker_count': len(chapter_positions),
+            'chapter_marker_count': block_count,
+            'short_block_count': short_count,
             'boilerplate_region_count': len(boilerplate),
             'debug': {**debug_info, 'epub_url': gutenberg_urls['gutenberg_epub_url']},
         })
