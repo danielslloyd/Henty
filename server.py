@@ -3792,14 +3792,16 @@ def _build_stage1_from_newlines(raw_text, boilerplate_regions):
     """
     Build stage-1 annotated book.txt using newline-based chapter splitting.
 
-    Rules applied to non-boilerplate text:
-      - Carriage returns normalised first (\\r\\n → \\n, \\r → \\n)
-      - Single newline within a text run → joined with a space (hard-wrap removal)
-      - 2+ consecutive newlines → chapter break (self-closing <chapter/> marker)
+    Normalization pipeline applied to non-boilerplate text:
+      1. Carriage returns normalised (\\r\\n → \\n, \\r → \\n)
+      2. 3+ consecutive \\n  → chapter break  (2+ blank lines = major section boundary)
+      3. Within each section:
+           \\n\\n  = true paragraph break  → becomes single \\n in output
+           \\n    = hard line-wrap        → replaced with a space
 
-    Every resulting text block gets a preceding <chapter title="..."/> marker.
-    Short blocks (≤ SHORT_BLOCK_CHARS) become their own chapter title.
-    Long blocks use the first 8 words as the auto-title.
+    Each resulting text block gets a preceding <chapter title="..."/> marker.
+    Short blocks (≤ SHORT_BLOCK_CHARS chars, excluding \\n) are flagged as potential
+    section headings.
 
     Returns (content: str, block_count: int, short_count: int)
     """
@@ -3844,33 +3846,46 @@ def _build_stage1_from_newlines(raw_text, boilerplate_regions):
             result.append(f'<delete>\n{ptext}\n</delete>')
             continue
 
-        # Split on 2+ consecutive newlines → each becomes a separate block
-        raw_blocks = re.split(r'\n{2,}', ptext)
+        # ── Step 1: split on 3+ consecutive newlines → chapter boundaries ──
+        chapter_blocks = re.split(r'\n{3,}', ptext)
 
-        for raw_block in raw_blocks:
-            # Join single-newline line-wraps with a space
-            normalized = raw_block.replace('\n', ' ').strip()
-            # Collapse accidental multiple spaces
-            normalized = re.sub(r' {2,}', ' ', normalized)
-            # Skip decorative lines (only dashes, dots, asterisks, whitespace)
-            if not normalized or re.fullmatch(r'[-–—*_.=~\s]+', normalized):
+        for chap_block in chapter_blocks:
+            # ── Step 2: within each block, split on \n\n → paragraphs ──
+            para_segments = chap_block.split('\n\n')
+
+            normalized_paras = []
+            for para in para_segments:
+                # ── Step 3: join hard-wrapped lines with spaces ──
+                p = para.replace('\n', ' ').strip()
+                # Collapse accidental multiple spaces
+                p = re.sub(r' {2,}', ' ', p)
+                # Skip decorative lines (only punctuation/whitespace)
+                if p and not re.fullmatch(r'[-–—*_.=~\s]+', p):
+                    normalized_paras.append(p)
+
+            if not normalized_paras:
                 continue
 
+            # Join paragraphs with \n (double → single) per normalization rules
+            block_text = '\n'.join(normalized_paras)
+
             block_count += 1
-            is_short = len(normalized) <= SHORT_BLOCK_CHARS
+            # Use flat char count (no newlines) to judge block length
+            flat_len = len(block_text.replace('\n', ''))
+            is_short = flat_len <= SHORT_BLOCK_CHARS
             if is_short:
                 short_count += 1
 
-            # Build the chapter marker title
+            # Build chapter marker title
             if is_short:
-                title = normalized
+                title = block_text.replace('\n', ' ')
             else:
-                words = normalized.split()
+                words = block_text.replace('\n', ' ').split()
                 title = ' '.join(words[:8]) + ('…' if len(words) > 8 else '')
 
             safe_title = title.replace('"', '&quot;')
             result.append(f'<chapter title="{safe_title}"/>')
-            result.append(normalized)
+            result.append(block_text)
 
     return '\n\n'.join(result), block_count, short_count
 
