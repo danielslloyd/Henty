@@ -535,17 +535,33 @@ class GutenbergTab {
             '<span style="background:#ddd6fe;border-radius:3px;padding:0 2px">{$1|<span style="color:#7c3aed;font-weight:600">$2</span>}</span>'
         );
 
-        // Highlight new <chunk id="..."> open tags and all </chunk> tags
+        // Highlight <chunk id="HEX"> open tags — carry hex ID as data attribute for merge handles
         escaped = escaped.replace(
-            /(&lt;chunk\s+[^&]*&gt;)/g,
-            '<span style="background:#fde68a;color:#92400e;border-radius:3px;padding:0 3px;font-size:0.85em;">$1</span>'
+            /&lt;chunk\s+id="([a-f0-9]{8})"([^&]*)&gt;/g,
+            (_, hexId, rest) =>
+                `<span class="chunk-open-tag" data-hex-id="${hexId}" style="background:#fde68a;color:#92400e;border-radius:3px;padding:0 3px;font-size:0.85em;cursor:pointer;">&lt;chunk id="${hexId}"${rest}&gt;</span>`
         );
-        escaped = escaped.replace(
-            /(&lt;\/chunk&gt;)/g,
-            '<span style="background:#fde68a;color:#92400e;border-radius:3px;padding:0 3px;font-size:0.85em;">$1</span>'
-        );
+        // Highlight </chunk> close tags — annotate with preceding open-tag hex ID in sequence
+        {
+            const chunkIdSeq = [];
+            (raw.match(/<chunk\s+id="([a-f0-9]{8})"/g) || []).forEach(m => {
+                const hm = m.match(/id="([a-f0-9]{8})"/);
+                if (hm) chunkIdSeq.push(hm[1]);
+            });
+            let closeIdx = 0;
+            escaped = escaped.replace(
+                /&lt;\/chunk&gt;/g,
+                () => {
+                    const hexId = chunkIdSeq[closeIdx++] || '';
+                    return `<span class="chunk-close-tag" data-hex-id="${hexId}" style="background:#fde68a;color:#92400e;border-radius:3px;padding:0 3px;font-size:0.85em;cursor:pointer;">&lt;/chunk&gt;</span>`;
+                }
+            );
+        }
 
         editor.innerHTML = escaped;
+
+        // Attach merge-on-hover handles to chunk tags
+        this._attachChunkMergeHandlers(editor);
 
         // Restore cursor position
         this._restoreCursor(editor, cursorOffset);
@@ -570,6 +586,90 @@ class GutenbergTab {
                 return;
             }
             offset += len;
+        }
+    }
+
+    /**
+     * Attach hover merge-handles to chunk open/close tag spans.
+     * Shows a small floating button: hovering <chunk ...> offers "merge ↑ prev",
+     * hovering </chunk> offers "merge ↓ next".
+     */
+    _attachChunkMergeHandlers(editor) {
+        // Create (or reuse) a singleton popup element
+        let popup = document.getElementById('chunkMergePopup');
+        if (!popup) {
+            popup = document.createElement('div');
+            popup.id = 'chunkMergePopup';
+            popup.style.cssText = [
+                'position:fixed',
+                'background:#1e293b',
+                'color:#f1f5f9',
+                'padding:2px 8px',
+                'border-radius:4px',
+                'font-size:11px',
+                'font-family:monospace',
+                'cursor:pointer',
+                'z-index:9999',
+                'display:none',
+                'pointer-events:all',
+                'white-space:nowrap',
+                'user-select:none',
+                'box-shadow:0 2px 6px rgba(0,0,0,0.3)'
+            ].join(';');
+            document.body.appendChild(popup);
+        }
+
+        let hideTimer = null;
+        const showPopup = (hexId, direction, rect) => {
+            clearTimeout(hideTimer);
+            popup.textContent = direction === 'prev' ? '⬆ merge with prev' : '⬇ merge with next';
+            popup.dataset.hexId = hexId;
+            popup.dataset.direction = direction;
+            popup.style.display = 'block';
+            popup.style.left = rect.left + 'px';
+            popup.style.top = (rect.bottom + 2) + 'px';
+        };
+        const hidePopup = () => {
+            hideTimer = setTimeout(() => { popup.style.display = 'none'; }, 120);
+        };
+
+        editor.querySelectorAll('.chunk-open-tag, .chunk-close-tag').forEach(span => {
+            span.addEventListener('mouseenter', () => {
+                const hexId = span.dataset.hexId;
+                if (!hexId) return;
+                const direction = span.classList.contains('chunk-open-tag') ? 'prev' : 'next';
+                showPopup(hexId, direction, span.getBoundingClientRect());
+            });
+            span.addEventListener('mouseleave', hidePopup);
+        });
+
+        popup.addEventListener('mouseenter', () => clearTimeout(hideTimer));
+        popup.addEventListener('mouseleave', hidePopup);
+        popup.addEventListener('click', async () => {
+            const hexId = popup.dataset.hexId;
+            const direction = popup.dataset.direction;
+            popup.style.display = 'none';
+            if (!hexId) return;
+            await this._mergeChunk(hexId, direction);
+        });
+    }
+
+    async _mergeChunk(hexId, direction) {
+        try {
+            const resp = await fetch(`${SERVER_URL}/api/project/merge-chunk`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', 'X-API-Key': API_KEY },
+                body: JSON.stringify({ hex_id: hexId, direction })
+            });
+            const result = await resp.json();
+            if (!resp.ok || result.error) {
+                showToast('Merge failed: ' + (result.error || 'Unknown error'), 'error');
+                return;
+            }
+            await this.loadMarkdown();
+            showToast('Chunks merged', 'success');
+        } catch (e) {
+            showToast('Error merging chunks: ' + e.message, 'error');
         }
     }
 
@@ -1420,14 +1520,38 @@ class GutenbergTab {
 
         console.log('[GUTENBERG] Loading URL:', url);
 
+        // ── Step 1: scan newline distribution ──────────────────────────────
+        let scanResult;
+        try {
+            const scanResp = await fetch(`${SERVER_URL}/api/project/add-gutenberg-url`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', 'X-API-Key': API_KEY },
+                body: JSON.stringify({ url, scan_only: true })
+            });
+            if (!scanResp.ok) {
+                const err = await scanResp.json();
+                throw new Error(err.error || 'Scan failed');
+            }
+            scanResult = await scanResp.json();
+        } catch (error) {
+            console.error('Error scanning Gutenberg text:', error);
+            alert('Error scanning Gutenberg text: ' + error.message);
+            return;
+        }
+
+        // ── Step 2: show newline-rules dialog ──────────────────────────────
+        const rules = await this._showNewlineRulesDialog(
+            scanResult.newline_distribution,
+            scanResult.default_rules
+        );
+        if (rules === null) return;  // user cancelled
+
+        // ── Step 3: process with chosen rules ─────────────────────────────
         try {
             const response = await fetch(`${SERVER_URL}/api/project/add-gutenberg-url`, {
                 method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                    'X-API-Key': API_KEY
-                },
-                body: JSON.stringify({ url })
+                headers: { 'Content-Type': 'application/json', 'X-API-Key': API_KEY },
+                body: JSON.stringify({ url, newline_rules: rules })
             });
 
             console.log('[GUTENBERG] Response status:', response.status);
@@ -1461,6 +1585,103 @@ class GutenbergTab {
             console.error('Error loading Gutenberg text:', error);
             alert('Error loading Gutenberg text: ' + error.message);
         }
+    }
+
+    /**
+     * Show a modal asking the user how to treat each newline count ≥2.
+     * Returns a rules object { "2": action, "3": action, ... } or null if cancelled.
+     */
+    _showNewlineRulesDialog(distribution, defaultRules) {
+        return new Promise(resolve => {
+            // Build sorted list of distinct counts present in the text
+            const allKeys = Object.keys(distribution).sort((a, b) => {
+                const na = a.endsWith('+') ? 999 : parseInt(a);
+                const nb = b.endsWith('+') ? 999 : parseInt(b);
+                return na - nb;
+            });
+
+            const ACTIONS = [
+                { value: 'chapter',   label: 'Chapter break' },
+                { value: 'paragraph', label: 'Paragraph separator' },
+                { value: 'trailing',  label: 'Trailing space after chapter' },
+                { value: 'ignore',    label: 'Ignore (remove)' },
+            ];
+
+            const getDefault = key => {
+                if (key in defaultRules) return defaultRules[key];
+                const n = parseInt(key);
+                if (!isNaN(n)) {
+                    for (let k = n; k >= 2; k--) {
+                        if (String(k) in defaultRules) return defaultRules[String(k)];
+                    }
+                }
+                return defaultRules['4+'] || 'chapter';
+            };
+
+            // Build rows
+            const rows = allKeys.map(key => {
+                const count = distribution[key];
+                const def = getDefault(key);
+                const radioName = `nl_${key}`;
+                const radios = ACTIONS.map(a =>
+                    `<label style="display:inline-flex;align-items:center;gap:4px;margin-right:10px;cursor:pointer;">
+                        <input type="radio" name="${radioName}" value="${a.value}"${a.value === def ? ' checked' : ''}>
+                        ${a.label}
+                    </label>`
+                ).join('');
+                const countStr = count.toLocaleString();
+                return `<tr style="border-bottom:1px solid #e2e8f0;">
+                    <td style="padding:8px 12px;white-space:nowrap;font-family:monospace;font-weight:600;color:#92400e;">
+                        ${key} newline${key === '1' ? '' : 's'}
+                        <span style="font-weight:normal;color:#64748b;font-family:sans-serif;font-size:11px;"> (${countStr}×)</span>
+                    </td>
+                    <td style="padding:8px 12px;">${radios}</td>
+                </tr>`;
+            }).join('');
+
+            const modal = document.createElement('div');
+            modal.style.cssText = 'position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.6);z-index:10000;display:flex;align-items:center;justify-content:center;';
+            modal.innerHTML = `
+                <div style="background:white;border-radius:12px;padding:28px;max-width:680px;width:95%;max-height:90vh;overflow-y:auto;box-shadow:0 20px 60px rgba(0,0,0,0.4);">
+                    <h3 style="margin:0 0 6px;color:#1e293b;font-size:17px;">Newline handling</h3>
+                    <p style="margin:0 0 16px;color:#64748b;font-size:13px;">
+                        Choose what to do with each run of consecutive blank lines found in this text.
+                        Single \\n (hard line-wrap) is always converted to a space.
+                    </p>
+                    <table style="width:100%;border-collapse:collapse;font-size:13px;">
+                        <thead>
+                            <tr style="background:#f8fafc;">
+                                <th style="padding:6px 12px;text-align:left;color:#475569;font-size:12px;">Blank lines</th>
+                                <th style="padding:6px 12px;text-align:left;color:#475569;font-size:12px;">Treatment</th>
+                            </tr>
+                        </thead>
+                        <tbody>${rows || '<tr><td colspan="2" style="padding:12px;color:#94a3b8;">No multi-line runs found.</td></tr>'}</tbody>
+                    </table>
+                    <div style="margin-top:20px;display:flex;justify-content:flex-end;gap:10px;">
+                        <button id="nlCancel" style="padding:8px 18px;border:1px solid #cbd5e1;border-radius:6px;background:white;cursor:pointer;font-size:14px;">Cancel</button>
+                        <button id="nlProcess" style="padding:8px 18px;border:none;border-radius:6px;background:#1e293b;color:white;cursor:pointer;font-size:14px;font-weight:600;">Process book</button>
+                    </div>
+                </div>
+            `;
+
+            document.body.appendChild(modal);
+
+            modal.querySelector('#nlCancel').onclick = () => {
+                modal.remove();
+                resolve(null);
+            };
+            modal.querySelector('#nlProcess').onclick = () => {
+                const result = {};
+                allKeys.forEach(key => {
+                    const checked = modal.querySelector(`input[name="nl_${key}"]:checked`);
+                    if (checked) result[key] = checked.value;
+                });
+                modal.remove();
+                resolve(result);
+            };
+            // Click outside = cancel
+            modal.onclick = e => { if (e.target === modal) { modal.remove(); resolve(null); } };
+        });
     }
 
 }

@@ -2183,6 +2183,7 @@
 
                 // Update current project
                 currentProjectPath = projectPath;
+                window.currentProjectPath = projectPath;
 
                 // Reload dropdown (this removes "Select a project" option when a project is selected)
                 await loadProjectsDropdown();
@@ -2211,6 +2212,7 @@
                 showToast('Failed to load project: ' + error.message, 'error');
                 hideMainContent();
                 currentProjectPath = null;
+                window.currentProjectPath = null;
                 // Reload dropdown to show "Select a project" option again
                 await loadProjectsDropdown();
                 // Reset title
@@ -2228,6 +2230,7 @@
             document.getElementById('projectPrompt').style.display = 'flex';
             document.getElementById('mainContent').classList.add('hidden');
             currentProjectPath = null;
+            window.currentProjectPath = null;
             // Reload dropdown to show "Select a project" option again
             await loadProjectsDropdown();
             // Reset page title
