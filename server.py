@@ -3788,23 +3788,57 @@ def process_gutenberg():
 SHORT_BLOCK_CHARS = 120  # blocks ≤ this many chars are flagged as potential headings
 
 
-def _build_stage1_from_newlines(raw_text, boilerplate_regions):
+DEFAULT_NEWLINE_RULES = {'2': 'paragraph', '3': 'chapter', '4+': 'chapter'}
+
+
+def _scan_newline_distribution(raw_text):
+    """
+    Return a dict of {str(count): occurrence_count} for all runs of 2+ newlines.
+    Runs longer than 9 are grouped under '9+'.
+    """
+    dist = {}
+    for m in re.finditer(r'\n{2,}', raw_text):
+        n = len(m.group())
+        key = str(n) if n <= 9 else '9+'
+        dist[key] = dist.get(key, 0) + 1
+    return dist
+
+
+def _get_newline_action(n_newlines, rules):
+    """
+    Look up the action for a run of n_newlines consecutive newlines.
+    Actions: 'chapter' | 'paragraph' | 'trailing' | 'ignore'
+    """
+    key = str(n_newlines)
+    if key in rules:
+        return rules[key]
+    # Try descending specific keys first, then fall back to '4+'
+    for k in sorted((k for k in rules if k.isdigit()), key=int, reverse=True):
+        if n_newlines >= int(k):
+            return rules[k]
+    return rules.get('4+', 'chapter')
+
+
+def _build_stage1_from_newlines(raw_text, boilerplate_regions, newline_rules=None):
     """
     Build stage-1 annotated book.txt using newline-based chapter splitting.
 
     Normalization pipeline applied to non-boilerplate text:
       1. Carriage returns normalised (\\r\\n → \\n, \\r → \\n)
-      2. 3+ consecutive \\n  → chapter break  (2+ blank lines = major section boundary)
-      3. Within each section:
-           \\n\\n  = true paragraph break  → becomes single \\n in output
-           \\n    = hard line-wrap        → replaced with a space
+      2. Each run of 2+ consecutive \\n dispatched via newline_rules:
+           'chapter'   → split into a new chapter block
+           'paragraph' → kept as single \\n (paragraph separator) within the block
+           'trailing'  → appended as trailing \\n to the preceding block; no new block
+           'ignore'    → removed entirely
+      3. Within each paragraph segment, single \\n (hard line-wrap) → space
 
     Each resulting text block gets a preceding <chapter title="..."/> marker.
-    Short blocks (≤ SHORT_BLOCK_CHARS chars, excluding \\n) are flagged as potential
-    section headings.
+    Short blocks (≤ SHORT_BLOCK_CHARS chars) are flagged as potential section headings.
 
     Returns (content: str, block_count: int, short_count: int)
     """
+    rules = {**DEFAULT_NEWLINE_RULES, **(newline_rules or {})}
+
     # Normalise line endings
     raw_text = raw_text.replace('\r\n', '\n').replace('\r', '\n')
 
@@ -3841,51 +3875,71 @@ def _build_stage1_from_newlines(raw_text, boilerplate_regions):
     block_count = 0
     short_count = 0
 
+    def _normalize_para(para):
+        """Join hard-wrapped single newlines with spaces; skip decorative lines."""
+        p = para.replace('\n', ' ').strip()
+        p = re.sub(r' {2,}', ' ', p)
+        if not p or re.fullmatch(r'[-–—*_.=~\s]+', p):
+            return None
+        return p
+
+    def _emit_block(paras, trailing=''):
+        nonlocal block_count, short_count
+        if not paras:
+            return
+        block_text = '\n'.join(paras) + trailing
+        block_text = block_text.rstrip('\n')
+        if not block_text.strip():
+            return
+        block_count += 1
+        flat_len = len(block_text.replace('\n', ''))
+        is_short = flat_len <= SHORT_BLOCK_CHARS
+        if is_short:
+            short_count += 1
+        if is_short:
+            title = block_text.replace('\n', ' ')
+        else:
+            words = block_text.replace('\n', ' ').split()
+            title = ' '.join(words[:8]) + ('…' if len(words) > 8 else '')
+        safe_title = title.replace('"', '&quot;')
+        result.append(f'<chapter title="{safe_title}"/>')
+        result.append(block_text)
+
     for ptype, ptext in pieces:
         if ptype == 'bp':
             result.append(f'<delete>\n{ptext}\n</delete>')
             continue
 
-        # ── Step 1: split on 3+ consecutive newlines → chapter boundaries ──
-        chapter_blocks = re.split(r'\n{3,}', ptext)
+        # Tokenise: alternate [text_segment, newline_run, text_segment, ...]
+        tokens = re.split(r'(\n{2,})', ptext)
 
-        for chap_block in chapter_blocks:
-            # ── Step 2: within each block, split on \n\n → paragraphs ──
-            para_segments = chap_block.split('\n\n')
+        current_paras = []  # normalized paragraphs in the current block
+        trailing = ''       # trailing newlines to append to current block
 
-            normalized_paras = []
-            for para in para_segments:
-                # ── Step 3: join hard-wrapped lines with spaces ──
-                p = para.replace('\n', ' ').strip()
-                # Collapse accidental multiple spaces
-                p = re.sub(r' {2,}', ' ', p)
-                # Skip decorative lines (only punctuation/whitespace)
-                if p and not re.fullmatch(r'[-–—*_.=~\s]+', p):
-                    normalized_paras.append(p)
-
-            if not normalized_paras:
-                continue
-
-            # Join paragraphs with \n (double → single) per normalization rules
-            block_text = '\n'.join(normalized_paras)
-
-            block_count += 1
-            # Use flat char count (no newlines) to judge block length
-            flat_len = len(block_text.replace('\n', ''))
-            is_short = flat_len <= SHORT_BLOCK_CHARS
-            if is_short:
-                short_count += 1
-
-            # Build chapter marker title
-            if is_short:
-                title = block_text.replace('\n', ' ')
+        for idx, tok in enumerate(tokens):
+            if idx % 2 == 0:
+                # Text segment — apply single-newline → space
+                p = _normalize_para(tok)
+                if p:
+                    current_paras.append(p)
+                    trailing = ''  # reset trailing once we have content after it
             else:
-                words = block_text.replace('\n', ' ').split()
-                title = ' '.join(words[:8]) + ('…' if len(words) > 8 else '')
+                # Newline run
+                action = _get_newline_action(len(tok), rules)
+                if action == 'chapter':
+                    _emit_block(current_paras, trailing)
+                    current_paras = []
+                    trailing = ''
+                elif action == 'paragraph':
+                    # Paragraph separator: the next text goes in the same block
+                    pass  # paragraphs joined by \n when emitted
+                elif action == 'trailing':
+                    # Append a blank line to the current block's last paragraph
+                    trailing = '\n'
+                elif action == 'ignore':
+                    pass  # discard
 
-            safe_title = title.replace('"', '&quot;')
-            result.append(f'<chapter title="{safe_title}"/>')
-            result.append(block_text)
+        _emit_block(current_paras, trailing)
 
     return '\n\n'.join(result), block_count, short_count
 
@@ -3909,6 +3963,8 @@ def add_gutenberg_url_to_project():
 
         data = request.json
         url = data.get('url', '').strip()
+        scan_only = bool(data.get('scan_only', False))
+        newline_rules = data.get('newline_rules', None)  # dict or None → uses defaults
         if not url:
             return jsonify({'error': 'url is required'}), 400
 
@@ -3979,11 +4035,23 @@ def add_gutenberg_url_to_project():
         except Exception as e:
             print(f"[STAGE1] Boilerplate detection failed: {e}")
 
+        # --- Scan newline distribution (always done; cheap) ---
+        newline_distribution = _scan_newline_distribution(raw_content)
+        print(f"[STAGE1] Newline distribution: {newline_distribution}")
+
+        # --- Scan-only mode: return distribution without creating book.txt ---
+        if scan_only:
+            return jsonify({
+                'scan_only': True,
+                'title': title,
+                'url': url,
+                'newline_distribution': newline_distribution,
+                'default_rules': DEFAULT_NEWLINE_RULES,
+            })
+
         # --- Build stage-1 annotated book.txt using newline-based splitting ---
-        # Single newlines (hard-wrap) → spaces; 2+ newlines → chapter break.
-        # Short text blocks (≤ {SHORT_BLOCK_CHARS} chars) are potential headings.
         book_content, block_count, short_count = _build_stage1_from_newlines(
-            raw_content, boilerplate
+            raw_content, boilerplate, newline_rules=newline_rules
         )
         debug_info['chapter_source'] = 'newline-split'
         debug_info['block_count'] = block_count
@@ -4017,6 +4085,8 @@ def add_gutenberg_url_to_project():
             'chapter_marker_count': block_count,
             'short_block_count': short_count,
             'boilerplate_region_count': len(boilerplate),
+            'newline_distribution': newline_distribution,
+            'newline_rules_applied': {**DEFAULT_NEWLINE_RULES, **(newline_rules or {})},
             'debug': {**debug_info, 'epub_url': gutenberg_urls['gutenberg_epub_url']},
         })
 
@@ -4595,6 +4665,82 @@ def split_chunk():
             json.dump(converter.current_project_metadata, f, indent=2, ensure_ascii=False)
 
         return jsonify({'success': True, 'new_ids': [new_id_a, new_id_b]})
+
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/project/merge-chunk', methods=['POST'])
+@auth_manager.require_api_key
+def merge_chunk():
+    """
+    Merge a chunk with its neighbour.
+    Body: { "hex_id": "a3f2c1b8", "direction": "prev" | "next" }
+    Finds the chunk and the adjacent chunk (in direction), joins their text with
+    a single newline, assigns a new hex ID, and writes book.txt back.
+    """
+    try:
+        if converter.current_project_path is None:
+            return jsonify({'error': 'No project loaded'}), 400
+
+        data = request.get_json() or {}
+        hex_id = data.get('hex_id', '')
+        direction = data.get('direction', 'prev')
+
+        if not hex_id:
+            return jsonify({'error': 'hex_id is required'}), 400
+        if direction not in ('prev', 'next'):
+            return jsonify({'error': 'direction must be "prev" or "next"'}), 400
+
+        book_file_path = os.path.join(converter.current_project_path, 'book.txt')
+        if not os.path.exists(book_file_path):
+            return jsonify({'error': 'No book.txt found'}), 400
+
+        with open(book_file_path, 'r', encoding='utf-8') as f:
+            content = f.read()
+
+        # Find all chunks in order
+        chunk_re = re.compile(r'<chunk\s+id="([a-f0-9]{8})"[^>]*>([\s\S]*?)</chunk>')
+        matches = list(chunk_re.finditer(content))
+        ids = [m.group(1) for m in matches]
+
+        if hex_id not in ids:
+            return jsonify({'error': f'Chunk {hex_id} not found'}), 404
+
+        idx = ids.index(hex_id)
+
+        if direction == 'prev':
+            if idx == 0:
+                return jsonify({'error': 'No previous chunk to merge with'}), 400
+            a_match, b_match = matches[idx - 1], matches[idx]
+        else:
+            if idx == len(matches) - 1:
+                return jsonify({'error': 'No next chunk to merge with'}), 400
+            a_match, b_match = matches[idx], matches[idx + 1]
+
+        text_a = a_match.group(2).strip()
+        text_b = b_match.group(2).strip()
+        merged_text = text_a + '\n' + text_b
+        new_id = uuid.uuid4().hex[:8]
+        replacement = f'<chunk id="{new_id}">{merged_text}</chunk>'
+
+        # Replace from the start of a_match to the end of b_match
+        new_content = content[:a_match.start()] + replacement + content[b_match.end():]
+
+        with open(book_file_path, 'w', encoding='utf-8') as f:
+            f.write(new_content)
+
+        # Re-parse to update project.json
+        existing_chapters = converter.current_project_metadata.get('chapters', [])
+        new_chapters = parse_book_file(new_content, existing_chapters)
+        converter.current_project_metadata['chapters'] = new_chapters
+        converter.current_project_metadata['last_modified'] = datetime.now().isoformat()
+
+        project_file = os.path.join(converter.current_project_path, 'project.json')
+        with open(project_file, 'w', encoding='utf-8') as f:
+            json.dump(converter.current_project_metadata, f, indent=2, ensure_ascii=False)
+
+        return jsonify({'success': True, 'new_id': new_id})
 
     except Exception as e:
         return jsonify({'error': str(e)}), 500

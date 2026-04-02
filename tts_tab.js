@@ -1125,7 +1125,7 @@ class TTSTab {
                 chapterId: this.currentChapter.id,
                 chunkText: chunk.text,
                 temperature: this.projectDefaults.temperature,
-                projectPath: currentProjectPath
+                projectPath: window.currentProjectPath
             });
             this.updateGenerationStatusToast();
             return;
@@ -1601,13 +1601,10 @@ class TTSTab {
     async generateAllChunks() {
         const chunks = this.currentChapter.chunks || [];
 
-        // Generate all chunks in parallel using Promise.all() for better performance
-        try {
-            await Promise.all(chunks.map(chunk => this.generateChunkAudio(chunk.id)));
-            showToast('All chunks generated successfully!', 'success');
-        } catch (error) {
-            console.error('Error generating chunks:', error);
-            showToast('Some chunks failed to generate. Check console for details.', 'error');
+        // Kick off up to maxParallelGenerations immediately; the rest will be queued
+        // and processed automatically as each generation completes.
+        for (const chunk of chunks) {
+            this.generateChunkAudio(chunk.id);
         }
     }
 
