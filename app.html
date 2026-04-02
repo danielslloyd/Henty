@@ -554,6 +554,26 @@
 
         /* Text paragraphs */
         .se-text-block { margin: 0; }
+        .se-short-block {
+            background: #fffbeb;
+            border-left: 3px solid #f59e0b;
+            padding-left: 8px;
+            border-radius: 0 4px 4px 0;
+            margin: 2px 0;
+        }
+        .se-short-badge {
+            display: inline-block;
+            font-size: 9px;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: .05em;
+            color: #92400e;
+            background: #fde68a;
+            border-radius: 4px;
+            padding: 1px 5px;
+            margin-bottom: 3px;
+            cursor: help;
+        }
         .se-paragraph {
             margin: 0;
             padding: 3px 0;
@@ -1714,12 +1734,20 @@
 
                 <!-- ─── Stage-1 toolbar (structure editing) ─── -->
                 <div id="stage1Toolbar" style="display:none; padding: 10px 15px; background:#eff6ff; border-bottom:1px solid #bfdbfe; flex-shrink:0;">
-                    <div style="font-size:13px; color:#1e40af; font-weight:600; margin-bottom:6px;">
-                        Structure Editing Mode
-                    </div>
-                    <div style="font-size:12px; color:#3730a3; line-height:1.5;">
-                        <strong>Red blocks</strong> — boilerplate suggested for deletion (toggle to keep).<br>
-                        <strong>Blue bars</strong> — chapter breaks. Drag ⠿ handle to move. Click × to remove. Click between paragraphs to add a new one.
+                    <div style="display:flex; align-items:center; gap:10px; flex-wrap:wrap;">
+                        <div style="flex:1; min-width:200px;">
+                            <div style="font-size:13px; color:#1e40af; font-weight:600; margin-bottom:4px;">Structure Editing Mode</div>
+                            <div style="font-size:12px; color:#3730a3; line-height:1.5;">
+                                <strong>Red</strong> — boilerplate (toggle keep/delete).&nbsp;
+                                <strong>Blue bars</strong> — chapter breaks (drag ⠿, click × to remove).&nbsp;
+                                <span style="color:#92400e;"><strong>Yellow</strong> — short blocks (likely headings, not real chapters).</span>
+                            </div>
+                        </div>
+                        <button class="pane-btn" onclick="gutenbergTab.autoCollapseHeadings()"
+                                style="background:#f59e0b; flex-shrink:0;"
+                                title="Remove breaks around short heading blocks and merge them into adjacent chapters">
+                            ⚡ Collapse Headings
+                        </button>
                     </div>
                 </div>
 
