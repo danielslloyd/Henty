@@ -1917,6 +1917,26 @@ def create_project():
 
                 print(f'[CREATE PROJECT API] Saved {len(text_content)} characters')
 
+                # Build stage-1 book.txt so the editor shows content immediately
+                try:
+                    processor_tmp = GutenbergProcessor(output_dir=project_path)
+                    boilerplate_tmp = []
+                    try:
+                        boilerplate_tmp = processor_tmp.detect_boilerplate(text_content)
+                    except Exception:
+                        pass
+                    book_content, block_count, short_count = _build_stage1_from_newlines(
+                        text_content, boilerplate_tmp
+                    )
+                    book_file_path = os.path.join(project_path, 'book.txt')
+                    with open(book_file_path, 'w', encoding='utf-8') as f:
+                        f.write(book_content)
+                    project_metadata['book_file_stage'] = 1
+                    project_metadata['original_filename'] = source_filename
+                    print(f'[CREATE PROJECT API] stage-1 book.txt written: {block_count} blocks')
+                except Exception as e:
+                    print(f'[CREATE PROJECT API] book.txt build failed (non-fatal): {e}')
+
         # Update converter metadata reference
         converter.current_project_metadata = project_metadata
 
