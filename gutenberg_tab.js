@@ -468,7 +468,9 @@ class GutenbergTab {
     }
 
     /**
-     * Set up input listeners for live highlighting and auto-save
+     * Set up input listeners for live highlighting and auto-save.
+     * Also tracks the last selection inside the editor so pronunciation/tag
+     * buttons can restore it after stealing focus.
      */
     _setupEditorListeners() {
         const editor = document.getElementById('pseudoXmlEditor');
@@ -480,6 +482,32 @@ class GutenbergTab {
             this._liveHighlight(editor);
             this._scheduleAutoSave(editor);
         });
+
+        // Save the last selection range inside this editor so insertion
+        // buttons can restore it after the button click steals focus.
+        document.addEventListener('selectionchange', () => {
+            const sel = window.getSelection();
+            if (!sel || !sel.rangeCount) return;
+            const r = sel.getRangeAt(0);
+            if (editor.contains(r.commonAncestorContainer)) {
+                this._savedRange = r.cloneRange();
+            }
+        });
+    }
+
+    /**
+     * Restore the last saved editor selection and focus the editor.
+     * Call this before any programmatic text insertion.
+     */
+    _restoreEditorSelection() {
+        const editor = document.getElementById('pseudoXmlEditor');
+        if (!editor) return;
+        editor.focus();
+        if (this._savedRange) {
+            const sel = window.getSelection();
+            sel.removeAllRanges();
+            sel.addRange(this._savedRange);
+        }
     }
 
     /**
@@ -1069,15 +1097,15 @@ class GutenbergTab {
             showToast('Confirm the chapter structure first before adding pronunciation', 'error');
             return;
         }
-        const selection = window.getSelection();
-        const selectedText = selection ? selection.toString() : '';
+        // Capture selected text BEFORE restoring selection (in case saved range has it)
+        const selectedText = this._savedRange ? this._savedRange.toString() : '';
         if (!selectedText) {
             showToast('Select the word or phrase to annotate first, then click Pronunciation', 'error');
             return;
         }
+        this._restoreEditorSelection();
         // Default: spoken text = display text (user edits spoken part after insertion)
         document.execCommand('insertText', false, `{${selectedText}|${selectedText}}`);
-        document.getElementById('pseudoXmlEditor').focus();
     }
 
     // Insert a paralinguistic tag at cursor: {|[tag]}
@@ -1086,9 +1114,8 @@ class GutenbergTab {
             showToast('Switch to Markup View to insert paralinguistic tags', 'error');
             return;
         }
-        const editor = document.getElementById('pseudoXmlEditor');
+        this._restoreEditorSelection();
         document.execCommand('insertText', false, `{|[${tag}]}`);
-        editor.focus();
     }
 
     // Toggle between clean view and markup view
@@ -1321,9 +1348,28 @@ class GutenbergTab {
         // Pane subtitle
         const subtitle = document.getElementById('markdownPaneSubtitle');
         if (subtitle) {
-            const labels = { 0: '', 1: 'Step 1 — Review structure', 2: 'Step 2 — Run Chunking', 3: 'Step 3 — Pronunciation & TTS' };
+            const labels = { 0: '', 1: 'Step 1 — Review structure', 2: 'Step 2 — Chunking…', 3: 'Step 3 — Pronunciation & TTS' };
             subtitle.textContent = labels[Math.min(stage, 3)] || '';
         }
+
+        // Gate TTS pane on chunking completion (stage ≥ 3)
+        const ttsToggle = document.getElementById('toggle-tts');
+        const ttsToggleItem = ttsToggle?.closest('.toggle-item');
+        if (ttsToggle && ttsToggleItem) {
+            if (stage < 3) {
+                ttsToggle.checked = false;
+                ttsToggle.disabled = true;
+                ttsToggleItem.style.opacity = '0.4';
+                ttsToggleItem.style.pointerEvents = 'none';
+                ttsToggleItem.title = 'Available after chunking';
+            } else {
+                ttsToggle.disabled = false;
+                ttsToggleItem.style.opacity = '';
+                ttsToggleItem.style.pointerEvents = '';
+                ttsToggleItem.title = '';
+            }
+        }
+        if (typeof updatePaneVisibility === 'function') updatePaneVisibility();
     }
 
     /** Auto-collapse heading blocks in the structure editor */
@@ -1389,13 +1435,28 @@ class GutenbergTab {
                 return;
             }
 
-            // Reload with the new stage-2 content
+            // Stage 2 is a transient internal state — immediately run chunking
             this._bookFileStage = 2;
+            this._updateStageToolbar();
+            showToast(`Structure confirmed — running chunking…`, 'info');
+
+            const chunkResp = await fetch(`${SERVER_URL}/api/project/tag-chunks`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', 'X-API-Key': API_KEY }
+            });
+            const chunkResult = await chunkResp.json();
+            if (!chunkResp.ok || chunkResult.error) {
+                showToast('Chunking failed: ' + (chunkResult.error || 'Unknown error'), 'error');
+                return;
+            }
+
+            this._bookFileStage = 3;
+            this._textUnlocked = false;
             await this.loadMarkdown();
             if (typeof ttsTab !== 'undefined' && ttsTab.refreshChapters) {
                 await ttsTab.refreshChapters();
             }
-            showToast(`Structure confirmed — ${result.chapter_count} chapters created. Now run "Tag Chunks" to prepare for TTS.`, 'success');
+            showToast(`Done — ${chunkResult.chapter_count} chapters chunked and ready for TTS.`, 'success');
         } catch (e) {
             showToast('Error confirming structure: ' + e.message, 'error');
         }

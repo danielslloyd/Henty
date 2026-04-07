@@ -1687,19 +1687,18 @@
                             title="Load a book from Project Gutenberg">
                         Load Book
                     </button>
-                    <!-- Stage 1: Confirm structure -->
+                    <!-- Stage 1: Confirm structure (auto-runs chunking) -->
                     <button class="pane-btn" id="confirmStructureBtn"
                             onclick="gutenbergTab.confirmStructure()"
                             style="display:none; background:#059669; font-weight:600;"
-                            title="Confirm chapter structure and advance to chunking">
-                        ✓ Lock Chapters
+                            title="Confirm chapter structure — chunking runs automatically">
+                        ✓ Lock &amp; Chunk
                     </button>
-                    <!-- Stage 2: Run chunking -->
+                    <!-- Stage 2: transient spinner shown by subtitle; button hidden -->
                     <button class="pane-btn" id="runChunkingBtn"
-                            onclick="gutenbergTab.runChunking()"
-                            style="display:none; background:#7c3aed; font-weight:600;"
-                            title="Split chapters into TTS chunks">
-                        ▶ Run Chunking
+                            style="display:none;"
+                            disabled>
+                        Chunking…
                     </button>
                     <!-- Stage 3: Edit text + save/undo -->
                     <button class="pane-btn" id="editTextBtn"
@@ -1757,7 +1756,7 @@
                         Chapters confirmed — ready to chunk
                     </div>
                     <div style="font-size:12px; color:#15803d; line-height:1.5;">
-                        Review the chapter text, then click <strong>Run Chunking</strong> to split into TTS segments.
+                        Chunking in progress…
                     </div>
                 </div>
 
