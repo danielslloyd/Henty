@@ -1700,26 +1700,7 @@
                             disabled>
                         Chunking…
                     </button>
-                    <!-- Stage 3: Edit text + save/undo -->
-                    <button class="pane-btn" id="editTextBtn"
-                            onclick="gutenbergTab.toggleTextLock()"
-                            style="display:none; background:#f59e0b; font-weight:600;"
-                            title="Unlock editor to edit underlying text">
-                        Edit Text
-                    </button>
-                    <button class="pane-btn" id="saveBtn"
-                            onclick="gutenbergTab.saveCode()"
-                            style="display:none;"
-                            title="Save">
-                        Save
-                    </button>
-                    <button class="pane-btn" id="undoBtn"
-                            onclick="gutenbergTab.undo()"
-                            disabled
-                            style="display:none; background:#64748b;"
-                            title="Nothing to undo">
-                        Undo
-                    </button>
+                    <!-- editTextBtn/saveBtn/undoBtn are now in stage3Toolbar -->
                 </div>
             </div>
             <div class="pane-content" style="padding: 0; display: flex; flex-direction: column; overflow: hidden;">
@@ -1761,14 +1742,24 @@
                 </div>
 
                 <!-- ─── Stage-3 toolbar (pronunciation & annotation) ─── -->
-                <div id="stage3Toolbar" style="display:none; padding: 8px 15px; background:#fafafa; border-bottom:1px solid #e2e8f0; flex-shrink:0;">
-                    <span id="textLockBadge" style="font-size:11px; font-weight:700; padding:2px 7px; border-radius:10px; background:#fef9c3; color:#854d0e; margin-right:8px;">LOCKED</span>
-                    <button class="xml-btn" onclick="gutenbergTab.insertPronunciation()"
+                <div id="stage3Toolbar" style="display:none; padding: 6px 12px; background:#fafafa; border-bottom:1px solid #e2e8f0; flex-shrink:0; display:flex; align-items:center; gap:6px; flex-wrap:wrap;">
+                    <!-- Lock toggle -->
+                    <button class="xml-btn" id="editTextBtn"
+                            onclick="gutenbergTab.toggleTextLock()"
+                            style="background:#e2e8f0; color:#475569; font-weight:600;"
+                            title="Unlock the editor to edit underlying text">
+                        🔒 Locked
+                    </button>
+                    <div style="width:1px; height:20px; background:#e2e8f0; margin:0 2px;"></div>
+                    <!-- Editing buttons (hidden when locked) -->
+                    <button class="xml-btn" id="insertPronunciationBtn"
+                            onclick="gutenbergTab.insertPronunciation()"
                             style="background:#7c3aed;color:white;"
                             title="Select a word first, then click to add pronunciation annotation">
                         + Pronunciation
                     </button>
-                    <select onchange="if(this.value) { gutenbergTab.insertParalinguisticTag(this.value); this.value=''; }"
+                    <select id="paralinguisticSelect"
+                            onchange="if(this.value) { gutenbergTab.insertParalinguisticTag(this.value); this.value=''; }"
                             style="padding: 4px 8px; border-radius: 4px; border: 1px solid #a78bfa; font-size: 12px; background: #ede9fe; cursor: pointer;">
                         <option value="">+ Paralinguistic Tag</option>
                         <option value="laugh">[laugh]</option>
@@ -1781,42 +1772,29 @@
                         <option value="clear throat">[clear throat]</option>
                         <option value="shush">[shush]</option>
                     </select>
-                    <button class="xml-btn" onclick="gutenbergTab.splitChunkAtCursor()"
+                    <button class="xml-btn" id="splitChunkBtn"
+                            onclick="gutenbergTab.splitChunkAtCursor()"
                             title="Split the chunk at cursor position">
-                        ✂ Split Chunk
+                        ✂ Split
+                    </button>
+                    <div style="width:1px; height:20px; background:#e2e8f0; margin:0 2px;"></div>
+                    <!-- Save / Undo (always visible at stage 3) -->
+                    <button class="xml-btn" id="saveBtn"
+                            onclick="gutenbergTab.saveCode()"
+                            title="Save">
+                        Save
+                    </button>
+                    <button class="xml-btn" id="undoBtn"
+                            onclick="gutenbergTab.undo()"
+                            disabled
+                            title="Nothing to undo">
+                        Undo
                     </button>
                     <span style="margin-left: auto;">
                         <button class="xml-btn" id="cleanViewToggle" onclick="gutenbergTab.toggleCleanView()" title="Toggle between clean text and markup view">Clean View</button>
                     </span>
                 </div>
 
-                <!-- ─── Stage-2 markdown toolbar (text editing) ─── -->
-                <div id="markdownToolbar" class="xml-tips" style="display:none; padding: 10px 15px; flex-shrink:0;">
-                    <strong>Editing:</strong>
-                    <button class="xml-btn" onclick="gutenbergTab.insertChapterBreak()">+ Chapter</button>
-                    <button class="xml-btn" onclick="gutenbergTab.insertPause()">+ Pause</button>
-                    <button class="xml-btn" onclick="gutenbergTab.insertPronunciation()"
-                            style="background:#7c3aed;color:white;"
-                            title="Select a word first, then click to add pronunciation annotation">
-                        + Pronunciation
-                    </button>
-                    <select onchange="if(this.value) { gutenbergTab.insertParalinguisticTag(this.value); this.value=''; }"
-                            style="padding: 4px 8px; border-radius: 4px; border: 1px solid #a78bfa; font-size: 12px; background: #ede9fe; cursor: pointer;">
-                        <option value="">+ Paralinguistic Tag</option>
-                        <option value="laugh">[laugh]</option>
-                        <option value="chuckle">[chuckle]</option>
-                        <option value="cough">[cough]</option>
-                        <option value="sigh">[sigh]</option>
-                        <option value="gasp">[gasp]</option>
-                        <option value="groan">[groan]</option>
-                        <option value="sniff">[sniff]</option>
-                        <option value="clear throat">[clear throat]</option>
-                        <option value="shush">[shush]</option>
-                    </select>
-                    <span style="margin-left: auto;">
-                        <button class="xml-btn" id="cleanViewToggle2" onclick="gutenbergTab.toggleCleanView()" title="Toggle between clean text and markup view">Clean View</button>
-                    </span>
-                </div>
 
                 <!-- ─── Stage-1 structure editor ─── -->
                 <div id="structureEditorContainer" style="display:none; flex:1; overflow-y:auto; padding:15px; font-family: Georgia, serif; font-size: 14px; line-height:1.7;"></div>
@@ -2312,6 +2290,9 @@
             // Build request body
             const requestBody = { name };
 
+            // Capture URL now (before modal closes)
+            let gutenbergUrlForAutoLoad = null;
+
             // Handle text source
             if (sourceType === 'url') {
                 const url = document.getElementById('gutenbergUrl').value.trim();
@@ -2319,11 +2300,10 @@
                     errorDiv.textContent = 'Please enter a Gutenberg URL';
                     return;
                 }
-                requestBody.text_source = {
-                    type: 'url',
-                    url: url
-                };
-                console.log('[CREATE PROJECT] Text Source URL:', url);
+                // For URL source: just record the URL; after project creation we'll
+                // auto-trigger the full Gutenberg load flow (scan + rules dialog).
+                gutenbergUrlForAutoLoad = url;
+                console.log('[CREATE PROJECT] Text Source URL (will auto-load):', url);
             } else {
                 const fileInput = document.getElementById('textFile');
                 if (!fileInput.files || fileInput.files.length === 0) {
@@ -2384,7 +2364,15 @@
                     // Switch to the new project (this will set the dropdown value)
                     await switchToProject(result.project_path);
 
-                    showToast('Project created successfully!', 'success');
+                    hideLoading();
+
+                    // For URL source: trigger the full Gutenberg load flow
+                    // (scan → newline-rules dialog → process) automatically.
+                    if (gutenbergUrlForAutoLoad) {
+                        await gutenbergTab.loadGutenbergUrl(gutenbergUrlForAutoLoad);
+                    } else {
+                        showToast('Project created successfully!', 'success');
+                    }
                 } else {
                     hideLoading();
                     const errorText = await response.text();

@@ -3815,7 +3815,9 @@ def _scan_newline_distribution(raw_text):
     """
     Return a dict of {str(count): occurrence_count} for all runs of 2+ newlines.
     Runs longer than 9 are grouped under '9+'.
+    CRLF is normalised first so Gutenberg .txt files (\\r\\n) are handled correctly.
     """
+    raw_text = raw_text.replace('\r\n', '\n').replace('\r', '\n')
     dist = {}
     for m in re.finditer(r'\n{2,}', raw_text):
         n = len(m.group())
