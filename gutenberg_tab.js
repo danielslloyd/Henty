@@ -916,18 +916,44 @@ class GutenbergTab {
 
         if (this.cleanViewActive) {
             let cleanText = this.markdownContent;
+            // Remove <delete>...</delete> blocks entirely
             cleanText = cleanText.replace(/<delete>[\s\S]*?<\/delete>/g, '');
+            // Remove <chapter> and </chapter> tags (keep content)
             cleanText = cleanText.replace(/<chapter[^>]*>\n?/g, '');
             cleanText = cleanText.replace(/<\/chapter>/g, '');
-            cleanText = cleanText.replace(/\{([^|}]*)\|[^}]*\}/g, '$1');
-            // Strip both old </chunk> and new <chunk id="...">...</chunk> formats
-            cleanText = cleanText.replace(/<chunk[^>]*>/g, '');
-            cleanText = cleanText.replace(/<\/chunk>/g, '');
+            // Remove legacy markdown ## headers
             cleanText = cleanText.replace(/^#{2,3}\s+.+$/gm, '');
-            const escaped = cleanText
+
+            // HTML-escape the text first
+            let escaped = cleanText
                 .replace(/&/g, '&amp;')
                 .replace(/</g, '&lt;')
                 .replace(/>/g, '&gt;');
+
+            // Restore pronunciation: show display text only {display|spoken} → display
+            // After escaping, we have {display|spoken} where < and > are escaped
+            escaped = escaped.replace(
+                /\{([^|}]*)\|[^}]*\}/g,
+                '$1'
+            );
+
+            // Show paralinguistic tags with pink styling: {|[tag]} → <pink>[tag]</pink>
+            escaped = escaped.replace(
+                /\{\|(\[[^\]]+\])\}/g,
+                '<span style="color:#ec4899;font-weight:600">$1</span>'
+            );
+
+            // Show chunk open/close tags as yellow <> markers
+            // <chunk id="..."> → <span yellow>&lt;&gt;</span>
+            escaped = escaped.replace(
+                /&lt;chunk[^&]*&gt;/g,
+                '<span style="background:#fde68a;color:#92400e;font-weight:600;">&lt;&gt;</span>'
+            );
+            escaped = escaped.replace(
+                /&lt;\/chunk&gt;/g,
+                '<span style="background:#fde68a;color:#92400e;font-weight:600;">&lt;/&gt;</span>'
+            );
+
             editor.innerHTML = escaped;
             editor.contentEditable = 'false';
         } else {
