@@ -1305,45 +1305,48 @@ class GutenbergTab {
 
         // Toolbar divs
         const toolbars = {
-            stage0Toolbar:   stage === 0,
-            stage1Toolbar:   stage === 1,
-            stage2Toolbar:   stage === 2,
-            stage3Toolbar:   stage >= 3,
-            markdownToolbar: stage === 2,  // shows text-editing tips alongside stage2 toolbar
+            stage0Toolbar: stage === 0,
+            stage1Toolbar: stage === 1,
+            stage2Toolbar: stage === 2,
+            stage3Toolbar: stage >= 3,
         };
         for (const [id, visible] of Object.entries(toolbars)) {
             const el = document.getElementById(id);
-            if (el) el.style.display = visible ? '' : 'none';
+            if (el) el.style.display = visible ? (el.id === 'stage3Toolbar' ? 'flex' : '') : 'none';
         }
 
-        // Header buttons
+        // Header buttons (loadBook / confirmStructure / runChunking only;
+        // editTextBtn / saveBtn / undoBtn now live inside stage3Toolbar)
         const btns = {
-            loadBookBtn:       stage === 0,
+            loadBookBtn:         stage === 0,
             confirmStructureBtn: stage === 1,
-            runChunkingBtn:    stage === 2,
-            editTextBtn:       stage >= 3,
-            saveBtn:           stage >= 3,
-            undoBtn:           stage >= 3,
+            runChunkingBtn:      stage === 2,
         };
         for (const [id, visible] of Object.entries(btns)) {
             const el = document.getElementById(id);
             if (el) el.style.display = visible ? '' : 'none';
         }
 
-        // Edit Text button label
+        // Lock toggle button (in stage3Toolbar)
         const editBtn = document.getElementById('editTextBtn');
         if (editBtn) {
-            editBtn.textContent = this._textUnlocked ? 'Lock Text' : 'Edit Text';
-            editBtn.style.background = this._textUnlocked ? '#dc2626' : '#f59e0b';
+            if (this._textUnlocked) {
+                editBtn.textContent = '🔓 Unlocked';
+                editBtn.style.background = '#fee2e2';
+                editBtn.style.color = '#991b1b';
+            } else {
+                editBtn.textContent = '🔒 Locked';
+                editBtn.style.background = '#e2e8f0';
+                editBtn.style.color = '#475569';
+            }
         }
 
-        // Lock badge in stage3 toolbar
-        const badge = document.getElementById('textLockBadge');
-        if (badge) {
-            badge.textContent = this._textUnlocked ? 'UNLOCKED' : 'LOCKED';
-            badge.style.background = this._textUnlocked ? '#fee2e2' : '#fef9c3';
-            badge.style.color = this._textUnlocked ? '#991b1b' : '#854d0e';
-        }
+        // Editing buttons: only visible when text is unlocked
+        const editOnlyBtns = ['insertPronunciationBtn', 'paralinguisticSelect', 'splitChunkBtn'];
+        editOnlyBtns.forEach(id => {
+            const el = document.getElementById(id);
+            if (el) el.style.display = this._textUnlocked ? '' : 'none';
+        });
 
         // Pane subtitle
         const subtitle = document.getElementById('markdownPaneSubtitle');
@@ -1575,8 +1578,10 @@ class GutenbergTab {
         }
     }
 
-    async loadGutenbergUrl() {
-        const url = prompt('Enter Project Gutenberg URL:', this.defaultGutenbergUrl);
+    async loadGutenbergUrl(prefilledUrl) {
+        const url = prefilledUrl !== undefined
+            ? prefilledUrl
+            : prompt('Enter Project Gutenberg URL:', this.defaultGutenbergUrl);
         if (!url) return;
 
         console.log('[GUTENBERG] Loading URL:', url);
