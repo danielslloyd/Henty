@@ -1601,9 +1601,17 @@ class TTSTab {
     async generateAllChunks() {
         const chunks = this.currentChapter.chunks || [];
 
+        // Skip chunks that already have takes; only generate the new ones.
+        const pending = chunks.filter(c => !c.generated_audios || c.generated_audios.length === 0);
+
+        if (pending.length === 0) {
+            showToast('All chunks already have takes.', 'info');
+            return;
+        }
+
         // Kick off up to maxParallelGenerations immediately; the rest will be queued
         // and processed automatically as each generation completes.
-        for (const chunk of chunks) {
+        for (const chunk of pending) {
             this.generateChunkAudio(chunk.id);
         }
     }

@@ -943,15 +943,14 @@ class GutenbergTab {
                 '<span style="color:#ec4899;font-weight:600">$1</span>'
             );
 
-            // Show chunk open/close tags as yellow <> markers
-            // <chunk id="..."> → <span yellow>&lt;&gt;</span>
+            // Show chunk open/close tags as yellow < > markers
             escaped = escaped.replace(
                 /&lt;chunk[^&]*&gt;/g,
-                '<span style="background:#fde68a;color:#92400e;font-weight:600;">&lt;&gt;</span>'
+                '<span style="background:#fde68a;color:#92400e;font-weight:600;">&lt;</span>'
             );
             escaped = escaped.replace(
                 /&lt;\/chunk&gt;/g,
-                '<span style="background:#fde68a;color:#92400e;font-weight:600;">&lt;/&gt;</span>'
+                '<span style="background:#fde68a;color:#92400e;font-weight:600;">&gt;</span>'
             );
 
             editor.innerHTML = escaped;
