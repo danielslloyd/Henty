@@ -597,13 +597,14 @@ class GutenbergTab {
         );
 
         // Highlight pronunciation/paralinguistic markup: {display|spoken} or {|[tag]}
-        // Include always-visible remove handle
+        // Include always-visible remove handle (positioned outside text flow)
         escaped = escaped.replace(
             /\{([^|}]*)\|([^}]*)\}/g,
             (match, display, spoken) => {
                 const origDisplay = display.replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&quot;/g, '"');
                 const markupId = Math.random().toString(16).substr(2, 8);
-                return `<span class="pp-markup" data-markup-id="${markupId}" data-original-display="${origDisplay.replace(/"/g, '&quot;')}" style="background:#ddd6fe;border-radius:3px;padding:0 2px;display:inline-block;position:relative;padding-right:16px">{${display}|<span style="color:#7c3aed;font-weight:600">${spoken}</span>}<span class="pp-remove-handle" data-markup-id="${markupId}" style="position:absolute;right:0;top:50%;transform:translateY(-50%);width:14px;height:14px;display:flex;align-items:center;justify-content:center;cursor:pointer;color:#7c3aed;font-weight:bold;font-size:16px;line-height:1;user-select:none" title="Remove markup">×</span></span>`
+                // Use absolute positioning and pointer-events to place handle outside text flow
+                return `<span class="pp-markup" data-markup-id="${markupId}" data-original-display="${origDisplay.replace(/"/g, '&quot;')}" style="background:#ddd6fe;border-radius:3px;padding:0 2px;display:inline-block;position:relative">{${display}|<span style="color:#7c3aed;font-weight:600">${spoken}</span>}<span class="pp-remove-handle" data-markup-id="${markupId}" style="position:absolute;right:-16px;top:50%;transform:translateY(-50%);width:14px;height:14px;display:flex;align-items:center;justify-content:center;cursor:pointer;color:#7c3aed;font-weight:bold;font-size:16px;line-height:1;pointer-events:all;white-space:nowrap;margin-left:2px" title="Remove markup" contenteditable="false">×</span></span>`
             }
         );
 
@@ -611,7 +612,7 @@ class GutenbergTab {
         escaped = escaped.replace(
             /&lt;chunk\s+id="([a-f0-9]{8})"([^&]*)&gt;/g,
             (_, hexId, rest) =>
-                `<span class="chunk-open-tag" data-hex-id="${hexId}" data-is-readonly="true" style="background:#fde68a;color:#92400e;border-radius:3px;padding:0 3px;font-size:0.85em;cursor:default;display:inline-block;position:relative;padding-right:20px">&lt;chunk id="${hexId}"${rest}&gt;<span class="chunk-merge-handle" data-hex-id="${hexId}" data-direction="prev" style="position:absolute;right:1px;top:50%;transform:translateY(-50%);cursor:pointer;color:#92400e;font-weight:bold;font-size:12px;line-height:1;user-select:none;padding:0 3px" title="Merge with previous chunk">⬆</span></span>`
+                `<span class="chunk-open-tag" data-hex-id="${hexId}" data-is-readonly="true" style="background:#fde68a;color:#92400e;border-radius:3px;padding:0 3px;font-size:0.85em;cursor:default;display:inline-block;position:relative">&lt;chunk id="${hexId}"${rest}&gt;<span class="chunk-merge-handle" data-hex-id="${hexId}" data-direction="prev" style="position:absolute;right:-18px;top:50%;transform:translateY(-50%);cursor:pointer;color:#92400e;font-weight:bold;font-size:12px;line-height:1;pointer-events:all;white-space:nowrap" title="Merge with previous chunk" contenteditable="false">⬆</span></span>`
         );
         // Highlight </chunk> close tags — annotate with preceding open-tag hex ID in sequence
         {
@@ -625,7 +626,7 @@ class GutenbergTab {
                 /&lt;\/chunk&gt;/g,
                 () => {
                     const hexId = chunkIdSeq[closeIdx++] || '';
-                    return `<span class="chunk-close-tag" data-hex-id="${hexId}" data-is-readonly="true" style="background:#fde68a;color:#92400e;border-radius:3px;padding:0 3px;font-size:0.85em;cursor:default;display:inline-block;position:relative;padding-right:20px">&lt;/chunk&gt;<span class="chunk-merge-handle" data-hex-id="${hexId}" data-direction="next" style="position:absolute;right:1px;top:50%;transform:translateY(-50%);cursor:pointer;color:#92400e;font-weight:bold;font-size:12px;line-height:1;user-select:none;padding:0 3px" title="Merge with next chunk">⬇</span></span>`;
+                    return `<span class="chunk-close-tag" data-hex-id="${hexId}" data-is-readonly="true" style="background:#fde68a;color:#92400e;border-radius:3px;padding:0 3px;font-size:0.85em;cursor:default;display:inline-block;position:relative">&lt;/chunk&gt;<span class="chunk-merge-handle" data-hex-id="${hexId}" data-direction="next" style="position:absolute;right:-18px;top:50%;transform:translateY(-50%);cursor:pointer;color:#92400e;font-weight:bold;font-size:12px;line-height:1;pointer-events:all;white-space:nowrap" title="Merge with next chunk" contenteditable="false">⬇</span></span>`;
                 }
             );
         }
