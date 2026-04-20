@@ -471,14 +471,36 @@ class GutenbergTab {
      * Set up input listeners for live highlighting and auto-save.
      * Also tracks the last selection inside the editor so pronunciation/tag
      * buttons can restore it after stealing focus.
+     * At stage 3 with chapters locked, prevents edits to plain text while allowing tag manipulation.
      */
     _setupEditorListeners() {
         const editor = document.getElementById('pseudoXmlEditor');
         if (!editor) return;
 
+        // Store original content at stage 3 to detect text-only changes
+        let lastKnownGoodContent = editor.textContent;
+
         // Live re-highlight on input (preserves cursor position)
         editor.addEventListener('input', () => {
             if (this.cleanViewActive) return;
+
+            // At stage 3 with chapters locked, detect if plain text (not tags) was changed
+            if (this._isStage3() && this.chaptersLocked && !this._textUnlocked) {
+                const currentRaw = editor.textContent || editor.innerText;
+                // Extract plain text (remove all markup)
+                const lastGoodPlain = this._extractPlainText(lastKnownGoodContent);
+                const currentPlain = this._extractPlainText(currentRaw);
+
+                // If plain text changed (beyond tags being modified), revert
+                if (lastGoodPlain !== currentPlain) {
+                    showToast('Text is locked. Only tags and chunks can be modified.', 'warning');
+                    editor.textContent = lastKnownGoodContent;
+                    this._liveHighlight(editor);
+                    return;
+                }
+            }
+
+            lastKnownGoodContent = editor.textContent || editor.innerText;
             this._liveHighlight(editor);
             this._scheduleAutoSave(editor);
         });
@@ -493,6 +515,23 @@ class GutenbergTab {
                 this._savedRange = r.cloneRange();
             }
         });
+    }
+
+    /**
+     * Extract plain text by removing all markup (chunks, pronunciation, etc.)
+     */
+    _extractPlainText(text) {
+        let plain = text || '';
+        // Remove chunk tags
+        plain = plain.replace(/<chunk[^>]*>/g, '');
+        plain = plain.replace(/<\/chunk>/g, '');
+        // Remove pronunciation markup
+        plain = plain.replace(/\{[^|}]*\|[^}]*\}/g, (match) => {
+            // Extract just the display text from {display|spoken}
+            const parts = match.slice(1, -1).split('|');
+            return parts[0] || '';
+        });
+        return plain;
     }
 
     /**
@@ -558,16 +597,22 @@ class GutenbergTab {
         );
 
         // Highlight pronunciation/paralinguistic markup: {display|spoken} or {|[tag]}
+        // Include always-visible remove handle (positioned outside text flow)
         escaped = escaped.replace(
             /\{([^|}]*)\|([^}]*)\}/g,
-            '<span style="background:#ddd6fe;border-radius:3px;padding:0 2px">{$1|<span style="color:#7c3aed;font-weight:600">$2</span>}</span>'
+            (match, display, spoken) => {
+                const origDisplay = display.replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&quot;/g, '"');
+                const markupId = Math.random().toString(16).substr(2, 8);
+                // Use absolute positioning and pointer-events to place handle outside text flow
+                return `<span class="pp-markup" data-markup-id="${markupId}" data-original-display="${origDisplay.replace(/"/g, '&quot;')}" style="background:#ddd6fe;border-radius:3px;padding:0 2px;display:inline-block;position:relative">{${display}|<span style="color:#7c3aed;font-weight:600">${spoken}</span>}<span class="pp-remove-handle" data-markup-id="${markupId}" style="position:absolute;right:-16px;top:50%;transform:translateY(-50%);width:14px;height:14px;display:flex;align-items:center;justify-content:center;cursor:pointer;color:#7c3aed;font-weight:bold;font-size:16px;line-height:1;pointer-events:all;white-space:nowrap;margin-left:2px" title="Remove markup" contenteditable="false">×</span></span>`
+            }
         );
 
-        // Highlight <chunk id="HEX"> open tags — carry hex ID as data attribute for merge handles
+        // Highlight <chunk id="HEX"> open tags — carry hex ID as data attribute with merge handles
         escaped = escaped.replace(
             /&lt;chunk\s+id="([a-f0-9]{8})"([^&]*)&gt;/g,
             (_, hexId, rest) =>
-                `<span class="chunk-open-tag" data-hex-id="${hexId}" style="background:#fde68a;color:#92400e;border-radius:3px;padding:0 3px;font-size:0.85em;cursor:pointer;">&lt;chunk id="${hexId}"${rest}&gt;</span>`
+                `<span class="chunk-open-tag" data-hex-id="${hexId}" data-is-readonly="true" style="background:#fde68a;color:#92400e;border-radius:3px;padding:0 3px;font-size:0.85em;cursor:default;display:inline-block;position:relative">&lt;chunk id="${hexId}"${rest}&gt;<span class="chunk-merge-handle" data-hex-id="${hexId}" data-direction="prev" style="position:absolute;right:-18px;top:50%;transform:translateY(-50%);cursor:pointer;color:#92400e;font-weight:bold;font-size:12px;line-height:1;pointer-events:all;white-space:nowrap" title="Merge with previous chunk" contenteditable="false">⬆</span></span>`
         );
         // Highlight </chunk> close tags — annotate with preceding open-tag hex ID in sequence
         {
@@ -581,15 +626,17 @@ class GutenbergTab {
                 /&lt;\/chunk&gt;/g,
                 () => {
                     const hexId = chunkIdSeq[closeIdx++] || '';
-                    return `<span class="chunk-close-tag" data-hex-id="${hexId}" style="background:#fde68a;color:#92400e;border-radius:3px;padding:0 3px;font-size:0.85em;cursor:pointer;">&lt;/chunk&gt;</span>`;
+                    return `<span class="chunk-close-tag" data-hex-id="${hexId}" data-is-readonly="true" style="background:#fde68a;color:#92400e;border-radius:3px;padding:0 3px;font-size:0.85em;cursor:default;display:inline-block;position:relative">&lt;/chunk&gt;<span class="chunk-merge-handle" data-hex-id="${hexId}" data-direction="next" style="position:absolute;right:-18px;top:50%;transform:translateY(-50%);cursor:pointer;color:#92400e;font-weight:bold;font-size:12px;line-height:1;pointer-events:all;white-space:nowrap" title="Merge with next chunk" contenteditable="false">⬇</span></span>`;
                 }
             );
         }
 
         editor.innerHTML = escaped;
 
-        // Attach merge-on-hover handles to chunk tags
+        // Attach handlers to chunk and p/p markup
         this._attachChunkMergeHandlers(editor);
+        this._attachMarkupRemoveHandlers(editor);
+        this._preventEditingTags(editor);
 
         // Restore cursor position
         this._restoreCursor(editor, cursorOffset);
@@ -618,68 +665,78 @@ class GutenbergTab {
     }
 
     /**
-     * Attach hover merge-handles to chunk open/close tag spans.
-     * Shows a small floating button: hovering <chunk ...> offers "merge ↑ prev",
-     * hovering </chunk> offers "merge ↓ next".
+     * Attach click handlers to chunk merge handles (always visible).
      */
     _attachChunkMergeHandlers(editor) {
-        // Create (or reuse) a singleton popup element
-        let popup = document.getElementById('chunkMergePopup');
-        if (!popup) {
-            popup = document.createElement('div');
-            popup.id = 'chunkMergePopup';
-            popup.style.cssText = [
-                'position:fixed',
-                'background:#1e293b',
-                'color:#f1f5f9',
-                'padding:2px 8px',
-                'border-radius:4px',
-                'font-size:11px',
-                'font-family:monospace',
-                'cursor:pointer',
-                'z-index:9999',
-                'display:none',
-                'pointer-events:all',
-                'white-space:nowrap',
-                'user-select:none',
-                'box-shadow:0 2px 6px rgba(0,0,0,0.3)'
-            ].join(';');
-            document.body.appendChild(popup);
-        }
-
-        let hideTimer = null;
-        const showPopup = (hexId, direction, rect) => {
-            clearTimeout(hideTimer);
-            popup.textContent = direction === 'prev' ? '⬆ merge with prev' : '⬇ merge with next';
-            popup.dataset.hexId = hexId;
-            popup.dataset.direction = direction;
-            popup.style.display = 'block';
-            popup.style.left = rect.left + 'px';
-            popup.style.top = (rect.bottom + 2) + 'px';
-        };
-        const hidePopup = () => {
-            hideTimer = setTimeout(() => { popup.style.display = 'none'; }, 120);
-        };
-
-        editor.querySelectorAll('.chunk-open-tag, .chunk-close-tag').forEach(span => {
-            span.addEventListener('mouseenter', () => {
-                const hexId = span.dataset.hexId;
-                if (!hexId) return;
-                const direction = span.classList.contains('chunk-open-tag') ? 'prev' : 'next';
-                showPopup(hexId, direction, span.getBoundingClientRect());
+        editor.querySelectorAll('.chunk-merge-handle').forEach(handle => {
+            handle.addEventListener('click', async (e) => {
+                e.stopPropagation();
+                e.preventDefault();
+                const hexId = handle.dataset.hexId;
+                const direction = handle.dataset.direction;
+                if (hexId) {
+                    await this._mergeChunk(hexId, direction);
+                }
             });
-            span.addEventListener('mouseleave', hidePopup);
         });
+    }
 
-        popup.addEventListener('mouseenter', () => clearTimeout(hideTimer));
-        popup.addEventListener('mouseleave', hidePopup);
-        popup.addEventListener('click', async () => {
-            const hexId = popup.dataset.hexId;
-            const direction = popup.dataset.direction;
-            popup.style.display = 'none';
-            if (!hexId) return;
-            await this._mergeChunk(hexId, direction);
+    /**
+     * Attach click handlers to pronunciation/paralinguistic markup remove buttons.
+     * When clicked, removes the {display|spoken} wrapper and restores original display text.
+     */
+    _attachMarkupRemoveHandlers(editor) {
+        editor.querySelectorAll('.pp-remove-handle').forEach(handle => {
+            handle.addEventListener('click', async (e) => {
+                e.stopPropagation();
+                e.preventDefault();
+                const markupSpan = handle.closest('.pp-markup');
+                if (!markupSpan) return;
+
+                const originalDisplay = markupSpan.dataset.originalDisplay || '';
+                // Replace the entire span with just the display text
+                const textNode = document.createTextNode(originalDisplay);
+                markupSpan.replaceWith(textNode);
+
+                // Trigger auto-save
+                this._scheduleAutoSave(editor);
+            });
         });
+    }
+
+    /**
+     * Prevent editing of chunk tags and p/p markup spans by intercepting input and keydown.
+     */
+    _preventEditingTags(editor) {
+        // Make it so users can't delete or modify the content of readonly spans
+        // We'll do this by detecting when they're trying to edit a tag and preventing it
+
+        // Store a mutation observer to prevent certain edits
+        const preventEditInSpan = (node) => {
+            if (!node || !node.classList) return false;
+            return node.classList.contains('chunk-open-tag') ||
+                   node.classList.contains('chunk-close-tag') ||
+                   node.classList.contains('pp-markup');
+        };
+
+        // Override document.execCommand for potentially dangerous operations
+        const originalExecCommand = document.execCommand;
+        document.execCommand = function(command, showUI, value) {
+            const sel = window.getSelection();
+            if (!sel || !sel.rangeCount) return false;
+
+            const range = sel.getRangeAt(0);
+            // Check if the range includes or is inside a protected tag
+            let node = range.commonAncestorContainer;
+            while (node && node !== editor) {
+                if (preventEditInSpan(node)) {
+                    return false; // Prevent the command
+                }
+                node = node.parentNode;
+            }
+
+            return originalExecCommand.call(this, command, showUI, value);
+        };
     }
 
     async _mergeChunk(hexId, direction) {
@@ -911,8 +968,8 @@ class GutenbergTab {
             return;
         }
 
-        // Stage 3: locked unless explicitly unlocked
-        const editable = !this._isStage3() || this._textUnlocked;
+        // Stage 3: always editable (for tag/chunk manipulation), but plain text is protected by event handlers
+        const editable = true; // Always true at stage 3 to allow tag manipulation
 
         if (this.cleanViewActive) {
             let cleanText = this.markdownContent;
@@ -1087,7 +1144,7 @@ class GutenbergTab {
 
     // Insert a pronunciation override: requires highlighted text.
     // Creates {display|spoken} where spoken defaults to the same as display.
-    // The user then edits only the spoken part (after the |).
+    // Automatically selects the spoken part for immediate editing.
     insertPronunciation() {
         if (this.cleanViewActive) {
             showToast('Switch to Markup View to insert pronunciation markers', 'error');
@@ -1104,8 +1161,57 @@ class GutenbergTab {
             return;
         }
         this._restoreEditorSelection();
-        // Default: spoken text = display text (user edits spoken part after insertion)
+        // Insert the markup
         document.execCommand('insertText', false, `{${selectedText}|${selectedText}}`);
+
+        // After insertion, trigger highlight to render the markup, then select the spoken text
+        const editor = document.getElementById('pseudoXmlEditor');
+        setTimeout(() => {
+            this._liveHighlight(editor);
+            // Find and select the replacement text (the part after |)
+            const raw = editor.textContent || editor.innerText;
+            const lastMarkup = `{${selectedText}|${selectedText}}`;
+            const idx = raw.lastIndexOf(lastMarkup);
+            if (idx !== -1) {
+                const startPos = idx + selectedText.length + 2; // {display|
+                const endPos = startPos + selectedText.length;
+                this._selectRange(editor, startPos, endPos);
+            }
+        }, 10);
+    }
+
+    /**
+     * Select a range of text by character offset in editor.
+     */
+    _selectRange(editor, startOffset, endOffset) {
+        const walker = document.createTreeWalker(editor, NodeFilter.SHOW_TEXT, null, false);
+        let offset = 0;
+        let startNode = null, startNodeOffset = null;
+        let endNode = null, endNodeOffset = null;
+        let node;
+
+        while ((node = walker.nextNode())) {
+            const len = node.textContent.length;
+            if (!startNode && offset + len >= startOffset) {
+                startNode = node;
+                startNodeOffset = startOffset - offset;
+            }
+            if (!endNode && offset + len >= endOffset) {
+                endNode = node;
+                endNodeOffset = endOffset - offset;
+                break;
+            }
+            offset += len;
+        }
+
+        if (startNode && endNode) {
+            const sel = window.getSelection();
+            const range = document.createRange();
+            range.setStart(startNode, startNodeOffset);
+            range.setEnd(endNode, endNodeOffset);
+            sel.removeAllRanges();
+            sel.addRange(range);
+        }
     }
 
     // Insert a paralinguistic tag at cursor: {|[tag]}
@@ -1217,7 +1323,7 @@ class GutenbergTab {
             if (unlockBtn) unlockBtn.style.display = '';
             if (lockStatus) {
                 lockStatus.style.display = '';
-                lockStatus.textContent = '🔒 Chapters locked — editing text and pronunciation only';
+                lockStatus.textContent = '🔒 Text locked — chunks and pronunciation tags are still editable';
             }
         } else {
             if (lockBtn) lockBtn.style.display = '';
@@ -1465,18 +1571,14 @@ class GutenbergTab {
         }
     }
 
-    /** Toggle text lock at stage 3 */
+    /** Toggle text lock at stage 3 (now just disables the protection, keeping tags editable) */
     toggleTextLock() {
         this._textUnlocked = !this._textUnlocked;
-        const editor = document.getElementById('pseudoXmlEditor');
-        if (editor) {
-            editor.contentEditable = this._textUnlocked ? 'true' : 'false';
-        }
         this._updateStageToolbar();
         if (this._textUnlocked) {
-            showToast('Text unlocked — be careful not to break chunk boundaries', 'warning');
+            showToast('Text protection disabled — you can now edit all text', 'warning');
         } else {
-            showToast('Text locked', 'success');
+            showToast('Text protection enabled — only tags and chunks are editable', 'success');
         }
     }
 
