@@ -1039,25 +1039,24 @@ class TTSTab {
     }
 
     renderDiffPanel(take) {
-        if (!take.transcription || !take.input_text) return '';
+        if (!take.transcription) return '';
         const score = take.similarity_score ?? 0;
         const cls = score >= 85 ? 'score-high' : score >= 60 ? 'score-mid' : 'score-low';
-        const diffHtml = this.buildDiffHtml(take.input_text, take.transcription);
-        const orig = take.input_text.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 
         // Show TTS input text if available (exact text sent to TTS engine)
-        const ttsInputText = take.tts_input_text ? take.tts_input_text.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;') : orig;
-        const showTtsInput = take.tts_input_text && take.tts_input_text !== take.input_text;
+        const ttsInputText = take.tts_input_text ? take.tts_input_text.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;') : '';
+
+        if (!ttsInputText) return ''; // Need TTS input text to show this panel
+
+        const diffHtml = this.buildDiffHtml(ttsInputText, take.transcription);
 
         return `<div class="diff-panel-header">
-                    <span class="diff-col-label">Original</span>
-                    ${showTtsInput ? `<span class="diff-divider"></span><span class="diff-col-label" style="font-size:11px;color:#666">TTS Input</span>` : ''}
+                    <span class="diff-col-label">TTS Input</span>
                     <span class="diff-divider"></span>
                     <span class="diff-col-label">Transcription <span class="score-badge ${cls}">${score}%</span></span>
                 </div>
                 <div class="diff-cols">
-                    <div class="diff-col diff-original">${orig}</div>
-                    ${showTtsInput ? `<div class="diff-col" style="font-size:12px;color:#666;background:#f5f5f5">${ttsInputText}</div>` : ''}
+                    <div class="diff-col diff-original">${ttsInputText}</div>
                     <div class="diff-col diff-transcription">${diffHtml}</div>
                 </div>`;
     }
@@ -1092,9 +1091,16 @@ class TTSTab {
 
         // Auto-detect paralinguistic tags in chunk text → force turbo
         const hasParalinguisticTags = /\{[^}]*\|\s*\[(?:laugh|chuckle|cough|sigh|gasp|groan|sniff|clear throat|shush)\]\s*\}/.test(chunk.text);
+        console.log(`[TTS TAB] Chunk ${chunkId} emotion tag detection:`, {
+            text: chunk.text.substring(0, 100),
+            hasParalinguisticTags,
+            model: ttsModel
+        });
         if (hasParalinguisticTags) {
             ttsModel = 'chatterbox_turbo';
-            console.log(`[TTS TAB] Paralinguistic tags detected in chunk ${chunkId}, using Turbo model`);
+            console.log(`[TTS TAB] Paralinguistic tags detected in chunk ${chunkId}, forcing Turbo model`);
+        } else {
+            console.log(`[TTS TAB] No paralinguistic tags detected in chunk ${chunkId}, using ${ttsModel}`);
         }
 
         // NEVER allow generation with missing voice sample
