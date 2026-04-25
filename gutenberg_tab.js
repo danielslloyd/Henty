@@ -597,23 +597,22 @@ class GutenbergTab {
         );
 
         // Highlight pronunciation/paralinguistic markup: {display|spoken} or {|[tag]}
-        // Handle uses CSS ::before so it has no text content and won't appear in textContent
         escaped = escaped.replace(
             /\{([^|}]*)\|([^}]*)\}/g,
             (match, display, spoken) => {
                 const origDisplay = display.replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&quot;/g, '"');
                 const markupId = Math.random().toString(16).substr(2, 8);
-                return `<span class="pp-markup" data-markup-id="${markupId}" data-original-display="${origDisplay.replace(/"/g, '&quot;')}" style="background:#ddd6fe;border-radius:3px;padding:0 2px;display:inline-block;position:relative">{${display}|<span style="color:#7c3aed;font-weight:600">${spoken}</span>}<span class="pp-remove-handle" data-markup-id="${markupId}" title="Remove markup" contenteditable="false"></span></span>`
+                return `<span class="pp-markup" data-markup-id="${markupId}" data-original-display="${origDisplay.replace(/"/g, '&quot;')}" style="background:#ddd6fe;border-radius:3px;padding:0 2px;display:inline-block;cursor:pointer">{${display}|<span style="color:#7c3aed;font-weight:600">${spoken}</span>}</span>`
             }
         );
 
-        // Highlight <chunk id="HEX"> open tags — handle uses CSS ::before, no text content
+        // Highlight <chunk id="HEX"> open tags — carry hex ID as data attribute for popup menu
         escaped = escaped.replace(
             /&lt;chunk\s+id="([a-f0-9]{8})"([^&]*)&gt;/g,
             (_, hexId, rest) =>
-                `<span class="chunk-open-tag" data-hex-id="${hexId}" style="background:#fde68a;color:#92400e;border-radius:3px;padding:0 3px;font-size:0.85em;cursor:default;display:inline-block;position:relative">&lt;chunk id="${hexId}"${rest}&gt;<span class="chunk-merge-handle" data-hex-id="${hexId}" data-direction="prev" title="Merge with previous chunk" contenteditable="false"></span></span>`
+                `<span class="chunk-open-tag" data-hex-id="${hexId}" style="background:#fde68a;color:#92400e;border-radius:3px;padding:0 3px;font-size:0.85em;cursor:pointer;">&lt;chunk id="${hexId}"${rest}&gt;</span>`
         );
-        // Highlight </chunk> close tags — handle uses CSS ::before, no text content
+        // Highlight </chunk> close tags — annotate with preceding open-tag hex ID in sequence
         {
             const chunkIdSeq = [];
             (raw.match(/<chunk\s+id="([a-f0-9]{8})"/g) || []).forEach(m => {
@@ -625,17 +624,16 @@ class GutenbergTab {
                 /&lt;\/chunk&gt;/g,
                 () => {
                     const hexId = chunkIdSeq[closeIdx++] || '';
-                    return `<span class="chunk-close-tag" data-hex-id="${hexId}" style="background:#fde68a;color:#92400e;border-radius:3px;padding:0 3px;font-size:0.85em;cursor:default;display:inline-block;position:relative">&lt;/chunk&gt;<span class="chunk-merge-handle" data-hex-id="${hexId}" data-direction="next" title="Merge with next chunk" contenteditable="false"></span></span>`;
+                    return `<span class="chunk-close-tag" data-hex-id="${hexId}" style="background:#fde68a;color:#92400e;border-radius:3px;padding:0 3px;font-size:0.85em;cursor:pointer;">&lt;/chunk&gt;</span>`;
                 }
             );
         }
 
         editor.innerHTML = escaped;
 
-        // Attach handlers to chunk and p/p markup
-        this._attachChunkMergeHandlers(editor);
-        this._attachMarkupRemoveHandlers(editor);
-        this._preventEditingTags(editor);
+        // Attach popup menu handlers to chunk and p/p markup
+        this._attachChunkPopupMenus(editor);
+        this._attachMarkupPopupMenus(editor);
 
         // Restore cursor position
         this._restoreCursor(editor, cursorOffset);
@@ -664,78 +662,130 @@ class GutenbergTab {
     }
 
     /**
-     * Attach click handlers to chunk merge handles (always visible).
+     * Attach click handlers to chunk tags that show a popup menu for merging.
      */
-    _attachChunkMergeHandlers(editor) {
-        editor.querySelectorAll('.chunk-merge-handle').forEach(handle => {
-            handle.addEventListener('click', async (e) => {
+    _attachChunkPopupMenus(editor) {
+        // Create (or reuse) a singleton popup element
+        let popup = document.getElementById('chunkMergePopup');
+        if (!popup) {
+            popup = document.createElement('div');
+            popup.id = 'chunkMergePopup';
+            popup.style.cssText = [
+                'position:fixed',
+                'background:#1e293b',
+                'color:#f1f5f9',
+                'padding:8px 0',
+                'border-radius:4px',
+                'font-size:12px',
+                'font-family:sans-serif',
+                'cursor:pointer',
+                'z-index:9999',
+                'display:none',
+                'pointer-events:all',
+                'min-width:140px',
+                'box-shadow:0 2px 8px rgba(0,0,0,0.3)'
+            ].join(';');
+            document.body.appendChild(popup);
+        }
+
+        let hideTimer = null;
+        const showPopup = (hexId, rect) => {
+            clearTimeout(hideTimer);
+            popup.innerHTML = `
+                <div style="padding:6px 16px;cursor:pointer;transition:background 0.15s" data-action="merge-prev" data-hex-id="${hexId}">⬆ Merge ↑</div>
+                <div style="padding:6px 16px;cursor:pointer;transition:background 0.15s" data-action="merge-next" data-hex-id="${hexId}">⬇ Merge ↓</div>
+            `;
+            popup.querySelectorAll('div').forEach(item => {
+                item.addEventListener('mouseenter', () => item.style.background = '#334155');
+                item.addEventListener('mouseleave', () => item.style.background = '');
+                item.addEventListener('click', async (e) => {
+                    e.stopPropagation();
+                    const action = item.dataset.action;
+                    const id = item.dataset.hexId;
+                    popup.style.display = 'none';
+                    if (action === 'merge-prev') await this._mergeChunk(id, 'prev');
+                    if (action === 'merge-next') await this._mergeChunk(id, 'next');
+                });
+            });
+            popup.style.display = 'block';
+            popup.style.left = rect.left + 'px';
+            popup.style.top = (rect.bottom + 4) + 'px';
+        };
+        const hidePopup = () => {
+            hideTimer = setTimeout(() => { popup.style.display = 'none'; }, 100);
+        };
+
+        editor.querySelectorAll('.chunk-open-tag, .chunk-close-tag').forEach(span => {
+            span.addEventListener('click', (e) => {
                 e.stopPropagation();
                 e.preventDefault();
-                const hexId = handle.dataset.hexId;
-                const direction = handle.dataset.direction;
-                if (hexId) {
-                    await this._mergeChunk(hexId, direction);
-                }
+                const hexId = span.dataset.hexId;
+                if (hexId) showPopup(hexId, span.getBoundingClientRect());
             });
         });
+
+        popup.addEventListener('mouseenter', () => clearTimeout(hideTimer));
+        popup.addEventListener('mouseleave', hidePopup);
+        document.addEventListener('click', hidePopup);
     }
 
     /**
-     * Attach click handlers to pronunciation/paralinguistic markup remove buttons.
-     * When clicked, removes the {display|spoken} wrapper and restores original display text.
+     * Attach click handlers to p/p markup that show a popup menu for removing.
      */
-    _attachMarkupRemoveHandlers(editor) {
-        editor.querySelectorAll('.pp-remove-handle').forEach(handle => {
-            handle.addEventListener('click', async (e) => {
+    _attachMarkupPopupMenus(editor) {
+        // Create (or reuse) a singleton popup element
+        let popup = document.getElementById('markupRemovePopup');
+        if (!popup) {
+            popup = document.createElement('div');
+            popup.id = 'markupRemovePopup';
+            popup.style.cssText = [
+                'position:fixed',
+                'background:#1e293b',
+                'color:#f1f5f9',
+                'padding:8px 16px',
+                'border-radius:4px',
+                'font-size:12px',
+                'font-family:sans-serif',
+                'cursor:pointer',
+                'z-index:9999',
+                'display:none',
+                'pointer-events:all',
+                'box-shadow:0 2px 8px rgba(0,0,0,0.3)'
+            ].join(';');
+            popup.addEventListener('mouseenter', (e) => clearTimeout(popup._hideTimer));
+            popup.addEventListener('mouseleave', (e) => {
+                popup._hideTimer = setTimeout(() => { popup.style.display = 'none'; }, 100);
+            });
+            document.body.appendChild(popup);
+        }
+
+        editor.querySelectorAll('.pp-markup').forEach(span => {
+            span.addEventListener('click', (e) => {
                 e.stopPropagation();
                 e.preventDefault();
-                const markupSpan = handle.closest('.pp-markup');
-                if (!markupSpan) return;
+                const markupId = span.dataset.markupId;
+                if (!markupId) return;
 
-                const originalDisplay = markupSpan.dataset.originalDisplay || '';
-                // Replace the entire span with just the display text
-                const textNode = document.createTextNode(originalDisplay);
-                markupSpan.replaceWith(textNode);
+                popup.textContent = '✕ Remove markup';
+                popup.style.display = 'block';
+                popup.style.left = (e.clientX) + 'px';
+                popup.style.top = (e.clientY + 4) + 'px';
+                popup.onclick = async (evt) => {
+                    evt.stopPropagation();
+                    popup.style.display = 'none';
 
-                // Trigger auto-save
-                this._scheduleAutoSave(editor);
+                    const originalDisplay = span.dataset.originalDisplay || '';
+                    const textNode = document.createTextNode(originalDisplay);
+                    span.replaceWith(textNode);
+                    this._scheduleAutoSave(editor);
+                };
             });
         });
-    }
 
-    /**
-     * Prevent editing of chunk tags and p/p markup spans by intercepting input and keydown.
-     */
-    _preventEditingTags(editor) {
-        // Make it so users can't delete or modify the content of readonly spans
-        // We'll do this by detecting when they're trying to edit a tag and preventing it
-
-        // Store a mutation observer to prevent certain edits
-        const preventEditInSpan = (node) => {
-            if (!node || !node.classList) return false;
-            return node.classList.contains('chunk-open-tag') ||
-                   node.classList.contains('chunk-close-tag') ||
-                   node.classList.contains('pp-markup');
-        };
-
-        // Override document.execCommand for potentially dangerous operations
-        const originalExecCommand = document.execCommand;
-        document.execCommand = function(command, showUI, value) {
-            const sel = window.getSelection();
-            if (!sel || !sel.rangeCount) return false;
-
-            const range = sel.getRangeAt(0);
-            // Check if the range includes or is inside a protected tag
-            let node = range.commonAncestorContainer;
-            while (node && node !== editor) {
-                if (preventEditInSpan(node)) {
-                    return false; // Prevent the command
-                }
-                node = node.parentNode;
-            }
-
-            return originalExecCommand.call(this, command, showUI, value);
-        };
+        document.addEventListener('click', () => {
+            clearTimeout(popup._hideTimer);
+            popup.style.display = 'none';
+        });
     }
 
     async _mergeChunk(hexId, direction) {
@@ -1015,21 +1065,20 @@ class GutenbergTab {
             );
 
             // Highlight pronunciation/paralinguistic markup: {display|spoken}
-            // Handle uses CSS ::before — no text content
             escaped = escaped.replace(
                 /\{([^|}]*)\|([^}]*)\}/g,
                 (match, display, spoken) => {
                     const origDisplay = display.replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&quot;/g, '"');
                     const markupId = Math.random().toString(16).substr(2, 8);
-                    return `<span class="pp-markup" data-markup-id="${markupId}" data-original-display="${origDisplay.replace(/"/g, '&quot;')}" style="background:#ddd6fe;border-radius:3px;padding:0 2px;display:inline-block;position:relative">{${display}|<span style="color:#7c3aed;font-weight:600">${spoken}</span>}<span class="pp-remove-handle" data-markup-id="${markupId}" title="Remove markup" contenteditable="false"></span></span>`;
+                    return `<span class="pp-markup" data-markup-id="${markupId}" data-original-display="${origDisplay.replace(/"/g, '&quot;')}" style="background:#ddd6fe;border-radius:3px;padding:0 2px;display:inline-block;cursor:pointer">{${display}|<span style="color:#7c3aed;font-weight:600">${spoken}</span>}</span>`;
                 }
             );
 
-            // Highlight <chunk id="..."> open tags — handle via CSS ::before
+            // Highlight <chunk id="..."> open tags — carry hex ID as data attribute for popup
             escaped = escaped.replace(
                 /&lt;chunk\s+id="([a-f0-9]{8})"([^&]*)&gt;/g,
                 (_, hexId, rest) =>
-                    `<span class="chunk-open-tag" data-hex-id="${hexId}" style="background:#fde68a;color:#92400e;border-radius:3px;padding:0 3px;font-size:0.85em;cursor:default;display:inline-block;position:relative">&lt;chunk id="${hexId}"${rest}&gt;<span class="chunk-merge-handle" data-hex-id="${hexId}" data-direction="prev" title="Merge with previous chunk" contenteditable="false"></span></span>`
+                    `<span class="chunk-open-tag" data-hex-id="${hexId}" style="background:#fde68a;color:#92400e;border-radius:3px;padding:0 3px;font-size:0.85em;cursor:pointer;">&lt;chunk id="${hexId}"${rest}&gt;</span>`
             );
 
             // Highlight </chunk> tags
@@ -1044,7 +1093,7 @@ class GutenbergTab {
                     /&lt;\/chunk&gt;/g,
                     () => {
                         const hexId = chunkIdSeq[closeIdx++] || '';
-                        return `<span class="chunk-close-tag" data-hex-id="${hexId}" style="background:#fde68a;color:#92400e;border-radius:3px;padding:0 3px;font-size:0.85em;cursor:default;display:inline-block;position:relative">&lt;/chunk&gt;<span class="chunk-merge-handle" data-hex-id="${hexId}" data-direction="next" title="Merge with next chunk" contenteditable="false"></span></span>`;
+                        return `<span class="chunk-close-tag" data-hex-id="${hexId}" style="background:#fde68a;color:#92400e;border-radius:3px;padding:0 3px;font-size:0.85em;cursor:pointer;">&lt;/chunk&gt;</span>`;
                     }
                 );
             }
@@ -1052,9 +1101,9 @@ class GutenbergTab {
             editor.innerHTML = escaped;
             editor.contentEditable = editable ? 'true' : 'false';
 
-            // Attach handlers after setting innerHTML
-            this._attachChunkMergeHandlers(editor);
-            this._attachMarkupRemoveHandlers(editor);
+            // Attach popup menu handlers after setting innerHTML
+            this._attachChunkPopupMenus(editor);
+            this._attachMarkupPopupMenus(editor);
         }
     }
 
