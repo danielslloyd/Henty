@@ -554,7 +554,7 @@ class TTSTab {
                             </div>
                             <div class="setting-row">
                                 <span class="setting-label">Model</span>
-                                <span class="setting-value take-model-value">${firstTake.tts_model === 'chatterbox_turbo' ? 'Turbo' : 'Standard'}${firstTake.tts_model_emotion_forced ? ' <span class="model-forced-badge" title="Forced by paralinguistic tags">(auto)</span>' : ''}</span>
+                                <span class="setting-value take-model-value" data-raw-model="${firstTake.tts_model || 'unknown'}">${firstTake.tts_model === 'chatterbox_turbo' ? 'Turbo' : (firstTake.tts_model === 'chatterbox' ? 'Standard' : 'Standard')}${firstTake.tts_model_emotion_forced ? ' <span class="model-forced-badge" title="Forced by paralinguistic tags">(auto)</span>' : ''}</span>
                             </div>
                             <div class="setting-row">
                                 <span class="setting-label">Exaggeration</span>
@@ -692,7 +692,7 @@ class TTSTab {
                                 </div>
                                 <div class="setting-row">
                                     <span class="setting-label">Model</span>
-                                    <span class="setting-value take-model-value">${take.tts_model === 'chatterbox_turbo' ? 'Turbo' : 'Standard'}${take.tts_model_emotion_forced ? ' <span class="model-forced-badge" title="Forced by paralinguistic tags">(auto)</span>' : ''}</span>
+                                    <span class="setting-value take-model-value" data-raw-model="${take.tts_model || 'unknown'}">${take.tts_model === 'chatterbox_turbo' ? 'Turbo' : (take.tts_model === 'chatterbox' ? 'Standard' : 'Standard')}${take.tts_model_emotion_forced ? ' <span class="model-forced-badge" title="Forced by paralinguistic tags">(auto)</span>' : ''}</span>
                                 </div>
                                 <div class="setting-row">
                                     <span class="setting-label">Exaggeration</span>

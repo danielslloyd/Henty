@@ -857,16 +857,21 @@ class TextToAudioConverter:
         cleaned = re.sub(r'<[^>]+>', '', text)
         return cleaned
 
-    def process_pronunciation_markup(self, text):
+    def process_pronunciation_markup(self, text, use_turbo=True):
         """Replace {display|spoken} pronunciation markup with the spoken form for TTS.
         Supports paralinguistic tags: {display|[laugh]} or {|[cough]} — extracts just
         the [tag] part for Chatterbox Turbo.
+        If use_turbo is False and the spoken form is an emotion tag, use display form instead.
         If no pipe is present inside braces, returns the text unchanged.
         """
         def replacer(m):
             parts = m.group(1).split('|', 1)
             if len(parts) == 2:
-                return parts[1]  # spoken form (may be [laugh], [cough], etc.)
+                spoken = parts[1].strip()
+                # If using Standard model and the "spoken" part is an emotion tag, use display instead
+                if not use_turbo and re.match(r'^\[(?:laugh|chuckle|cough|sigh|gasp|groan|sniff|clear throat|shush)\]$', spoken):
+                    return parts[0].strip()  # display form
+                return spoken  # spoken form (may be [laugh], [cough], etc.)
             return m.group(0)    # no pipe = not a pronunciation marker, leave as-is
         return re.sub(r'\{([^}]+)\}', replacer, text)
 
@@ -2831,9 +2836,13 @@ def generate_project_chunk_audio():
         audio_path = os.path.join(converter.audio_dir, audio_filename)
 
         # Process pronunciation markup: {display|spoken} → spoken form for TTS
-        tts_text = converter.process_pronunciation_markup(chunk_text)
+        # If using Standard model and text has emotion tags, strip them (Standard doesn't support them)
+        use_turbo = (tts_model == 'chatterbox_turbo')
+        tts_text = converter.process_pronunciation_markup(chunk_text, use_turbo=use_turbo)
         if tts_text != chunk_text:
             print(f"[TTS] Pronunciation markup applied: {len(chunk_text)} → {len(tts_text)} chars")
+            if not use_turbo:
+                print(f"[TTS] Using Standard model: emotion tags will be converted to display text")
 
         # Generate the audio (returns dict with path and duration)
         generation_result = converter.generate_audio(
