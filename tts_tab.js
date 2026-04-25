@@ -1044,13 +1044,20 @@ class TTSTab {
         const cls = score >= 85 ? 'score-high' : score >= 60 ? 'score-mid' : 'score-low';
         const diffHtml = this.buildDiffHtml(take.input_text, take.transcription);
         const orig = take.input_text.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+
+        // Show TTS input text if available (exact text sent to TTS engine)
+        const ttsInputText = take.tts_input_text ? take.tts_input_text.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;') : orig;
+        const showTtsInput = take.tts_input_text && take.tts_input_text !== take.input_text;
+
         return `<div class="diff-panel-header">
                     <span class="diff-col-label">Original</span>
+                    ${showTtsInput ? `<span class="diff-divider"></span><span class="diff-col-label" style="font-size:11px;color:#666">TTS Input</span>` : ''}
                     <span class="diff-divider"></span>
                     <span class="diff-col-label">Transcription <span class="score-badge ${cls}">${score}%</span></span>
                 </div>
                 <div class="diff-cols">
                     <div class="diff-col diff-original">${orig}</div>
+                    ${showTtsInput ? `<div class="diff-col" style="font-size:12px;color:#666;background:#f5f5f5">${ttsInputText}</div>` : ''}
                     <div class="diff-col diff-transcription">${diffHtml}</div>
                 </div>`;
     }

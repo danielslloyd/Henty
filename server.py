@@ -859,8 +859,8 @@ class TextToAudioConverter:
 
     def process_pronunciation_markup(self, text):
         """Replace {display|spoken} pronunciation markup with the spoken form for TTS.
-        Supports paralinguistic tags: {display|[laugh]} or {|[cough]} — the square-bracket
-        tag is passed through verbatim for Chatterbox Turbo.
+        Supports paralinguistic tags: {display|[laugh]} or {|[cough]} — extracts just
+        the [tag] part for Chatterbox Turbo.
         If no pipe is present inside braces, returns the text unchanged.
         """
         def replacer(m):
@@ -2885,7 +2885,8 @@ def generate_project_chunk_audio():
                     'audio_duration_seconds': round(audio_duration, 2),
                     'possibly_truncated': possibly_truncated,
                     'generation_time_ms': generation_time_ms,
-                    'input_text': chunk_text,  # Store the text used for generation to detect outdated takes
+                    'input_text': chunk_text,  # Original text with markup (for detecting outdated takes)
+                    'tts_input_text': tts_text,  # Exact text sent to TTS engine (for debugging)
                     'tts_model': tts_model,
                     'tts_model_requested': requested_model,
                     'tts_model_emotion_forced': has_paralinguistic_tags and requested_model != tts_model
