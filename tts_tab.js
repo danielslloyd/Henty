@@ -495,6 +495,16 @@ class TTSTab {
 
                 // First take: chunk preview + icons
                 const firstTake = sortedAudio[0];
+
+                // Log take metadata for debugging
+                if (firstTake) {
+                    console.log(`[TTS TAB] Chunk ${chunk.id} first take metadata:`, {
+                        model: firstTake.tts_model || 'undefined',
+                        requested: firstTake.tts_model_requested || 'undefined',
+                        emotion_forced: firstTake.tts_model_emotion_forced,
+                        input_has_tags: firstTake.input_text ? /\{[^}]*\|\s*\[[^\]]+\]/.test(firstTake.input_text) : 'unknown'
+                    });
+                }
                 const isBest = firstTake.is_best_take;
                 const isOutdated = this.isTakeOutdated(firstTake, chunk.text);
                 const takeId = `take_${chunk.id}_${takeCounter++}`;
