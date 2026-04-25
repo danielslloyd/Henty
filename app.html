@@ -437,6 +437,55 @@
             font-style: italic;
         }
 
+        /* Chunk merge handles — rendered via ::before so no text content reaches textContent */
+        .chunk-merge-handle {
+            position: absolute;
+            top: 50%;
+            transform: translateY(-50%);
+            width: 16px;
+            height: 16px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            color: #92400e;
+            font-size: 11px;
+            line-height: 1;
+            pointer-events: all;
+            user-select: none;
+            opacity: 0.7;
+            transition: opacity 0.15s;
+        }
+        .chunk-merge-handle:hover { opacity: 1; }
+        .chunk-merge-handle[data-direction="prev"] { right: -18px; }
+        .chunk-merge-handle[data-direction="next"] { right: -18px; }
+        .chunk-merge-handle[data-direction="prev"]::before { content: '⬆'; }
+        .chunk-merge-handle[data-direction="next"]::before { content: '⬇'; }
+
+        /* P/P markup remove handles — same ::before trick */
+        .pp-remove-handle {
+            position: absolute;
+            right: -16px;
+            top: 50%;
+            transform: translateY(-50%);
+            width: 14px;
+            height: 14px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            color: #7c3aed;
+            font-weight: bold;
+            font-size: 14px;
+            line-height: 1;
+            pointer-events: all;
+            user-select: none;
+            opacity: 0.6;
+            transition: opacity 0.15s;
+        }
+        .pp-remove-handle:hover { opacity: 1; }
+        .pp-remove-handle::before { content: '×'; }
+
         .xml-tips {
             margin-bottom: 10px;
             padding: 8px;

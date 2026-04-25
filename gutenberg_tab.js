@@ -597,24 +597,23 @@ class GutenbergTab {
         );
 
         // Highlight pronunciation/paralinguistic markup: {display|spoken} or {|[tag]}
-        // Include always-visible remove handle (positioned outside text flow)
+        // Handle uses CSS ::before so it has no text content and won't appear in textContent
         escaped = escaped.replace(
             /\{([^|}]*)\|([^}]*)\}/g,
             (match, display, spoken) => {
                 const origDisplay = display.replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&quot;/g, '"');
                 const markupId = Math.random().toString(16).substr(2, 8);
-                // Use absolute positioning and pointer-events to place handle outside text flow
-                return `<span class="pp-markup" data-markup-id="${markupId}" data-original-display="${origDisplay.replace(/"/g, '&quot;')}" style="background:#ddd6fe;border-radius:3px;padding:0 2px;display:inline-block;position:relative">{${display}|<span style="color:#7c3aed;font-weight:600">${spoken}</span>}<span class="pp-remove-handle" data-markup-id="${markupId}" style="position:absolute;right:-16px;top:50%;transform:translateY(-50%);width:14px;height:14px;display:flex;align-items:center;justify-content:center;cursor:pointer;color:#7c3aed;font-weight:bold;font-size:16px;line-height:1;pointer-events:all;white-space:nowrap;margin-left:2px" title="Remove markup" contenteditable="false">×</span></span>`
+                return `<span class="pp-markup" data-markup-id="${markupId}" data-original-display="${origDisplay.replace(/"/g, '&quot;')}" style="background:#ddd6fe;border-radius:3px;padding:0 2px;display:inline-block;position:relative">{${display}|<span style="color:#7c3aed;font-weight:600">${spoken}</span>}<span class="pp-remove-handle" data-markup-id="${markupId}" title="Remove markup" contenteditable="false"></span></span>`
             }
         );
 
-        // Highlight <chunk id="HEX"> open tags — carry hex ID as data attribute with merge handles
+        // Highlight <chunk id="HEX"> open tags — handle uses CSS ::before, no text content
         escaped = escaped.replace(
             /&lt;chunk\s+id="([a-f0-9]{8})"([^&]*)&gt;/g,
             (_, hexId, rest) =>
-                `<span class="chunk-open-tag" data-hex-id="${hexId}" data-is-readonly="true" style="background:#fde68a;color:#92400e;border-radius:3px;padding:0 3px;font-size:0.85em;cursor:default;display:inline-block;position:relative">&lt;chunk id="${hexId}"${rest}&gt;<span class="chunk-merge-handle" data-hex-id="${hexId}" data-direction="prev" style="position:absolute;right:-18px;top:50%;transform:translateY(-50%);cursor:pointer;color:#92400e;font-weight:bold;font-size:12px;line-height:1;pointer-events:all;white-space:nowrap" title="Merge with previous chunk" contenteditable="false">⬆</span></span>`
+                `<span class="chunk-open-tag" data-hex-id="${hexId}" style="background:#fde68a;color:#92400e;border-radius:3px;padding:0 3px;font-size:0.85em;cursor:default;display:inline-block;position:relative">&lt;chunk id="${hexId}"${rest}&gt;<span class="chunk-merge-handle" data-hex-id="${hexId}" data-direction="prev" title="Merge with previous chunk" contenteditable="false"></span></span>`
         );
-        // Highlight </chunk> close tags — annotate with preceding open-tag hex ID in sequence
+        // Highlight </chunk> close tags — handle uses CSS ::before, no text content
         {
             const chunkIdSeq = [];
             (raw.match(/<chunk\s+id="([a-f0-9]{8})"/g) || []).forEach(m => {
@@ -626,7 +625,7 @@ class GutenbergTab {
                 /&lt;\/chunk&gt;/g,
                 () => {
                     const hexId = chunkIdSeq[closeIdx++] || '';
-                    return `<span class="chunk-close-tag" data-hex-id="${hexId}" data-is-readonly="true" style="background:#fde68a;color:#92400e;border-radius:3px;padding:0 3px;font-size:0.85em;cursor:default;display:inline-block;position:relative">&lt;/chunk&gt;<span class="chunk-merge-handle" data-hex-id="${hexId}" data-direction="next" style="position:absolute;right:-18px;top:50%;transform:translateY(-50%);cursor:pointer;color:#92400e;font-weight:bold;font-size:12px;line-height:1;pointer-events:all;white-space:nowrap" title="Merge with next chunk" contenteditable="false">⬇</span></span>`;
+                    return `<span class="chunk-close-tag" data-hex-id="${hexId}" style="background:#fde68a;color:#92400e;border-radius:3px;padding:0 3px;font-size:0.85em;cursor:default;display:inline-block;position:relative">&lt;/chunk&gt;<span class="chunk-merge-handle" data-hex-id="${hexId}" data-direction="next" title="Merge with next chunk" contenteditable="false"></span></span>`;
                 }
             );
         }
@@ -1016,25 +1015,46 @@ class GutenbergTab {
             );
 
             // Highlight pronunciation/paralinguistic markup: {display|spoken}
+            // Handle uses CSS ::before — no text content
             escaped = escaped.replace(
                 /\{([^|}]*)\|([^}]*)\}/g,
-                '<span style="background:#ddd6fe;border-radius:3px;padding:0 2px">{$1|<span style="color:#7c3aed;font-weight:600">$2</span>}</span>'
+                (match, display, spoken) => {
+                    const origDisplay = display.replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&quot;/g, '"');
+                    const markupId = Math.random().toString(16).substr(2, 8);
+                    return `<span class="pp-markup" data-markup-id="${markupId}" data-original-display="${origDisplay.replace(/"/g, '&quot;')}" style="background:#ddd6fe;border-radius:3px;padding:0 2px;display:inline-block;position:relative">{${display}|<span style="color:#7c3aed;font-weight:600">${spoken}</span>}<span class="pp-remove-handle" data-markup-id="${markupId}" title="Remove markup" contenteditable="false"></span></span>`;
+                }
             );
 
-            // Highlight new <chunk id="..."> open tags (yellow-orange)
+            // Highlight <chunk id="..."> open tags — handle via CSS ::before
             escaped = escaped.replace(
-                /(&lt;chunk\s+[^&]*&gt;)/g,
-                '<span style="background:#fde68a;color:#92400e;border-radius:3px;padding:0 3px;font-size:0.85em;">$1</span>'
+                /&lt;chunk\s+id="([a-f0-9]{8})"([^&]*)&gt;/g,
+                (_, hexId, rest) =>
+                    `<span class="chunk-open-tag" data-hex-id="${hexId}" style="background:#fde68a;color:#92400e;border-radius:3px;padding:0 3px;font-size:0.85em;cursor:default;display:inline-block;position:relative">&lt;chunk id="${hexId}"${rest}&gt;<span class="chunk-merge-handle" data-hex-id="${hexId}" data-direction="prev" title="Merge with previous chunk" contenteditable="false"></span></span>`
             );
 
-            // Highlight </chunk> tags (old separator format or closing tag)
-            escaped = escaped.replace(
-                /(&lt;\/chunk&gt;)/g,
-                '<span style="background:#fde68a;color:#92400e;border-radius:3px;padding:0 3px;font-size:0.85em;">$1</span>'
-            );
+            // Highlight </chunk> tags
+            {
+                const chunkIdSeq = [];
+                (this.markdownContent.match(/<chunk\s+id="([a-f0-9]{8})"/g) || []).forEach(m => {
+                    const hm = m.match(/id="([a-f0-9]{8})"/);
+                    if (hm) chunkIdSeq.push(hm[1]);
+                });
+                let closeIdx = 0;
+                escaped = escaped.replace(
+                    /&lt;\/chunk&gt;/g,
+                    () => {
+                        const hexId = chunkIdSeq[closeIdx++] || '';
+                        return `<span class="chunk-close-tag" data-hex-id="${hexId}" style="background:#fde68a;color:#92400e;border-radius:3px;padding:0 3px;font-size:0.85em;cursor:default;display:inline-block;position:relative">&lt;/chunk&gt;<span class="chunk-merge-handle" data-hex-id="${hexId}" data-direction="next" title="Merge with next chunk" contenteditable="false"></span></span>`;
+                    }
+                );
+            }
 
             editor.innerHTML = escaped;
             editor.contentEditable = editable ? 'true' : 'false';
+
+            // Attach handlers after setting innerHTML
+            this._attachChunkMergeHandlers(editor);
+            this._attachMarkupRemoveHandlers(editor);
         }
     }
 
