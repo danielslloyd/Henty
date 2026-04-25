@@ -9,7 +9,40 @@ try:
     HAS_TURBO = True
 except ImportError:
     HAS_TURBO = False
-    print("WARNING: chatterbox.tts_turbo not available. Install chatterbox-tts >= 0.1.6 for Turbo support.")
+    print("\n" + "="*70)
+    print("⚠️  Chatterbox Turbo not found. Attempting to install...")
+    print("="*70)
+    try:
+        import subprocess
+        import sys
+        # Try to install chatterbox-tts with turbo support
+        result = subprocess.run(
+            [sys.executable, "-m", "pip", "install", "--upgrade", "chatterbox-tts>=0.1.6"],
+            capture_output=True,
+            text=True,
+            timeout=120
+        )
+        if result.returncode == 0:
+            print("✓ Successfully installed chatterbox-tts>=0.1.6")
+            print("  Attempting to import Turbo module...")
+            try:
+                from chatterbox.tts_turbo import ChatterboxTurboTTS
+                HAS_TURBO = True
+                print("✓ Chatterbox Turbo is now available!")
+            except ImportError as e:
+                print(f"✗ Could not import Turbo after install: {e}")
+                HAS_TURBO = False
+        else:
+            print(f"✗ Installation failed: {result.stderr}")
+            print("  Emotion tags will not work. Install manually with:")
+            print("    pip install --upgrade chatterbox-tts>=0.1.6")
+    except Exception as e:
+        print(f"✗ Auto-installation error: {e}")
+        print("  Install manually with: pip install --upgrade chatterbox-tts>=0.1.6")
+    finally:
+        if not HAS_TURBO:
+            print("  Running without Turbo support (emotion tags will be converted to text)")
+        print("="*70 + "\n")
 import torch
 import numpy as np
 from scipy.io import wavfile
