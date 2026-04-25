@@ -900,9 +900,15 @@ class GutenbergTab {
                     this.chapters = data.chapters || [];
                 }
 
-                // Notify TTS tab to update dirty indicators without full reload
-                if (typeof ttsTab !== 'undefined' && ttsTab.updateDirtyIndicators) {
-                    ttsTab.updateDirtyIndicators(this.chapters);
+                // Notify TTS tab to update dirty indicators AND reload current chapter
+                if (typeof ttsTab !== 'undefined') {
+                    if (ttsTab.updateDirtyIndicators) {
+                        ttsTab.updateDirtyIndicators(this.chapters);
+                    }
+                    // Reload the currently displayed chapter so emotion tags are detected
+                    if (ttsTab.currentChapterIndex !== null) {
+                        await ttsTab.loadChapter(ttsTab.currentChapterIndex);
+                    }
                 }
 
                 // Refresh Reader tab if available
