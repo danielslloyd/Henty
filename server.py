@@ -951,20 +951,21 @@ class TextToAudioConverter:
                 })
 
             use_turbo = (tts_model == 'chatterbox_turbo')
-            print(f"[TTS VERBOSE] tts_model={tts_model!r}, use_turbo={use_turbo}, HAS_TURBO={HAS_TURBO}")
+            print(f"\n[TTS MODEL LOADING]")
+            print(f"  Model: {tts_model}, HAS_TURBO={HAS_TURBO}")
             if use_turbo:
                 if not HAS_TURBO:
-                    print(f"[TTS VERBOSE] WARNING: Turbo requested but not available — loading standard model instead")
+                    print(f"  ⚠️  Turbo selected but not available — loading Standard instead")
                     model = self.load_model()
-                    print(f"[TTS VERBOSE] Standard model loaded (turbo unavailable): {type(model).__name__}")
+                    print(f"  ✓ Loaded: {type(model).__name__} (Standard fallback)")
                 else:
-                    print(f"[TTS VERBOSE] Loading Chatterbox Turbo model...")
+                    print(f"  → Loading Turbo model...")
                     model = self.load_turbo_model()
-                    print(f"[TTS VERBOSE] Turbo model loaded successfully: {type(model).__name__}")
+                    print(f"  ✓ Loaded: {type(model).__name__} (Turbo)")
             else:
-                print(f"[TTS VERBOSE] Loading Chatterbox Standard model...")
+                print(f"  → Loading Standard model...")
                 model = self.load_model()
-                print(f"[TTS VERBOSE] Standard model loaded successfully: {type(model).__name__}")
+                print(f"  ✓ Loaded: {type(model).__name__} (Standard)")
 
             # Prepare generation parameters
             gen_params = {
@@ -2789,24 +2790,27 @@ def generate_project_chunk_audio():
         # Verbose model selection logging
         requested_model = tts_model
         has_paralinguistic_tags = converter.text_has_paralinguistic_tags(chunk_text)
-        print(f"[TTS MODEL] Requested: {requested_model}")
-        print(f"[TTS MODEL] HAS_TURBO available: {HAS_TURBO}")
-        print(f"[TTS MODEL] Paralinguistic tags in text: {has_paralinguistic_tags}")
+        print(f"\n[TTS MODEL SELECTION]")
+        print(f"  Requested: {requested_model}")
+        print(f"  HAS_TURBO available: {HAS_TURBO}")
+        print(f"  Paralinguistic tags detected: {has_paralinguistic_tags}")
+
         # Note: Chatterbox Turbo expects [laugh], [cough], etc. embedded directly in text.
         # process_pronunciation_markup strips the {display|[tag]} wrapper, leaving [tag] in the text.
 
         # Auto-detect paralinguistic tags → force turbo
         if has_paralinguistic_tags:
             tts_model = 'chatterbox_turbo'
-            print(f"[TTS MODEL] Forced to chatterbox_turbo (paralinguistic tags detected)")
+            print(f"  → Emotion tags found, requesting Turbo model")
         else:
-            print(f"[TTS MODEL] No paralinguistic tags — using requested model: {tts_model}")
+            print(f"  → No emotion tags, using requested model: {requested_model}")
 
         if tts_model == 'chatterbox_turbo' and not HAS_TURBO:
-            print(f"[TTS MODEL] WARNING: chatterbox_turbo requested but HAS_TURBO=False — falling back to chatterbox")
+            print(f"  ⚠️  Turbo requested but NOT INSTALLED (HAS_TURBO=False)")
+            print(f"  ⚠️  Falling back to Standard model (emotion tags will be stripped)")
             tts_model = 'chatterbox'
 
-        print(f"[TTS MODEL] Final model selected: {tts_model}")
+        print(f"  ✓ Final model to use: {tts_model}")
 
         # Construct voice sample path
         audio_prompt_path = None
@@ -2827,8 +2831,8 @@ def generate_project_chunk_audio():
         print(f"\n=== Generating audio for chunk {chunk_id} on {model_device} ===")
         print(f"Text file ID: {text_file_id}")
         print(f"Voice: {voice_sample}")
-        print(f"Model (final): {tts_model} | requested: {requested_model} | emotion_tags: {has_paralinguistic_tags}")
-        print(f"Exaggeration: {exaggeration}, CFG: {cfg_weight}, Temp: {temperature}")
+        print(f"Model: {tts_model} (requested={requested_model}, emotion_tags={has_paralinguistic_tags}, turbo_available={HAS_TURBO})")
+        print(f"Parameters: Exaggeration={exaggeration}, CFG={cfg_weight}, Temp={temperature}")
 
         # Generate audio filename with timestamp and chunk ID
         timestamp = int(time.time() * 1000)
@@ -2901,6 +2905,14 @@ def generate_project_chunk_audio():
                     'tts_model_emotion_forced': has_paralinguistic_tags and requested_model != tts_model
                 }
                 chunk['generated_audios'].append(audio_entry)
+
+                # Log what was saved
+                print(f"\n[TTS METADATA SAVED]")
+                print(f"  Model saved as: {tts_model}")
+                print(f"  Model requested: {requested_model}")
+                print(f"  Emotion tags in input: {has_paralinguistic_tags}")
+                if audio_entry['tts_model_emotion_forced']:
+                    print(f"  ⚠️  Model was forced due to emotion tags (requested {requested_model}, saved {tts_model})")
 
                 # Mark chunk as not dirty
                 chunk['dirty'] = False
