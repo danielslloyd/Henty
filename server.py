@@ -7,71 +7,28 @@ from chatterbox.tts import ChatterboxTTS
 try:
     from chatterbox.tts_turbo import ChatterboxTurboTTS
     HAS_TURBO = True
-except ImportError as initial_import_error:
+except ImportError as e:
     HAS_TURBO = False
-    print("\n" + "="*70)
-    print("⚠️  Chatterbox Turbo not found. Attempting to install...")
-    print("="*70)
-    try:
-        import subprocess
-        import sys
-        # Try to install chatterbox-tts with turbo support
-        result = subprocess.run(
-            [sys.executable, "-m", "pip", "install", "--upgrade", "chatterbox-tts>=0.1.6"],
-            capture_output=True,
-            text=True,
-            timeout=120
-        )
-        if result.returncode == 0:
-            print("✓ Successfully installed chatterbox-tts>=0.1.6")
-            print("  Attempting to import Turbo module...")
-            try:
-                from chatterbox.tts_turbo import ChatterboxTurboTTS
-                HAS_TURBO = True
-                print("✓ Chatterbox Turbo is now available!")
-            except ImportError as e:
-                # Check if it's a transformers compatibility issue
-                if "transformers" in str(e) or "is_mistral_common_available" in str(e):
-                    print(f"✗ Transformers library compatibility issue detected")
-                    print("  Attempting to upgrade transformers...")
-                    result2 = subprocess.run(
-                        [sys.executable, "-m", "pip", "install", "--upgrade", "transformers"],
-                        capture_output=True,
-                        text=True,
-                        timeout=120
-                    )
-                    if result2.returncode == 0:
-                        print("✓ Successfully upgraded transformers")
-                        print("  Attempting to import Turbo module again...")
-                        try:
-                            from chatterbox.tts_turbo import ChatterboxTurboTTS
-                            HAS_TURBO = True
-                            print("✓ Chatterbox Turbo is now available!")
-                        except ImportError as e2:
-                            print(f"✗ Still cannot import Turbo: {e2}")
-                            HAS_TURBO = False
-                    else:
-                        print(f"✗ Transformers upgrade failed: {result2.stderr}")
-                        print("  Try manually: pip install --upgrade transformers")
-                        HAS_TURBO = False
-                else:
-                    print(f"✗ Could not import Turbo: {e}")
-                    print("  Install manually with:")
-                    print("    pip install --upgrade chatterbox-tts>=0.1.6")
-                    HAS_TURBO = False
-        else:
-            print(f"✗ Installation failed: {result.stderr}")
-            print("  Try manually installing with:")
-            print("    pip install --upgrade chatterbox-tts>=0.1.6")
-            print("    pip install --upgrade transformers")
-    except Exception as e:
-        print(f"✗ Auto-installation error: {e}")
-        print("  Install manually with:")
-        print("    pip install --upgrade chatterbox-tts>=0.1.6")
-        print("    pip install --upgrade transformers")
-    finally:
-        if not HAS_TURBO:
-            print("  Running without Turbo support (emotion tags will be converted to text)")
+    # Check if it's a transformers issue
+    error_str = str(e)
+    if "transformers" in error_str or "is_mistral_common_available" in error_str:
+        print("\n" + "="*70)
+        print("⚠️  Chatterbox Turbo has a transformers compatibility issue")
+        print("="*70)
+        print("Fix with:")
+        print("  pip install --upgrade transformers")
+        print("  pip install --upgrade chatterbox-tts>=0.1.6")
+        print("\nThen restart the server.")
+        print("Running without Turbo support (emotion tags will be converted to text)")
+        print("="*70 + "\n")
+    else:
+        print("\n" + "="*70)
+        print("⚠️  Chatterbox Turbo not found")
+        print("="*70)
+        print("Install with:")
+        print("  pip install chatterbox-tts>=0.1.6")
+        print("\nThen restart the server.")
+        print("Running without Turbo support (emotion tags will be converted to text)")
         print("="*70 + "\n")
 import torch
 import numpy as np
