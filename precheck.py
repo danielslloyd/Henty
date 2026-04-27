@@ -71,7 +71,27 @@ def fix_torch():
         print("  [ERR] pip install failed")
     return ok
 
-# ── 2. transformers / LlamaModel ─────────────────────────────────────────────
+# ── 2. numpy / numba compatibility ───────────────────────────────────────────
+
+NUMBA_CHECK = """
+import numba
+print("ok")
+"""
+
+def check_numba():
+    ok, _ = run_check(NUMBA_CHECK)
+    return ok
+
+def fix_numpy():
+    print("  [FIX] Downgrading numpy to <2.3 (numba requirement)...")
+    ok = pip("numpy<2.3", "--quiet")
+    if ok:
+        print("  [OK ] numpy downgraded")
+    else:
+        print("  [ERR] pip install failed")
+    return ok
+
+# ── 3. transformers / LlamaModel ─────────────────────────────────────────────
 
 LLAMA_CHECK = """
 import transformers
@@ -112,9 +132,23 @@ def main():
     print("  Python: " + sys.executable)
     print("=" * 60)
 
-    # 1. torch + torchvision
+    # 1. numpy / numba
     print("")
-    print("[1/3] torch + torchvision compatibility...")
+    print("[1/4] numpy / numba compatibility...")
+    if check_numba():
+        print("  [OK ]")
+    else:
+        if not fix_numpy():
+            print("")
+            print("FAILED: could not downgrade numpy.")
+            sys.exit(1)
+        if not check_numba():
+            print("  [ERR] Still broken after numpy downgrade.")
+            sys.exit(1)
+
+    # 2. torch + torchvision
+    print("")
+    print("[2/4] torch + torchvision compatibility...")
     if check_torchvision():
         print("  [OK ]")
     else:
@@ -130,9 +164,9 @@ def main():
             print("    pip install --force-reinstall torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu121")
             sys.exit(1)
 
-    # 2. transformers LlamaModel
+    # 3. transformers LlamaModel
     print("")
-    print("[2/3] transformers / LlamaModel...")
+    print("[3/4] transformers / LlamaModel...")
     if check_transformers():
         print("  [OK ]")
     else:
@@ -144,9 +178,9 @@ def main():
             print("  [ERR] Still broken after downgrade.")
             sys.exit(1)
 
-    # 3. chatterbox end-to-end
+    # 4. chatterbox end-to-end
     print("")
-    print("[3/3] chatterbox.tts...")
+    print("[4/4] chatterbox.tts...")
     ok, err = check_chatterbox()
     if ok:
         print("  [OK ]")

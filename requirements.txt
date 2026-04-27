@@ -14,7 +14,7 @@ torchaudio>=2.9.1
 chatterbox-tts
 
 # Scientific Computing
-numpy>=2.4.1
+numpy>=1.24,<2.3
 scipy>=1.17.0
 
 # Audio Processing
