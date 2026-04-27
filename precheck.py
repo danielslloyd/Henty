@@ -1,8 +1,14 @@
 import sys
+import os
 if hasattr(sys.stdout, 'reconfigure'):
     sys.stdout.reconfigure(encoding='utf-8', errors='replace')
 if hasattr(sys.stderr, 'reconfigure'):
     sys.stderr.reconfigure(encoding='utf-8', errors='replace')
+
+# Check if precheck should be skipped (after first successful run)
+if os.environ.get('SKIP_PRECHECK', '0') in ('1', 'true', 'True'):
+    print("[PRECHECK] Skipped (SKIP_PRECHECK=1)")
+    sys.exit(0)
 
 """
 Henty pre-flight dependency checker.
@@ -129,6 +135,24 @@ def check_chatterbox():
     ok, out = run_check(CHATTERBOX_CHECK)
     return ok, out
 
+# ── GPU detection ─────────────────────────────────────────────────────────────
+
+def check_gpu_available():
+    """Check if CUDA GPU is available on this system."""
+    try:
+        result = subprocess.run(
+            ["nvidia-smi", "--query-gpu=compute_cap", "--format=csv,noheader"],
+            capture_output=True, text=True, timeout=5
+        )
+        return result.returncode == 0
+    except:
+        return False
+
+def check_torch_cuda():
+    """Check if torch has CUDA support enabled."""
+    ok, out = run_check("import torch; print('cuda' if torch.cuda.is_available() else 'cpu')")
+    return 'cuda' in out.lower()
+
 # ── main ──────────────────────────────────────────────────────────────────────
 
 def main():
@@ -137,6 +161,23 @@ def main():
     print("  Henty pre-flight check")
     print("  Python: " + sys.executable)
     print("=" * 60)
+
+    # GPU check
+    print("")
+    print("[GPU] Checking for CUDA support...")
+    gpu_available = check_gpu_available()
+    torch_has_cuda = check_torch_cuda()
+    if gpu_available and not torch_has_cuda:
+        print(f"  GPU detected but PyTorch is CPU version")
+        print(f"  To enable GPU:")
+        print(f"    pip uninstall torch torchvision torchaudio -y")
+        print(f"    pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu130")
+        print()
+    elif gpu_available and torch_has_cuda:
+        print("  GPU available and enabled")
+    else:
+        print("  Running on CPU")
+    print()
 
     # 1. numpy / numba
     print("")
