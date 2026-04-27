@@ -94,9 +94,9 @@ echo [INFO] Starting server...
 echo.
 
 REM Start the server using the detected Python, logging output to server_log.txt
-REM PYTHONUTF8=1 forces UTF-8 stdout so Unicode print statements don't crash on Windows
+REM Window stays open after crash so you can see the error
 if exist server_log.txt del server_log.txt
-start "Henty Server" cmd /k "set PYTHONUTF8=1 && %HENTY_PYTHON% server.py > server_log.txt 2>&1 || (echo. & echo ====== SERVER CRASHED - check server_log.txt ====== & echo.)"
+start "Henty Server" cmd /k "%HENTY_PYTHON% server.py > server_log.txt 2>&1 || (echo. & echo ====== SERVER CRASHED - check server_log.txt ====== & echo.)"
 
 REM Wait for server to start
 echo [INFO] Waiting for server to initialize...
