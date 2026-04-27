@@ -3,37 +3,13 @@ from flask_cors import CORS
 from flask_socketio import SocketIO, emit
 import os
 from pathlib import Path
-try:
-    from chatterbox.tts import ChatterboxTTS
-except Exception as e:
-    import sys as _sys
-    _err = str(e)
-    print("\n" + "="*70)
-    if "torchvision::nms" in _err or "nms does not exist" in _err:
-        print("[FATAL] torch/torchvision version mismatch (caused by a recent package upgrade).")
-        print("  Fix (GPU): pip install --upgrade torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu121")
-        print("  Fix (CPU): pip install --upgrade torch torchvision torchaudio")
-    else:
-        print("[FATAL] Cannot import ChatterboxTTS: " + _err[:300])
-        print("  Try: pip install --upgrade torch torchvision chatterbox-tts")
-    print("="*70 + "\n")
-    _sys.exit(1)
-
+from chatterbox.tts import ChatterboxTTS
 try:
     from chatterbox.tts_turbo import ChatterboxTurboTTS
     HAS_TURBO = True
-except Exception as e:
+except ImportError:
     HAS_TURBO = False
-    error_str = str(e)
-    print("\n" + "="*70)
-    if "is_mistral_common_available" in error_str or "transformers" in error_str:
-        print("[WARNING] Chatterbox Turbo: transformers version incompatibility")
-        print("  Fix: pip install --upgrade transformers")
-    else:
-        print("[WARNING] Chatterbox Turbo unavailable: " + error_str[:120])
-        print("  Fix: pip install chatterbox-tts>=0.1.6")
-    print("  Running without Turbo (emotion tags will be converted to display text)")
-    print("="*70 + "\n")
+    print("WARNING: chatterbox.tts_turbo not available. Emotion tags will be converted to display text.")
 import torch
 import numpy as np
 from scipy.io import wavfile
