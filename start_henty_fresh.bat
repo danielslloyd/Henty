@@ -56,13 +56,20 @@ if not exist "server.py" (
 
 REM --- Run pre-flight dependency check (auto-repairs broken packages) ---
 echo.
-echo [INFO] Running pre-flight dependency check...
-%HENTY_PYTHON% precheck.py
-if %errorlevel% neq 0 (
-    echo.
-    echo [ERROR] Pre-flight check failed. See messages above.
-    pause
-    exit /b 1
+REM Load env vars
+setlocal enabledelayedexpansion
+for /f "delims==" %%a in ('type .env ^| findstr SKIP_PRECHECK') do set %%a
+if "!SKIP_PRECHECK!"=="1" (
+    echo [INFO] Pre-flight check skipped (SKIP_PRECHECK=1 in .env)
+) else (
+    echo [INFO] Running pre-flight dependency check...
+    %HENTY_PYTHON% precheck.py
+    if !errorlevel! neq 0 (
+        echo.
+        echo [ERROR] Pre-flight check failed. See messages above.
+        pause
+        exit /b 1
+    )
 )
 
 REM Check if ffmpeg is available, install if not

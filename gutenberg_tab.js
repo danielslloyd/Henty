@@ -1358,6 +1358,14 @@ class GutenbergTab {
                 this.chaptersLocked = true;
                 this._updateLockUI();
                 showToast('Chapters locked. Original text saved.', 'success');
+
+                // Switch to TTS tab after successful chunking
+                setTimeout(() => {
+                    document.getElementById('pane-tts').classList.remove('hidden');
+                    if (typeof ttsTab !== 'undefined') {
+                        ttsTab.loadChapter(0);  // Load first chapter
+                    }
+                }, 500);
             } else {
                 const err = await response.json();
                 showToast('Lock failed: ' + (err.error || 'Unknown error'), 'error');
