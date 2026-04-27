@@ -3,33 +3,30 @@ from flask_cors import CORS
 from flask_socketio import SocketIO, emit
 import os
 from pathlib import Path
-from chatterbox.tts import ChatterboxTTS
+try:
+    from chatterbox.tts import ChatterboxTTS
+except Exception as e:
+    print("\n" + "="*70)
+    print(f"✗ FATAL: Cannot import ChatterboxTTS: {str(e)[:200]}")
+    print("  Try: pip install --upgrade transformers chatterbox-tts")
+    print("="*70 + "\n")
+    raise  # Can't run without the main TTS model
+
 try:
     from chatterbox.tts_turbo import ChatterboxTurboTTS
     HAS_TURBO = True
-except ImportError as e:
+except Exception as e:
     HAS_TURBO = False
-    # Check if it's a transformers issue
     error_str = str(e)
-    if "transformers" in error_str or "is_mistral_common_available" in error_str:
-        print("\n" + "="*70)
-        print("⚠️  Chatterbox Turbo has a transformers compatibility issue")
-        print("="*70)
-        print("Fix with:")
-        print("  pip install --upgrade transformers")
-        print("  pip install --upgrade chatterbox-tts>=0.1.6")
-        print("\nThen restart the server.")
-        print("Running without Turbo support (emotion tags will be converted to text)")
-        print("="*70 + "\n")
+    print("\n" + "="*70)
+    if "is_mistral_common_available" in error_str or "transformers" in error_str:
+        print("⚠️  Chatterbox Turbo: transformers version incompatibility")
+        print("  Fix: pip install --upgrade transformers")
     else:
-        print("\n" + "="*70)
-        print("⚠️  Chatterbox Turbo not found")
-        print("="*70)
-        print("Install with:")
-        print("  pip install chatterbox-tts>=0.1.6")
-        print("\nThen restart the server.")
-        print("Running without Turbo support (emotion tags will be converted to text)")
-        print("="*70 + "\n")
+        print(f"⚠️  Chatterbox Turbo unavailable: {error_str[:120]}")
+        print("  Fix: pip install chatterbox-tts>=0.1.6")
+    print("  Running without Turbo (emotion tags → display text)")
+    print("="*70 + "\n")
 import torch
 import numpy as np
 from scipy.io import wavfile
