@@ -1,93 +1,109 @@
 """
 Henty pre-flight dependency checker.
 Runs before server.py to detect and repair broken packages.
-Always uses sys.executable so it operates on the correct Python environment.
+All import checks run in fresh subprocesses to avoid Python module cache issues.
 """
 import sys
 import subprocess
-import importlib
+
+def run_check(code):
+    """Run a Python snippet in a fresh subprocess. Returns (ok, output)."""
+    result = subprocess.run(
+        [sys.executable, "-c", code],
+        capture_output=True, text=True
+    )
+    return result.returncode == 0, (result.stdout + result.stderr).strip()
 
 def pip(*args):
+    print("    Running: pip install " + " ".join(str(a) for a in args))
     result = subprocess.run(
-        [sys.executable, "-m", "pip", "install", "--quiet", *args],
+        [sys.executable, "-m", "pip", "install", *args],
         capture_output=True, text=True
     )
     if result.returncode != 0:
-        print("    pip error: " + result.stderr[-400:])
+        print("    pip error: " + result.stderr[-600:])
     return result.returncode == 0
 
-def try_import(module):
-    try:
-        return importlib.import_module(module), None
-    except Exception as e:
-        return None, str(e)
+# ── 1. torch / torchvision ────────────────────────────────────────────────────
+
+TORCHVISION_CHECK = """
+import torchvision
+_ = torchvision.transforms.InterpolationMode
+print("ok")
+"""
+
+TORCH_CUDA_CHECK = """
+import torch, sys
+cuda = getattr(torch.version, 'cuda', None) or ''
+print(cuda)
+"""
 
 def get_torch_index():
-    """Return the correct PyTorch index URL based on installed CUDA version."""
-    torch, err = try_import("torch")
-    if torch is None:
-        return "https://download.pytorch.org/whl/cpu"
-    cuda = getattr(torch.version, "cuda", None) or ""
-    if cuda.startswith("12.1"):
-        return "https://download.pytorch.org/whl/cu121"
-    elif cuda.startswith("12.4"):
+    ok, out = run_check(TORCH_CUDA_CHECK)
+    cuda = out.strip() if ok else ""
+    print(f"  Detected torch CUDA version: {repr(cuda)}")
+    if cuda.startswith("12.4"):
         return "https://download.pytorch.org/whl/cu124"
+    elif cuda.startswith("12.1"):
+        return "https://download.pytorch.org/whl/cu121"
     elif cuda.startswith("11.8"):
         return "https://download.pytorch.org/whl/cu118"
     elif cuda:
-        # Unknown CUDA version — try cu121 as a reasonable default
+        # Unknown CUDA — cu121 is a safe default for most modern cards
+        print(f"  Unknown CUDA version {cuda!r}, defaulting to cu121 index")
         return "https://download.pytorch.org/whl/cu121"
-    return "https://download.pytorch.org/whl/cpu"
+    else:
+        print("  No CUDA detected — using CPU index")
+        return "https://download.pytorch.org/whl/cpu"
 
 def check_torchvision():
-    """Return True if torchvision loads without error."""
-    try:
-        import torchvision
-        _ = torchvision.transforms.InterpolationMode
-        return True
-    except Exception:
-        return False
+    ok, out = run_check(TORCHVISION_CHECK)
+    return ok
 
 def fix_torch():
-    print("  [FIX] Reinstalling torch/torchvision/torchaudio with matching binaries...")
     index = get_torch_index()
-    print(f"  [FIX] Using index: {index}")
+    print(f"  [FIX] Force-reinstalling torch/torchvision/torchaudio from {index}")
     ok = pip("--force-reinstall", "torch", "torchvision", "torchaudio",
              "--index-url", index)
     if ok:
-        print("  [OK ] torch/torchvision reinstalled")
+        print("  [OK ] Reinstalled")
     else:
-        print("  [ERR] Could not reinstall torch — try running as administrator")
+        print("  [ERR] pip install failed")
     return ok
 
-def check_transformers_llama():
-    """Return True if transformers can load LlamaModel."""
-    try:
-        import importlib
-        t = importlib.import_module("transformers")
-        _ = t.LlamaModel
-        return True
-    except Exception:
-        return False
+# ── 2. transformers / LlamaModel ─────────────────────────────────────────────
+
+LLAMA_CHECK = """
+import transformers
+_ = transformers.LlamaModel
+print("ok")
+"""
+
+def check_transformers():
+    ok, _ = run_check(LLAMA_CHECK)
+    return ok
 
 def fix_transformers():
-    print("  [FIX] Pinning transformers to compatible version...")
-    ok = pip("transformers<4.52.0")
+    print("  [FIX] Downgrading transformers to <4.52.0 ...")
+    ok = pip("transformers<4.52.0", "--quiet")
     if ok:
-        print("  [OK ] transformers pinned")
+        print("  [OK ] transformers downgraded")
     else:
-        print("  [ERR] Could not fix transformers")
+        print("  [ERR] pip install failed")
     return ok
 
+# ── 3. chatterbox end-to-end ─────────────────────────────────────────────────
+
+CHATTERBOX_CHECK = """
+from chatterbox.tts import ChatterboxTTS
+print("ok")
+"""
+
 def check_chatterbox():
-    try:
-        # Force fresh import in case precheck re-installed things
-        if "chatterbox" in sys.modules:
-            del sys.modules["chatterbox"]
-        import chatterbox.tts  # noqa
-        return True, None
-    except Exception as e:
-        return False, str(e)
+    ok, out = run_check(CHATTERBOX_CHECK)
+    return ok, out
+
+# ── main ──────────────────────────────────────────────────────────────────────
 
 def main():
     print("")
@@ -96,7 +112,7 @@ def main():
     print("  Python: " + sys.executable)
     print("=" * 60)
 
-    # --- Step 1: torchvision/torch compatibility ---
+    # 1. torch + torchvision
     print("")
     print("[1/3] torch + torchvision compatibility...")
     if check_torchvision():
@@ -104,43 +120,45 @@ def main():
     else:
         if not fix_torch():
             print("")
-            print("Pre-flight FAILED: could not fix torch/torchvision.")
-            print("Try running this terminal as Administrator, then restart the server.")
+            print("FAILED: could not reinstall torch.")
+            print("Try running the launcher as Administrator.")
             sys.exit(1)
         if not check_torchvision():
-            print("  [ERR] Still broken after reinstall — environment may need manual repair")
+            print("  [ERR] Still broken after reinstall.")
+            print("  This may require running the launcher as Administrator,")
+            print("  or manually running:")
+            print("    pip install --force-reinstall torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu121")
             sys.exit(1)
 
-    # --- Step 2: transformers / LlamaModel ---
+    # 2. transformers LlamaModel
     print("")
-    print("[2/3] transformers LlamaModel import...")
-    if check_transformers_llama():
+    print("[2/3] transformers / LlamaModel...")
+    if check_transformers():
         print("  [OK ]")
     else:
         if not fix_transformers():
             print("")
-            print("Pre-flight FAILED: could not fix transformers.")
+            print("FAILED: could not fix transformers.")
             sys.exit(1)
-        if not check_transformers_llama():
-            print("  [ERR] Still broken after downgrade")
+        if not check_transformers():
+            print("  [ERR] Still broken after downgrade.")
             sys.exit(1)
 
-    # --- Step 3: chatterbox end-to-end ---
+    # 3. chatterbox end-to-end
     print("")
-    print("[3/3] chatterbox.tts import...")
+    print("[3/3] chatterbox.tts...")
     ok, err = check_chatterbox()
     if ok:
         print("  [OK ]")
     else:
-        print(f"  [ERR] {err}")
+        print("  [ERR] " + err[-400:])
         print("")
-        print("Pre-flight FAILED: chatterbox cannot be imported.")
-        print("Check the error above; you may need to reinstall chatterbox-tts.")
+        print("FAILED: chatterbox cannot be imported.")
         sys.exit(1)
 
     print("")
     print("=" * 60)
-    print("  All checks passed — starting server")
+    print("  All checks passed -- starting server")
     print("=" * 60)
     print("")
     sys.exit(0)
