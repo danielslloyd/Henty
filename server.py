@@ -1011,6 +1011,20 @@ class TextToAudioConverter:
                 except (AttributeError, RuntimeError):
                     pass
 
+            # Debug: Check model and parameter dtypes
+            if hasattr(model, 'dtype'):
+                print(f"Model dtype: {model.dtype}")
+            else:
+                # Check first parameter dtype if model doesn't have dtype attribute
+                try:
+                    first_param = next(model.parameters())
+                    print(f"Model first parameter dtype: {first_param.dtype}")
+                except (StopIteration, AttributeError):
+                    print(f"Could not determine model dtype")
+
+            print(f"Generation parameters dtypes: exaggeration={type(gen_params.get('exaggeration'))}, cfg_weight={type(gen_params.get('cfg_weight'))}")
+            print(f"Torch default dtype: {torch.get_default_dtype()}")
+
             wav = model.generate(text, **gen_params)
             print(f"Generated wav type: {type(wav)}, shape: {wav.shape if hasattr(wav, 'shape') else 'N/A'}")
 
