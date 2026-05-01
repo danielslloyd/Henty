@@ -1003,8 +1003,13 @@ class TextToAudioConverter:
             # Ensure float32 throughout — numpy <2.3 can produce float64 tensors
             # which cause "expected scalar type Double but found Float" errors
             torch.set_default_dtype(torch.float32)
-            if hasattr(model, 'float'):
+            try:
                 model = model.float()
+            except (AttributeError, RuntimeError):
+                try:
+                    model = model.to(dtype=torch.float32)
+                except (AttributeError, RuntimeError):
+                    pass
 
             wav = model.generate(text, **gen_params)
             print(f"Generated wav type: {type(wav)}, shape: {wav.shape if hasattr(wav, 'shape') else 'N/A'}")
