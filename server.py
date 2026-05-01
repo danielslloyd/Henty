@@ -974,10 +974,10 @@ class TextToAudioConverter:
                 model = self.load_model()
                 print(f"  ✓ Loaded: {type(model).__name__} (Standard)")
 
-            # Prepare generation parameters
+            # Prepare generation parameters with explicit float32 conversion
             gen_params = {
-                "exaggeration": exaggeration,
-                "cfg_weight": cfg_weight
+                "exaggeration": torch.tensor(exaggeration, dtype=torch.float32).item(),
+                "cfg_weight": torch.tensor(cfg_weight, dtype=torch.float32).item()
             }
 
             # Add audio prompt if provided
@@ -1010,20 +1010,6 @@ class TextToAudioConverter:
                     model = model.to(dtype=torch.float32)
                 except (AttributeError, RuntimeError):
                     pass
-
-            # Debug: Check model and parameter dtypes
-            if hasattr(model, 'dtype'):
-                print(f"Model dtype: {model.dtype}")
-            else:
-                # Check first parameter dtype if model doesn't have dtype attribute
-                try:
-                    first_param = next(model.parameters())
-                    print(f"Model first parameter dtype: {first_param.dtype}")
-                except (StopIteration, AttributeError):
-                    print(f"Could not determine model dtype")
-
-            print(f"Generation parameters dtypes: exaggeration={type(gen_params.get('exaggeration'))}, cfg_weight={type(gen_params.get('cfg_weight'))}")
-            print(f"Torch default dtype: {torch.get_default_dtype()}")
 
             wav = model.generate(text, **gen_params)
             print(f"Generated wav type: {type(wav)}, shape: {wav.shape if hasattr(wav, 'shape') else 'N/A'}")
