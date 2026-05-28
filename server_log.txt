@@ -1,0 +1,2126 @@
+
+================================================================================
+GPU/CUDA INITIALIZATION
+================================================================================
+Python executable: C:\Users\danie\AppData\Local\Programs\Python\Python311\python.exe
+Python version: 3.11.0
+PyTorch version: 2.12.0+cu130
+PyTorch location: C:\Users\danie\AppData\Local\Programs\Python\Python311\Lib\site-packages\torch\__init__.py
+CUDA available: True
+CUDA version: 13.0
+Number of GPUs: 1
+Current GPU: 0
+GPU Name: NVIDIA GeForce RTX 5070 Ti
+GPU Memory: 17.09 GB
+
+Device preference: auto
+Using device: cuda
+================================================================================
+
+Starting Text to Audio Converter API...
+Using device: cuda
+Server address: http://0.0.0.0:5000
+Authentication: DISABLED (not recommended for remote access)
+WebSocket support: ENABLED
+
+Allowed CORS origins: *
+
+[BUILD] git commit : 919d737
+[BUILD] /listen route registered: True
+
+Ready for connections!
+ * Serving Flask app 'server'
+ * Debug mode: off
+WARNING: This is a development server. Do not use it in a production deployment. Use a production WSGI server instead.
+ * Running on all addresses (0.0.0.0)
+ * Running on http://127.0.0.1:5000
+ * Running on http://192.168.68.52:5000
+Press CTRL+C to quit
+127.0.0.1 - - [28/May/2026 09:10:01] "GET /app.html HTTP/1.1" 304 -
+127.0.0.1 - - [28/May/2026 09:10:02] "GET /client_config.js HTTP/1.1" 304 -
+127.0.0.1 - - [28/May/2026 09:10:02] "GET /gutenberg_tab.js HTTP/1.1" 304 -
+127.0.0.1 - - [28/May/2026 09:10:02] "GET /tts_tab.js HTTP/1.1" 304 -
+127.0.0.1 - - [28/May/2026 09:10:02] "GET /reader_tab.js HTTP/1.1" 304 -
+127.0.0.1 - - [28/May/2026 09:10:02] "GET /api/project/recent HTTP/1.1" 200 -
+127.0.0.1 - - [28/May/2026 09:10:02] "GET /api/device-status HTTP/1.1" 200 -
+127.0.0.1 - - [28/May/2026 09:10:03] "GET /api/project/recent HTTP/1.1" 200 -
+127.0.0.1 - - [28/May/2026 09:10:04] "GET /api/config HTTP/1.1" 200 -
+127.0.0.1 - - [28/May/2026 09:10:09] "POST /api/project/create HTTP/1.1" 200 -
+127.0.0.1 - - [28/May/2026 09:10:09] "GET /api/project/recent HTTP/1.1" 200 -
+127.0.0.1 - - [28/May/2026 09:10:09] "POST /api/project/load HTTP/1.1" 200 -
+127.0.0.1 - - [28/May/2026 09:10:09] "GET /api/config HTTP/1.1" 200 -
+127.0.0.1 - - [28/May/2026 09:10:10] "GET /api/project/book-file HTTP/1.1" 400 -
+127.0.0.1 - - [28/May/2026 09:10:10] "GET /api/project/get-text-files HTTP/1.1" 200 -
+127.0.0.1 - - [28/May/2026 09:10:10] "GET /api/voice-samples HTTP/1.1" 200 -
+127.0.0.1 - - [28/May/2026 09:10:10] "GET /api/config HTTP/1.1" 200 -
+127.0.0.1 - - [28/May/2026 09:10:10] "GET /api/project/info HTTP/1.1" 200 -
+127.0.0.1 - - [28/May/2026 09:10:10] "GET /api/device-status HTTP/1.1" 200 -
+127.0.0.1 - - [28/May/2026 09:10:11] "GET /api/project/info HTTP/1.1" 200 -
+127.0.0.1 - - [28/May/2026 09:10:11] "GET /api/project/info HTTP/1.1" 200 -
+127.0.0.1 - - [28/May/2026 09:10:11] "GET /api/project/recent HTTP/1.1" 200 -
+127.0.0.1 - - [28/May/2026 09:10:13] "POST /api/project/add-gutenberg-url HTTP/1.1" 200 -
+127.0.0.1 - - [28/May/2026 09:10:18] "POST /api/project/add-gutenberg-url HTTP/1.1" 200 -
+127.0.0.1 - - [28/May/2026 09:10:19] "POST /api/project/add-gutenberg-url HTTP/1.1" 200 -
+127.0.0.1 - - [28/May/2026 09:10:20] "GET /api/project/book-file HTTP/1.1" 200 -
+127.0.0.1 - - [28/May/2026 09:10:20] "GET /api/project/get-text-files HTTP/1.1" 200 -
+127.0.0.1 - - [28/May/2026 09:10:22] "POST /api/project/save-book-file HTTP/1.1" 200 -
+127.0.0.1 - - [28/May/2026 09:10:22] "GET /api/project/get-text-files HTTP/1.1" 200 -
+127.0.0.1 - - [28/May/2026 09:10:23] "GET /api/project/info HTTP/1.1" 200 -
+127.0.0.1 - - [28/May/2026 09:10:24] "POST /api/project/confirm-structure HTTP/1.1" 200 -
+127.0.0.1 - - [28/May/2026 09:10:24] "POST /api/project/tag-chunks HTTP/1.1" 200 -
+127.0.0.1 - - [28/May/2026 09:10:24] "GET /api/project/book-file HTTP/1.1" 200 -
+127.0.0.1 - - [28/May/2026 09:10:24] "GET /api/project/get-text-files HTTP/1.1" 200 -
+127.0.0.1 - - [28/May/2026 09:10:25] "GET /api/project/info HTTP/1.1" 200 -
+127.0.0.1 - - [28/May/2026 09:10:25] "GET /api/project/info HTTP/1.1" 200 -
+127.0.0.1 - - [28/May/2026 09:10:25] "GET /api/project/flags HTTP/1.1" 200 -
+127.0.0.1 - - [28/May/2026 09:10:31] "GET /api/project/info HTTP/1.1" 200 -
+127.0.0.1 - - [28/May/2026 09:10:31] "GET /api/project/flags HTTP/1.1" 200 -
+127.0.0.1 - - [28/May/2026 09:10:35] "GET /api/generation-progress HTTP/1.1" 200 -
+127.0.0.1 - - [28/May/2026 09:10:36] "GET /api/generation-progress HTTP/1.1" 200 -
+127.0.0.1 - - [28/May/2026 09:10:36] "GET /api/generation-progress HTTP/1.1" 200 -
+127.0.0.1 - - [28/May/2026 09:10:37] "GET /api/generation-progress HTTP/1.1" 200 -
+127.0.0.1 - - [28/May/2026 09:10:37] "GET /api/generation-progress HTTP/1.1" 200 -
+127.0.0.1 - - [28/May/2026 09:10:37] "GET /api/generation-progress HTTP/1.1" 200 -
+127.0.0.1 - - [28/May/2026 09:10:38] "GET /api/generation-progress HTTP/1.1" 200 -
+127.0.0.1 - - [28/May/2026 09:10:38] "GET /api/generation-progress HTTP/1.1" 200 -
+127.0.0.1 - - [28/May/2026 09:10:38] "GET /api/generation-progress HTTP/1.1" 200 -
+127.0.0.1 - - [28/May/2026 09:10:39] "GET /api/generation-progress HTTP/1.1" 200 -
+127.0.0.1 - - [28/May/2026 09:10:39] "GET /api/generation-progress HTTP/1.1" 200 -
+127.0.0.1 - - [28/May/2026 09:10:39] "GET /api/generation-progress HTTP/1.1" 200 -
+127.0.0.1 - - [28/May/2026 09:10:40] "GET /api/generation-progress HTTP/1.1" 200 -
+127.0.0.1 - - [28/May/2026 09:10:40] "GET /api/generation-progress HTTP/1.1" 200 -
+127.0.0.1 - - [28/May/2026 09:10:40] "GET /api/generation-progress HTTP/1.1" 200 -
+127.0.0.1 - - [28/May/2026 09:10:41] "GET /api/generation-progress HTTP/1.1" 200 -
+127.0.0.1 - - [28/May/2026 09:10:41] "GET /api/generation-progress HTTP/1.1" 200 -
+127.0.0.1 - - [28/May/2026 09:10:41] "GET /api/generation-progress HTTP/1.1" 200 -
+127.0.0.1 - - [28/May/2026 09:10:42] "GET /api/generation-progress HTTP/1.1" 200 -
+127.0.0.1 - - [28/May/2026 09:10:42] "GET /api/generation-progress HTTP/1.1" 200 -
+127.0.0.1 - - [28/May/2026 09:10:42] "GET /api/generation-progress HTTP/1.1" 200 -
+127.0.0.1 - - [28/May/2026 09:10:43] "GET /api/generation-progress HTTP/1.1" 200 -
+127.0.0.1 - - [28/May/2026 09:10:43] "GET /api/generation-progress HTTP/1.1" 200 -
+127.0.0.1 - - [28/May/2026 09:10:43] "GET /api/generation-progress HTTP/1.1" 200 -
+127.0.0.1 - - [28/May/2026 09:10:44] "GET /api/generation-progress HTTP/1.1" 200 -
+127.0.0.1 - - [28/May/2026 09:10:44] "GET /api/generation-progress HTTP/1.1" 200 -
+127.0.0.1 - - [28/May/2026 09:10:44] "GET /api/generation-progress HTTP/1.1" 200 -
+127.0.0.1 - - [28/May/2026 09:10:45] "GET /api/generation-progress HTTP/1.1" 200 -
+127.0.0.1 - - [28/May/2026 09:10:45] "GET /api/generation-progress HTTP/1.1" 200 -
+C:\Users\danie\AppData\Local\Programs\Python\Python311\Lib\site-packages\diffusers\models\lora.py:393: FutureWarning: `LoRACompatibleLinear` is deprecated and will be removed in version 1.0.0. Use of `LoRACompatibleLinear` is deprecated. Please switch to PEFT backend by installing PEFT: `pip install peft`.
+  deprecate("LoRACompatibleLinear", "1.0.0", deprecation_message)
+127.0.0.1 - - [28/May/2026 09:10:45] "GET /api/generation-progress HTTP/1.1" 200 -
+127.0.0.1 - - [28/May/2026 09:10:46] "GET /api/generation-progress HTTP/1.1" 200 -
+127.0.0.1 - - [28/May/2026 09:10:46] "GET /api/generation-progress HTTP/1.1" 200 -
+127.0.0.1 - - [28/May/2026 09:10:46] "GET /api/generation-progress HTTP/1.1" 200 -
+127.0.0.1 - - [28/May/2026 09:10:47] "GET /api/generation-progress HTTP/1.1" 200 -
+127.0.0.1 - - [28/May/2026 09:10:47] "GET /api/generation-progress HTTP/1.1" 200 -
+127.0.0.1 - - [28/May/2026 09:10:47] "GET /api/generation-progress HTTP/1.1" 200 -
+127.0.0.1 - - [28/May/2026 09:10:48] "GET /api/generation-progress HTTP/1.1" 200 -
+INFO:werkzeug:127.0.0.1 - - [28/May/2026 09:10:48] "GET /api/generation-progress HTTP/1.1" 200 -
+127.0.0.1 - - [28/May/2026 09:10:48] "GET /api/generation-progress HTTP/1.1" 200 -
+INFO:werkzeug:127.0.0.1 - - [28/May/2026 09:10:48] "GET /api/generation-progress HTTP/1.1" 200 -
+127.0.0.1 - - [28/May/2026 09:10:48] "GET /api/generation-progress HTTP/1.1" 200 -
+INFO:werkzeug:127.0.0.1 - - [28/May/2026 09:10:48] "GET /api/generation-progress HTTP/1.1" 200 -
+127.0.0.1 - - [28/May/2026 09:10:49] "GET /api/generation-progress HTTP/1.1" 200 -
+INFO:werkzeug:127.0.0.1 - - [28/May/2026 09:10:49] "GET /api/generation-progress HTTP/1.1" 200 -
+127.0.0.1 - - [28/May/2026 09:10:49] "GET /api/generation-progress HTTP/1.1" 200 -
+INFO:werkzeug:127.0.0.1 - - [28/May/2026 09:10:49] "GET /api/generation-progress HTTP/1.1" 200 -
+127.0.0.1 - - [28/May/2026 09:10:49] "GET /api/generation-progress HTTP/1.1" 200 -
+INFO:werkzeug:127.0.0.1 - - [28/May/2026 09:10:49] "GET /api/generation-progress HTTP/1.1" 200 -
+127.0.0.1 - - [28/May/2026 09:10:50] "GET /api/generation-progress HTTP/1.1" 200 -
+INFO:werkzeug:127.0.0.1 - - [28/May/2026 09:10:50] "GET /api/generation-progress HTTP/1.1" 200 -
+127.0.0.1 - - [28/May/2026 09:10:50] "GET /api/generation-progress HTTP/1.1" 200 -
+INFO:werkzeug:127.0.0.1 - - [28/May/2026 09:10:50] "GET /api/generation-progress HTTP/1.1" 200 -
+127.0.0.1 - - [28/May/2026 09:10:50] "GET /api/generation-progress HTTP/1.1" 200 -
+INFO:werkzeug:127.0.0.1 - - [28/May/2026 09:10:50] "GET /api/generation-progress HTTP/1.1" 200 -
+127.0.0.1 - - [28/May/2026 09:10:51] "GET /api/generation-progress HTTP/1.1" 200 -
+INFO:werkzeug:127.0.0.1 - - [28/May/2026 09:10:51] "GET /api/generation-progress HTTP/1.1" 200 -
+127.0.0.1 - - [28/May/2026 09:10:51] "GET /api/generation-progress HTTP/1.1" 200 -
+INFO:werkzeug:127.0.0.1 - - [28/May/2026 09:10:51] "GET /api/generation-progress HTTP/1.1" 200 -
+127.0.0.1 - - [28/May/2026 09:10:52] "GET /api/generation-progress HTTP/1.1" 200 -
+INFO:werkzeug:127.0.0.1 - - [28/May/2026 09:10:52] "GET /api/generation-progress HTTP/1.1" 200 -
+127.0.0.1 - - [28/May/2026 09:10:52] "GET /api/generation-progress HTTP/1.1" 200 -
+INFO:werkzeug:127.0.0.1 - - [28/May/2026 09:10:52] "GET /api/generation-progress HTTP/1.1" 200 -
+127.0.0.1 - - [28/May/2026 09:10:52] "GET /api/generation-progress HTTP/1.1" 200 -
+INFO:werkzeug:127.0.0.1 - - [28/May/2026 09:10:52] "GET /api/generation-progress HTTP/1.1" 200 -
+127.0.0.1 - - [28/May/2026 09:10:53] "GET /api/generation-progress HTTP/1.1" 200 -
+INFO:werkzeug:127.0.0.1 - - [28/May/2026 09:10:53] "GET /api/generation-progress HTTP/1.1" 200 -
+127.0.0.1 - - [28/May/2026 09:10:53] "GET /api/generation-progress HTTP/1.1" 200 -
+INFO:werkzeug:127.0.0.1 - - [28/May/2026 09:10:53] "GET /api/generation-progress HTTP/1.1" 200 -
+C:\Users\danie\AppData\Local\Programs\Python\Python311\Lib\contextlib.py:105: FutureWarning: `torch.backends.cuda.sdp_kernel()` is deprecated. In the future, this context manager will be removed. Please see `torch.nn.attention.sdpa_kernel()` for the new context manager, with updated signature.
+  self.gen = func(*args, **kwds)
+`sdpa` attention does not support `output_attentions=True`. Please set your attention to `eager` if you want any of these features.
+
+━━━ [CREATE PROJECT API] START ━━━
+[CREATE PROJECT API] Request data keys: dict_keys(['name'])
+[CREATE PROJECT API] Project name: kllpp
+[CREATE PROJECT API] Base path: (using default)
+[CREATE PROJECT API] Text source: None
+[CREATE PROJECT API] Using default path: Projects
+[CREATE PROJECT API] Full project path: Projects\kllpp
+[CREATE PROJECT API] Creating directories...
+[CREATE PROJECT API] Saved project metadata to Projects\kllpp\project.json
+[CREATE PROJECT API] ✓ Project created successfully
+[CREATE PROJECT API] Returning: project_path=Projects\kllpp
+[CREATE PROJECT API] Path repr: 'Projects\\kllpp'
+[CREATE PROJECT API] Path bytes: ['0x50', '0x72', '0x6f', '0x6a', '0x65', '0x63', '0x74', '0x73', '0x5c', '0x6b', '0x6c', '0x6c', '0x70', '0x70']
+━━━ [CREATE PROJECT API] END ━━━
+
+[CREATE PROJECT API] JSON being returned: {
+  "success": true,
+  "project_path": "Projects\\kllpp",
+  "metadata": {
+    "name": "kllpp",
+    "created_at": "2026-05-28T09:10:09.138694",
+    "last_modified": "2026-05-28T09:10:09.138694",
+    "version": "1.0",
+    "note": "All file references use relative paths for portability",
+    "default_audio_settings": {
+      "exaggeration": 0.6,
+      "cfg_weight": 0.4,
+      "voice_sample": "none",
+      "seed": 0,
+      "temperature": 0.8,
+      "ref_vad_trimming": false
+    },
+    "chapters": []
+  }
+}
+
+━━━ [LOAD PROJECT API] START ━━━
+[LOAD PROJECT API] Request data: {'project_path': 'Projects\\kllpp'}
+[LOAD PROJECT API] Project path: Projects\kllpp
+[LOAD PROJECT API] Checking if path exists: Projects\kllpp
+[LOAD PROJECT API] Looking for project file: Projects\kllpp\project.json
+[LOAD PROJECT API] Reading project.json...
+[LOAD PROJECT API] Project metadata: {"name": "kllpp", "created_at": "2026-05-28T09:10:09.138694", "last_modified": "2026-05-28T09:10:09.138694", "version": "1.0", "note": "All file references use relative paths for portability", "default_audio_settings": {"exaggeration": 0.6, "cfg_weight": 0.4, "voice_sample": "none", "seed": 0, "temp... [358 chars total]
+[LOAD PROJECT API] ✓ Project loaded successfully
+[LOAD PROJECT API] Text files found: 0
+━━━ [LOAD PROJECT API] END ━━━
+
+
+=== Loading Gutenberg book (stage-1): https://www.gutenberg.org/cache/epub/120/pg120.txt ===
+[STAGE1] Downloading plain text: https://www.gutenberg.org/cache/epub/120/pg120.txt
+[STAGE1] Downloaded 391,658 chars
+[STAGE1] Title: TREASURE_ISLAND
+[STAGE1] Downloading EPUB for cache
+[EPUB] Downloading: https://www.gutenberg.org/ebooks/120.epub.noimages
+[EPUB] Downloaded successfully: 274,665 bytes
+[STAGE1] Boilerplate regions found: 3
+[STAGE1] Newline distribution: {'2': 1407, '3': 41, '5': 42, '4': 1}
+
+=== Loading Gutenberg book (stage-1): https://www.gutenberg.org/cache/epub/120/pg120.txt ===
+[STAGE1] Downloading plain text: https://www.gutenberg.org/cache/epub/120/pg120.txt
+[STAGE1] Downloaded 391,658 chars
+[STAGE1] Title: TREASURE_ISLAND
+[STAGE1] Boilerplate regions found: 3
+[STAGE1] Newline distribution: {'2': 1407, '3': 41, '5': 42, '4': 1}
+
+=== Loading Gutenberg book (stage-1): https://www.gutenberg.org/cache/epub/120/pg120.txt ===
+[STAGE1] Downloading plain text: https://www.gutenberg.org/cache/epub/120/pg120.txt
+[STAGE1] Downloaded 391,658 chars
+[STAGE1] Title: TREASURE_ISLAND
+[STAGE1] Boilerplate regions found: 3
+[STAGE1] Newline distribution: {'2': 1407, '3': 41, '5': 42, '4': 1}
+[STAGE1] book.txt written: 385,671 chars, 78 blocks (42 short/heading), 3 delete regions
+[CONFIRM-STRUCTURE] Stage-2 book.txt written: 78 chapters, 364553 chars
+
+[TTS MODEL SELECTION]
+  Requested: chatterbox
+  HAS_TURBO available: True
+  Paralinguistic tags detected: False
+  → No emotion tags, using requested model: chatterbox
+  ✓ Final model to use: chatterbox
+
+=== Generating audio for chunk 0 on GPU (will load) ===
+Text file ID: dd4285e3-4c3f-4454-9541-7cd055e2ba5b
+Voice: Haggard.wav
+Model: chatterbox (requested=chatterbox, emotion_tags=False, turbo_available=True)
+Parameters: Exaggeration=0.6, CFG=0.4, Temp=0.8
+Error getting GPU stats: nvidia-ml-py does not seem to be installed or it can't be imported.
+
+[TTS MODEL LOADING]
+  Model: chatterbox, HAS_TURBO=True
+  → Loading Standard model...
+
+================================================================================
+Loading Chatterbox TTS model...
+Device: cuda
+CUDA Available: True
+CUDA Device: NVIDIA GeForce RTX 5070 Ti
+CUDA Version: 13.0
+================================================================================
+
+Error getting GPU stats: nvidia-ml-py does not seem to be installed or it can't be imported.
+
+[TTS MODEL SELECTION]
+  Requested: chatterbox
+  HAS_TURBO available: True
+  Paralinguistic tags detected: False
+  → No emotion tags, using requested model: chatterbox
+  ✓ Final model to use: chatterbox
+
+=== Generating audio for chunk 1 on GPU (will load) ===
+Text file ID: dd4285e3-4c3f-4454-9541-7cd055e2ba5b
+Voice: Haggard.wav
+Model: chatterbox (requested=chatterbox, emotion_tags=False, turbo_available=True)
+Parameters: Exaggeration=0.6, CFG=0.4, Temp=0.8
+Error getting GPU stats: nvidia-ml-py does not seem to be installed or it can't be imported.
+
+[TTS MODEL LOADING]
+  Model: chatterbox, HAS_TURBO=True
+  → Loading Standard model...
+
+================================================================================
+Loading Chatterbox TTS model...
+Device: cuda
+CUDA Available: True
+CUDA Device: NVIDIA GeForce RTX 5070 Ti
+CUDA Version: 13.0
+================================================================================
+
+Error getting GPU stats: nvidia-ml-py does not seem to be installed or it can't be imported.
+
+[TTS MODEL SELECTION]
+  Requested: chatterbox
+  HAS_TURBO available: True
+  Paralinguistic tags detected: False
+  → No emotion tags, using requested model: chatterbox
+  ✓ Final model to use: chatterbox
+
+=== Generating audio for chunk 2 on GPU (will load) ===
+Text file ID: dd4285e3-4c3f-4454-9541-7cd055e2ba5b
+Voice: Haggard.wav
+Model: chatterbox (requested=chatterbox, emotion_tags=False, turbo_available=True)
+Parameters: Exaggeration=0.6, CFG=0.4, Temp=0.8
+Error getting GPU stats: nvidia-ml-py does not seem to be installed or it can't be imported.
+
+[TTS MODEL LOADING]
+  Model: chatterbox, HAS_TURBO=True
+  → Loading Standard model...
+
+================================================================================
+Loading Chatterbox TTS model...
+Device: cuda
+CUDA Available: True
+CUDA Device: NVIDIA GeForce RTX 5070 Ti
+CUDA Version: 13.0
+================================================================================
+
+Error getting GPU stats: nvidia-ml-py does not seem to be installed or it can't be imported.
+Error getting GPU stats: nvidia-ml-py does not seem to be installed or it can't be imported.
+Error getting GPU stats: nvidia-ml-py does not seem to be installed or it can't be imported.
+Error getting GPU stats: nvidia-ml-py does not seem to be installed or it can't be imported.
+Error getting GPU stats: nvidia-ml-py does not seem to be installed or it can't be imported.
+Error getting GPU stats: nvidia-ml-py does not seem to be installed or it can't be imported.
+Error getting GPU stats: nvidia-ml-py does not seem to be installed or it can't be imported.
+Error getting GPU stats: nvidia-ml-py does not seem to be installed or it can't be imported.
+Error getting GPU stats: nvidia-ml-py does not seem to be installed or it can't be imported.
+Error getting GPU stats: nvidia-ml-py does not seem to be installed or it can't be imported.
+Error getting GPU stats: nvidia-ml-py does not seem to be installed or it can't be imported.
+Error getting GPU stats: nvidia-ml-py does not seem to be installed or it can't be imported.
+Error getting GPU stats: nvidia-ml-py does not seem to be installed or it can't be imported.
+Error getting GPU stats: nvidia-ml-py does not seem to be installed or it can't be imported.
+Error getting GPU stats: nvidia-ml-py does not seem to be installed or it can't be imported.
+Error getting GPU stats: nvidia-ml-py does not seem to be installed or it can't be imported.
+Error getting GPU stats: nvidia-ml-py does not seem to be installed or it can't be imported.
+Error getting GPU stats: nvidia-ml-py does not seem to be installed or it can't be imported.
+Error getting GPU stats: nvidia-ml-py does not seem to be installed or it can't be imported.
+Error getting GPU stats: nvidia-ml-py does not seem to be installed or it can't be imported.
+Error getting GPU stats: nvidia-ml-py does not seem to be installed or it can't be imported.
+Error getting GPU stats: nvidia-ml-py does not seem to be installed or it can't be imported.
+Error getting GPU stats: nvidia-ml-py does not seem to be installed or it can't be imported.
+Error getting GPU stats: nvidia-ml-py does not seem to be installed or it can't be imported.
+Error getting GPU stats: nvidia-ml-py does not seem to be installed or it can't be imported.
+Error getting GPU stats: nvidia-ml-py does not seem to be installed or it can't be imported.
+Error getting GPU stats: nvidia-ml-py does not seem to be installed or it can't be imported.
+Error getting GPU stats: nvidia-ml-py does not seem to be installed or it can't be imported.
+Error getting GPU stats: nvidia-ml-py does not seem to be installed or it can't be imported.
+Error getting GPU stats: nvidia-ml-py does not seem to be installed or it can't be imported.
+Error getting GPU stats: nvidia-ml-py does not seem to be installed or it can't be imported.
+Error getting GPU stats: nvidia-ml-py does not seem to be installed or it can't be imported.
+Error getting GPU stats: nvidia-ml-py does not seem to be installed or it can't be imported.
+Error getting GPU stats: nvidia-ml-py does not seem to be installed or it can't be imported.
+Error getting GPU stats: nvidia-ml-py does not seem to be installed or it can't be imported.
+Error getting GPU stats: nvidia-ml-py does not seem to be installed or it can't be imported.
+Error getting GPU stats: nvidia-ml-py does not seem to be installed or it can't be imported.
+Error getting GPU stats: nvidia-ml-py does not seem to be installed or it can't be imported.
+Error getting GPU stats: nvidia-ml-py does not seem to be installed or it can't be imported.
+Error getting GPU stats: nvidia-ml-py does not seem to be installed or it can't be imported.
+loaded PerthNet (Implicit) at step 250,000
+
+================================================================================
+Model loaded successfully!
+Expected device: cuda
+✓ Model loaded (device verification not available for this model type)
+================================================================================
+
+  ✓ Loaded: ChatterboxTTS (Standard)
+
+=== Validating voice sample: voice_samples\Haggard.wav ===
+Voice sample format validation: OK (48000 Hz)
+Voice sample ready for use
+Generating with parameters: {'exaggeration': 0.6000000238418579, 'cfg_weight': 0.4000000059604645, 'audio_prompt_path': 'voice_samples\\Haggard.wav'}
+Text length: 479 characters
+Device: GPU
+Error getting GPU stats: nvidia-ml-py does not seem to be installed or it can't be imported.
+Error getting GPU stats: nvidia-ml-py does not seem to be installed or it can't be imported.
+Error getting GPU stats: nvidia-ml-py does not seem to be installed or it can't be imported.
+Error getting GPU stats: nvidia-ml-py does not seem to be installed or it can't be imported.
+Error getting GPU stats: nvidia-ml-py does not seem to be installed or it can't be imported.
+loaded PerthNet (Implicit) at step 250,000
+
+================================================================================
+Model loaded successfully!
+Expected device: cuda
+✓ Model loaded (device verification not available for this model type)
+================================================================================
+
+  ✓ Loaded: ChatterboxTTS (Standard)
+
+=== Validating voice sample: voice_samples\Haggard.wav ===
+Voice sample format validation: OK (48000 Hz)
+Voice sample ready for use
+Generating with parameters: {'exaggeration': 0.6000000238418579, 'cfg_weight': 0.4000000059604645, 'audio_prompt_path': 'voice_samples\\Haggard.wav'}
+Text length: 350 characters
+Device: GPU
+loaded PerthNet (Implicit) at step 250,000
+
+================================================================================
+Model loaded successfully!
+Expected device: cuda
+✓ Model loaded (device verification not available for this model type)
+================================================================================
+
+  ✓ Loaded: ChatterboxTTS (Standard)
+
+=== Validating voice sample: voice_samples\Haggard.wav ===
+Error getting GPU stats: nvidia-ml-py does not seem to be installed or it can't be imported.
+Voice sample format validation: OK (48000 Hz)
+Voice sample ready for use
+Generating with parameters: {'exaggeration': 0.6000000238418579, 'cfg_weight': 0.4000000059604645, 'audio_prompt_path': 'voice_samples\\Haggard.wav'}
+Text length: 153 characters
+Device: GPU
+Error getting GPU stats: nvidia-ml-py does not seem to be installed or it can't be imported.
+Error getting GPU stats: nvidia-ml-py does not seem to be installed or it can't be imported.
+Error getting GPU stats: nvidia-ml-py does not seem to be installed or it can't be imported.
+Error getting GPU stats: nvidia-ml-py does not seem to be installed or it can't be imported.
+Sampling:   0%|          | 0/1000 [00:00<?, ?it/s]
+Sampling:   0%|          | 0/1000 [00:00<?, ?it/s][A
+
+Sampling:   0%|          | 0/1000 [00:00<?, ?it/s][A[A127.0.0.1 - - [28/May/2026 09:10:53] "GET /api/generation-progress HTTP/1.1" 200 -
+INFO:werkzeug:127.0.0.1 - - [28/May/2026 09:10:53] "GET /api/generation-progress HTTP/1.1" 200 -
+
+
+Sampling:   0%|          | 1/1000 [00:00<02:31,  6.60it/s][A[A
+Sampling:   0%|          | 1/1000 [00:00<02:35,  6.41it/s][ASampling:   0%|          | 1/1000 [00:00<02:37,  6.33it/s]
+
+Sampling:   0%|          | 3/1000 [00:00<01:43,  9.67it/s][A[ASampling:   0%|          | 3/1000 [00:00<01:46,  9.39it/s]
+Sampling:   0%|          | 3/1000 [00:00<01:46,  9.35it/s][A127.0.0.1 - - [28/May/2026 09:10:53] "GET /api/generation-progress HTTP/1.1" 200 -
+INFO:werkzeug:127.0.0.1 - - [28/May/2026 09:10:53] "GET /api/generation-progress HTTP/1.1" 200 -
+
+
+Sampling:   0%|          | 5/1000 [00:00<01:34, 10.51it/s][A[ASampling:   0%|          | 5/1000 [00:00<01:35, 10.44it/s]
+Sampling:   0%|          | 5/1000 [00:00<01:38, 10.15it/s][A
+
+Sampling:   1%|          | 7/1000 [00:00<01:30, 10.98it/s][A[ASampling:   1%|          | 7/1000 [00:00<01:31, 10.90it/s]
+Sampling:   1%|          | 7/1000 [00:00<01:33, 10.67it/s][A127.0.0.1 - - [28/May/2026 09:10:54] "GET /api/generation-progress HTTP/1.1" 200 -
+INFO:werkzeug:127.0.0.1 - - [28/May/2026 09:10:54] "GET /api/generation-progress HTTP/1.1" 200 -
+
+
+Sampling:   1%|          | 9/1000 [00:00<01:27, 11.37it/s][A[ASampling:   1%|          | 9/1000 [00:00<01:29, 11.10it/s]
+Sampling:   1%|          | 9/1000 [00:00<01:30, 10.93it/s][A
+
+Sampling:   1%|          | 11/1000 [00:01<01:25, 11.53it/s][A[ASampling:   1%|          | 11/1000 [00:01<01:27, 11.26it/s]127.0.0.1 - - [28/May/2026 09:10:54] "GET /api/generation-progress HTTP/1.1" 200 -
+INFO:werkzeug:127.0.0.1 - - [28/May/2026 09:10:54] "GET /api/generation-progress HTTP/1.1" 200 -
+
+Sampling:   1%|          | 11/1000 [00:01<01:29, 11.04it/s][A
+
+Sampling:   1%|▏         | 13/1000 [00:01<01:27, 11.32it/s][A[ASampling:   1%|▏         | 13/1000 [00:01<01:28, 11.17it/s]
+Sampling:   1%|▏         | 13/1000 [00:01<01:29, 11.08it/s][A
+
+Sampling:   2%|▏         | 15/1000 [00:01<01:25, 11.52it/s][A[A127.0.0.1 - - [28/May/2026 09:10:54] "GET /api/generation-progress HTTP/1.1" 200 -
+INFO:werkzeug:127.0.0.1 - - [28/May/2026 09:10:54] "GET /api/generation-progress HTTP/1.1" 200 -
+Sampling:   2%|▏         | 15/1000 [00:01<01:27, 11.30it/s]
+Sampling:   2%|▏         | 15/1000 [00:01<01:28, 11.17it/s][A
+
+Sampling:   2%|▏         | 17/1000 [00:01<01:24, 11.58it/s][A[ASampling:   2%|▏         | 17/1000 [00:01<01:25, 11.55it/s]
+Sampling:   2%|▏         | 17/1000 [00:01<01:27, 11.27it/s][A127.0.0.1 - - [28/May/2026 09:10:55] "GET /api/generation-progress HTTP/1.1" 200 -
+INFO:werkzeug:127.0.0.1 - - [28/May/2026 09:10:55] "GET /api/generation-progress HTTP/1.1" 200 -
+
+
+Sampling:   2%|▏         | 19/1000 [00:01<01:23, 11.70it/s][A[ASampling:   2%|▏         | 19/1000 [00:01<01:24, 11.59it/s]
+Sampling:   2%|▏         | 19/1000 [00:01<01:27, 11.25it/s][A
+
+Sampling:   2%|▏         | 21/1000 [00:01<01:23, 11.79it/s][A[ASampling:   2%|▏         | 21/1000 [00:01<01:24, 11.62it/s]
+Sampling:   2%|▏         | 21/1000 [00:01<01:26, 11.31it/s][A127.0.0.1 - - [28/May/2026 09:10:55] "GET /api/generation-progress HTTP/1.1" 200 -
+INFO:werkzeug:127.0.0.1 - - [28/May/2026 09:10:55] "GET /api/generation-progress HTTP/1.1" 200 -
+
+
+Sampling:   2%|▏         | 23/1000 [00:02<01:22, 11.85it/s][A[ASampling:   2%|▏         | 23/1000 [00:02<01:23, 11.72it/s]
+Sampling:   2%|▏         | 23/1000 [00:02<01:26, 11.33it/s][A
+
+Sampling:   2%|▎         | 25/1000 [00:02<01:22, 11.79it/s][A[ASampling:   2%|▎         | 25/1000 [00:02<01:23, 11.65it/s]
+Sampling:   2%|▎         | 25/1000 [00:02<01:26, 11.31it/s][A
+
+Sampling:   3%|▎         | 27/1000 [00:02<01:21, 11.92it/s][A[A127.0.0.1 - - [28/May/2026 09:10:55] "GET /api/generation-progress HTTP/1.1" 200 -
+INFO:werkzeug:127.0.0.1 - - [28/May/2026 09:10:55] "GET /api/generation-progress HTTP/1.1" 200 -
+Sampling:   3%|▎         | 27/1000 [00:02<01:23, 11.65it/s]
+Sampling:   3%|▎         | 27/1000 [00:02<01:26, 11.20it/s][A
+
+Sampling:   3%|▎         | 29/1000 [00:02<01:22, 11.74it/s][A[ASampling:   3%|▎         | 29/1000 [00:02<01:23, 11.62it/s]
+Sampling:   3%|▎         | 29/1000 [00:02<01:25, 11.35it/s][A127.0.0.1 - - [28/May/2026 09:10:56] "GET /api/generation-progress HTTP/1.1" 200 -
+INFO:werkzeug:127.0.0.1 - - [28/May/2026 09:10:56] "GET /api/generation-progress HTTP/1.1" 200 -
+
+
+Sampling:   3%|▎         | 31/1000 [00:02<01:21, 11.84it/s][A[ASampling:   3%|▎         | 31/1000 [00:02<01:22, 11.70it/s]
+Sampling:   3%|▎         | 31/1000 [00:02<01:25, 11.37it/s][A
+
+Sampling:   3%|▎         | 33/1000 [00:02<01:21, 11.83it/s][A[ASampling:   3%|▎         | 33/1000 [00:02<01:21, 11.80it/s]127.0.0.1 - - [28/May/2026 09:10:56] "GET /api/generation-progress HTTP/1.1" 200 -
+INFO:werkzeug:127.0.0.1 - - [28/May/2026 09:10:56] "GET /api/generation-progress HTTP/1.1" 200 -
+
+Sampling:   3%|▎         | 33/1000 [00:02<01:25, 11.25it/s][A
+
+Sampling:   4%|▎         | 35/1000 [00:03<01:21, 11.80it/s][A[ASampling:   4%|▎         | 35/1000 [00:03<01:21, 11.81it/s]
+Sampling:   4%|▎         | 35/1000 [00:03<01:24, 11.41it/s][A
+
+Sampling:   4%|▎         | 37/1000 [00:03<01:21, 11.83it/s][A[ASampling:   4%|▎         | 37/1000 [00:03<01:21, 11.84it/s]
+Sampling:   4%|▎         | 37/1000 [00:03<01:22, 11.60it/s][A
+
+Sampling:   4%|▍         | 39/1000 [00:03<01:19, 12.03it/s][A[A127.0.0.1 - - [28/May/2026 09:10:56] "GET /api/generation-progress HTTP/1.1" 200 -
+INFO:werkzeug:127.0.0.1 - - [28/May/2026 09:10:56] "GET /api/generation-progress HTTP/1.1" 200 -
+Sampling:   4%|▍         | 39/1000 [00:03<01:20, 11.99it/s]
+Sampling:   4%|▍         | 39/1000 [00:03<01:24, 11.44it/s][A
+
+Sampling:   4%|▍         | 41/1000 [00:03<01:20, 11.89it/s][A[ASampling:   4%|▍         | 41/1000 [00:03<01:20, 11.99it/s]
+Sampling:   4%|▍         | 41/1000 [00:03<01:23, 11.52it/s][A
+
+Sampling:   4%|▍         | 43/1000 [00:03<01:19, 11.99it/s][A[ASampling:   4%|▍         | 43/1000 [00:03<01:19, 12.05it/s]
+Sampling:   4%|▍         | 43/1000 [00:03<01:22, 11.55it/s][A
+
+Sampling:   4%|▍         | 45/1000 [00:03<01:18, 12.15it/s][A[ASampling:   4%|▍         | 45/1000 [00:03<01:19, 12.06it/s]
+Sampling:   4%|▍         | 45/1000 [00:04<01:23, 11.46it/s][A
+
+Sampling:   5%|▍         | 47/1000 [00:04<01:18, 12.08it/s][A[ASampling:   5%|▍         | 47/1000 [00:04<01:21, 11.74it/s]
+
+Sampling:   5%|▍         | 49/1000 [00:04<01:19, 12.02it/s][A[A
+Sampling:   5%|▍         | 47/1000 [00:04<01:24, 11.32it/s][ASampling:   5%|▍         | 49/1000 [00:04<01:20, 11.82it/s]127.0.0.1 - - [28/May/2026 09:10:57] "GET /api/generation-progress HTTP/1.1" 200 -
+INFO:werkzeug:127.0.0.1 - - [28/May/2026 09:10:57] "GET /api/generation-progress HTTP/1.1" 200 -
+
+
+Sampling:   5%|▌         | 51/1000 [00:04<01:18, 12.11it/s][A[A
+Sampling:   5%|▍         | 49/1000 [00:04<01:22, 11.47it/s][ASampling:   5%|▌         | 51/1000 [00:04<01:19, 11.87it/s]
+
+Sampling:   5%|▌         | 53/1000 [00:04<01:18, 12.07it/s][A[A
+Sampling:   5%|▌         | 51/1000 [00:04<01:22, 11.51it/s][ASampling:   5%|▌         | 53/1000 [00:04<01:19, 11.95it/s]127.0.0.1 - - [28/May/2026 09:10:58] "GET /api/generation-progress HTTP/1.1" 200 -
+INFO:werkzeug:127.0.0.1 - - [28/May/2026 09:10:58] "GET /api/generation-progress HTTP/1.1" 200 -
+
+
+Sampling:   6%|▌         | 55/1000 [00:04<01:17, 12.15it/s][A[A
+Sampling:   5%|▌         | 53/1000 [00:04<01:21, 11.57it/s][ASampling:   6%|▌         | 55/1000 [00:04<01:18, 11.98it/s]
+
+Sampling:   6%|▌         | 57/1000 [00:04<01:17, 12.18it/s][A[A
+Sampling:   6%|▌         | 55/1000 [00:04<01:22, 11.51it/s][ASampling:   6%|▌         | 57/1000 [00:04<01:18, 11.97it/s]127.0.0.1 - - [28/May/2026 09:10:58] "GET /api/generation-progress HTTP/1.1" 200 -
+INFO:werkzeug:127.0.0.1 - - [28/May/2026 09:10:58] "GET /api/generation-progress HTTP/1.1" 200 -
+
+
+Sampling:   6%|▌         | 59/1000 [00:05<01:18, 11.93it/s][A[A
+Sampling:   6%|▌         | 57/1000 [00:05<01:23, 11.33it/s][ASampling:   6%|▌         | 59/1000 [00:05<01:19, 11.80it/s]
+
+Sampling:   6%|▌         | 61/1000 [00:05<01:19, 11.77it/s][A[A
+Sampling:   6%|▌         | 59/1000 [00:05<01:24, 11.13it/s][ASampling:   6%|▌         | 61/1000 [00:05<01:22, 11.43it/s]127.0.0.1 - - [28/May/2026 09:10:58] "GET /api/generation-progress HTTP/1.1" 200 -
+INFO:werkzeug:127.0.0.1 - - [28/May/2026 09:10:58] "GET /api/generation-progress HTTP/1.1" 200 -
+
+
+Sampling:   6%|▋         | 63/1000 [00:05<01:20, 11.61it/s][A[A
+Sampling:   6%|▌         | 61/1000 [00:05<01:25, 10.96it/s][ASampling:   6%|▋         | 63/1000 [00:05<01:23, 11.24it/s]
+
+Sampling:   6%|▋         | 65/1000 [00:05<01:19, 11.75it/s][A[A
+Sampling:   6%|▋         | 63/1000 [00:05<01:23, 11.22it/s][ASampling:   6%|▋         | 65/1000 [00:05<01:21, 11.49it/s]127.0.0.1 - - [28/May/2026 09:10:59] "GET /api/generation-progress HTTP/1.1" 200 -
+INFO:werkzeug:127.0.0.1 - - [28/May/2026 09:10:59] "GET /api/generation-progress HTTP/1.1" 200 -
+
+
+Sampling:   7%|▋         | 67/1000 [00:05<01:18, 11.90it/s][A[A
+Sampling:   6%|▋         | 65/1000 [00:05<01:23, 11.26it/s][ASampling:   7%|▋         | 67/1000 [00:05<01:21, 11.48it/s]
+
+Sampling:   7%|▋         | 69/1000 [00:05<01:18, 11.91it/s][A[ASampling:   7%|▋         | 69/1000 [00:05<01:20, 11.50it/s]
+Sampling:   7%|▋         | 67/1000 [00:05<01:22, 11.28it/s][A127.0.0.1 - - [28/May/2026 09:10:59] "GET /api/generation-progress HTTP/1.1" 200 -
+INFO:werkzeug:127.0.0.1 - - [28/May/2026 09:10:59] "GET /api/generation-progress HTTP/1.1" 200 -
+
+
+Sampling:   7%|▋         | 71/1000 [00:06<01:18, 11.84it/s][A[ASampling:   7%|▋         | 71/1000 [00:06<01:19, 11.63it/s]
+Sampling:   7%|▋         | 69/1000 [00:06<01:22, 11.35it/s][A
+
+Sampling:   7%|▋         | 73/1000 [00:06<01:17, 12.03it/s][A[ASampling:   7%|▋         | 73/1000 [00:06<01:18, 11.83it/s]
+Sampling:   7%|▋         | 71/1000 [00:06<01:20, 11.50it/s][A
+
+Sampling:   8%|▊         | 75/1000 [00:06<01:15, 12.20it/s][A[A127.0.0.1 - - [28/May/2026 09:10:59] "GET /api/generation-progress HTTP/1.1" 200 -
+INFO:werkzeug:127.0.0.1 - - [28/May/2026 09:10:59] "GET /api/generation-progress HTTP/1.1" 200 -
+Sampling:   8%|▊         | 75/1000 [00:06<01:17, 11.97it/s]
+Sampling:   7%|▋         | 73/1000 [00:06<01:19, 11.68it/s][A
+
+Sampling:   8%|▊         | 77/1000 [00:06<01:14, 12.33it/s][A[ASampling:   8%|▊         | 77/1000 [00:06<01:15, 12.27it/s]
+Sampling:   8%|▊         | 75/1000 [00:06<01:17, 11.86it/s][A
+
+Sampling:   8%|▊         | 79/1000 [00:06<01:13, 12.48it/s][A[A127.0.0.1 - - [28/May/2026 09:11:00] "GET /api/generation-progress HTTP/1.1" 200 -
+INFO:werkzeug:127.0.0.1 - - [28/May/2026 09:11:00] "GET /api/generation-progress HTTP/1.1" 200 -
+Sampling:   8%|▊         | 79/1000 [00:06<01:15, 12.13it/s]
+Sampling:   8%|▊         | 77/1000 [00:06<01:18, 11.79it/s][A
+
+Sampling:   8%|▊         | 81/1000 [00:06<01:13, 12.45it/s][A[ASampling:   8%|▊         | 81/1000 [00:06<01:16, 12.05it/s]
+Sampling:   8%|▊         | 79/1000 [00:06<01:18, 11.76it/s][A127.0.0.1 - - [28/May/2026 09:11:00] "GET /api/generation-progress HTTP/1.1" 200 -
+INFO:werkzeug:127.0.0.1 - - [28/May/2026 09:11:00] "GET /api/generation-progress HTTP/1.1" 200 -
+
+
+Sampling:   8%|▊         | 83/1000 [00:07<01:14, 12.26it/s][A[ASampling:   8%|▊         | 83/1000 [00:07<01:17, 11.85it/s]
+Sampling:   8%|▊         | 81/1000 [00:07<01:18, 11.64it/s][A
+
+Sampling:   8%|▊         | 85/1000 [00:07<01:15, 12.09it/s][A[ASampling:   8%|▊         | 85/1000 [00:07<01:17, 11.83it/s]
+Sampling:   8%|▊         | 83/1000 [00:07<01:19, 11.55it/s][A
+
+Sampling:   9%|▊         | 87/1000 [00:07<01:15, 12.04it/s][A[A127.0.0.1 - - [28/May/2026 09:11:00] "GET /api/generation-progress HTTP/1.1" 200 -
+INFO:werkzeug:127.0.0.1 - - [28/May/2026 09:11:00] "GET /api/generation-progress HTTP/1.1" 200 -
+Sampling:   9%|▊         | 87/1000 [00:07<01:16, 11.89it/s]
+Sampling:   8%|▊         | 85/1000 [00:07<01:19, 11.57it/s][A
+
+Sampling:   9%|▉         | 89/1000 [00:07<01:15, 12.03it/s][A[ASampling:   9%|▉         | 89/1000 [00:07<01:16, 11.89it/s]127.0.0.1 - - [28/May/2026 09:11:01] "GET /api/generation-progress HTTP/1.1" 200 -
+INFO:werkzeug:127.0.0.1 - - [28/May/2026 09:11:01] "GET /api/generation-progress HTTP/1.1" 200 -
+
+
+Sampling:   9%|▉         | 91/1000 [00:07<01:15, 12.03it/s][A[A
+Sampling:   9%|▊         | 87/1000 [00:07<01:19, 11.49it/s][ASampling:   9%|▉         | 91/1000 [00:07<01:16, 11.90it/s]
+
+Sampling:   9%|▉         | 93/1000 [00:07<01:14, 12.11it/s][A[A
+Sampling:   9%|▉         | 89/1000 [00:07<01:19, 11.46it/s][ASampling:   9%|▉         | 93/1000 [00:07<01:16, 11.88it/s]127.0.0.1 - - [28/May/2026 09:11:01] "GET /api/generation-progress HTTP/1.1" 200 -
+INFO:werkzeug:127.0.0.1 - - [28/May/2026 09:11:01] "GET /api/generation-progress HTTP/1.1" 200 -
+
+
+Sampling:  10%|▉         | 95/1000 [00:08<01:15, 11.99it/s][A[A
+Sampling:   9%|▉         | 91/1000 [00:08<01:19, 11.49it/s][ASampling:  10%|▉         | 95/1000 [00:08<01:16, 11.82it/s]
+
+Sampling:  10%|▉         | 97/1000 [00:08<01:16, 11.87it/s][A[A
+Sampling:   9%|▉         | 93/1000 [00:08<01:19, 11.38it/s][ASampling:  10%|▉         | 97/1000 [00:08<01:16, 11.75it/s]
+
+Sampling:  10%|▉         | 99/1000 [00:08<01:16, 11.81it/s][A[A127.0.0.1 - - [28/May/2026 09:11:01] "GET /api/generation-progress HTTP/1.1" 200 -
+INFO:werkzeug:127.0.0.1 - - [28/May/2026 09:11:01] "GET /api/generation-progress HTTP/1.1" 200 -
+
+Sampling:  10%|▉         | 95/1000 [00:08<01:19, 11.40it/s][ASampling:  10%|▉         | 99/1000 [00:08<01:16, 11.70it/s]
+
+Sampling:  10%|█         | 101/1000 [00:08<01:16, 11.77it/s][A[A
+Sampling:  10%|▉         | 97/1000 [00:08<01:19, 11.38it/s][ASampling:  10%|█         | 101/1000 [00:08<01:16, 11.77it/s]127.0.0.1 - - [28/May/2026 09:11:02] "GET /api/generation-progress HTTP/1.1" 200 -
+INFO:werkzeug:127.0.0.1 - - [28/May/2026 09:11:02] "GET /api/generation-progress HTTP/1.1" 200 -
+
+
+Sampling:  10%|█         | 103/1000 [00:08<01:16, 11.80it/s][A[A
+Sampling:  10%|▉         | 99/1000 [00:08<01:19, 11.28it/s][ASampling:  10%|█         | 103/1000 [00:08<01:16, 11.71it/s]
+
+Sampling:  10%|█         | 105/1000 [00:08<01:15, 11.89it/s][A[A
+Sampling:  10%|█         | 101/1000 [00:08<01:18, 11.44it/s][ASampling:  10%|█         | 105/1000 [00:09<01:16, 11.74it/s]127.0.0.1 - - [28/May/2026 09:11:02] "GET /api/generation-progress HTTP/1.1" 200 -
+INFO:werkzeug:127.0.0.1 - - [28/May/2026 09:11:02] "GET /api/generation-progress HTTP/1.1" 200 -
+
+
+Sampling:  11%|█         | 107/1000 [00:09<01:15, 11.91it/s][A[A
+Sampling:  10%|█         | 103/1000 [00:09<01:18, 11.46it/s][ASampling:  11%|█         | 107/1000 [00:09<01:15, 11.79it/s]
+
+Sampling:  11%|█         | 109/1000 [00:09<01:14, 11.94it/s][A[A
+Sampling:  10%|█         | 105/1000 [00:09<01:18, 11.40it/s][A127.0.0.1 - - [28/May/2026 09:11:02] "GET /api/generation-progress HTTP/1.1" 200 -
+INFO:werkzeug:127.0.0.1 - - [28/May/2026 09:11:02] "GET /api/generation-progress HTTP/1.1" 200 -
+Sampling:  11%|█         | 109/1000 [00:09<01:15, 11.81it/s]
+
+Sampling:  11%|█         | 111/1000 [00:09<01:14, 11.88it/s][A[A
+Sampling:  11%|█         | 107/1000 [00:09<01:17, 11.49it/s][ASampling:  11%|█         | 111/1000 [00:09<01:15, 11.82it/s]
+
+Sampling:  11%|█▏        | 113/1000 [00:09<01:14, 11.96it/s][A[A
+Sampling:  11%|█         | 109/1000 [00:09<01:17, 11.56it/s][A127.0.0.1 - - [28/May/2026 09:11:03] "GET /api/generation-progress HTTP/1.1" 200 -
+INFO:werkzeug:127.0.0.1 - - [28/May/2026 09:11:03] "GET /api/generation-progress HTTP/1.1" 200 -
+Sampling:  11%|█▏        | 113/1000 [00:09<01:15, 11.80it/s]
+
+Sampling:  12%|█▏        | 115/1000 [00:09<01:13, 12.00it/s][A[A
+Sampling:  11%|█         | 111/1000 [00:09<01:17, 11.54it/s][ASampling:  12%|█▏        | 115/1000 [00:09<01:14, 11.86it/s]
+
+Sampling:  12%|█▏        | 117/1000 [00:09<01:13, 12.03it/s][A[A127.0.0.1 - - [28/May/2026 09:11:03] "GET /api/generation-progress HTTP/1.1" 200 -
+INFO:werkzeug:127.0.0.1 - - [28/May/2026 09:11:03] "GET /api/generation-progress HTTP/1.1" 200 -
+
+Sampling:  11%|█▏        | 113/1000 [00:09<01:17, 11.50it/s][ASampling:  12%|█▏        | 117/1000 [00:10<01:14, 11.82it/s]
+
+Sampling:  12%|█▏        | 119/1000 [00:10<01:13, 12.00it/s][A[A
+Sampling:  12%|█▏        | 115/1000 [00:10<01:15, 11.68it/s][ASampling:  12%|█▏        | 119/1000 [00:10<01:12, 12.12it/s]
+
+Sampling:  12%|█▏        | 121/1000 [00:10<01:12, 12.15it/s][A[A127.0.0.1 - - [28/May/2026 09:11:03] "GET /api/generation-progress HTTP/1.1" 200 -
+INFO:werkzeug:127.0.0.1 - - [28/May/2026 09:11:03] "GET /api/generation-progress HTTP/1.1" 200 -
+
+Sampling:  12%|█▏        | 117/1000 [00:10<01:14, 11.83it/s][ASampling:  12%|█▏        | 121/1000 [00:10<01:11, 12.24it/s]
+
+Sampling:  12%|█▏        | 123/1000 [00:10<01:12, 12.15it/s][A[A
+Sampling:  12%|█▏        | 119/1000 [00:10<01:13, 12.02it/s][ASampling:  12%|█▏        | 123/1000 [00:10<01:10, 12.48it/s]
+
+Sampling:  12%|█▎        | 125/1000 [00:10<01:11, 12.27it/s][A[A127.0.0.1 - - [28/May/2026 09:11:04] "GET /api/generation-progress HTTP/1.1" 200 -
+INFO:werkzeug:127.0.0.1 - - [28/May/2026 09:11:04] "GET /api/generation-progress HTTP/1.1" 200 -
+
+Sampling:  12%|█▏        | 121/1000 [00:10<01:12, 12.15it/s][ASampling:  12%|█▎        | 125/1000 [00:10<01:09, 12.61it/s]
+
+Sampling:  13%|█▎        | 127/1000 [00:10<01:10, 12.33it/s][A[A
+Sampling:  12%|█▏        | 123/1000 [00:10<01:10, 12.39it/s][ASampling:  13%|█▎        | 127/1000 [00:10<01:08, 12.78it/s]
+
+Sampling:  13%|█▎        | 129/1000 [00:10<01:09, 12.49it/s][A[A127.0.0.1 - - [28/May/2026 09:11:04] "GET /api/generation-progress HTTP/1.1" 200 -
+INFO:werkzeug:127.0.0.1 - - [28/May/2026 09:11:04] "GET /api/generation-progress HTTP/1.1" 200 -
+
+Sampling:  12%|█▎        | 125/1000 [00:10<01:09, 12.51it/s][ASampling:  13%|█▎        | 129/1000 [00:10<01:07, 12.87it/s]
+
+Sampling:  13%|█▎        | 131/1000 [00:10<01:09, 12.51it/s][A[A
+Sampling:  13%|█▎        | 127/1000 [00:11<01:09, 12.59it/s][ASampling:  13%|█▎        | 131/1000 [00:11<01:07, 12.93it/s]
+
+Sampling:  13%|█▎        | 133/1000 [00:11<01:09, 12.48it/s][A[A127.0.0.1 - - [28/May/2026 09:11:04] "GET /api/generation-progress HTTP/1.1" 200 -
+INFO:werkzeug:127.0.0.1 - - [28/May/2026 09:11:04] "GET /api/generation-progress HTTP/1.1" 200 -
+
+Sampling:  13%|█▎        | 129/1000 [00:11<01:09, 12.61it/s][ASampling:  13%|█▎        | 133/1000 [00:11<01:07, 12.85it/s]
+
+Sampling:  14%|█▎        | 135/1000 [00:11<01:10, 12.32it/s][A[A
+Sampling:  13%|█▎        | 131/1000 [00:11<01:12, 12.06it/s][ASampling:  14%|█▎        | 135/1000 [00:11<01:09, 12.51it/s]127.0.0.1 - - [28/May/2026 09:11:05] "GET /api/generation-progress HTTP/1.1" 200 -
+INFO:werkzeug:127.0.0.1 - - [28/May/2026 09:11:05] "GET /api/generation-progress HTTP/1.1" 200 -
+
+
+Sampling:  14%|█▎        | 137/1000 [00:11<01:12, 11.96it/s][A[ASampling:  14%|█▎        | 137/1000 [00:11<01:11, 12.12it/s]
+Sampling:  13%|█▎        | 133/1000 [00:11<01:15, 11.54it/s][A
+
+Sampling:  14%|█▍        | 139/1000 [00:11<01:12, 11.91it/s][A[ASampling:  14%|█▍        | 139/1000 [00:11<01:09, 12.46it/s]127.0.0.1 - - [28/May/2026 09:11:05] "GET /api/generation-progress HTTP/1.1" 200 -
+INFO:werkzeug:127.0.0.1 - - [28/May/2026 09:11:05] "GET /api/generation-progress HTTP/1.1" 200 -
+
+Sampling:  14%|█▎        | 135/1000 [00:11<01:12, 11.88it/s][A127.0.0.1 - - [28/May/2026 09:11:05] "GET /api/generation-progress HTTP/1.1" 200 -
+INFO:werkzeug:127.0.0.1 - - [28/May/2026 09:11:05] "GET /api/generation-progress HTTP/1.1" 200 -
+
+
+Sampling:  14%|█▍        | 141/1000 [00:11<01:11, 12.09it/s][A[ASampling:  14%|█▍        | 141/1000 [00:11<01:08, 12.62it/s]
+Sampling:  14%|█▎        | 137/1000 [00:11<01:11, 12.09it/s][A
+
+Sampling:  14%|█▍        | 143/1000 [00:11<01:10, 12.14it/s][A[ASampling:  14%|█▍        | 143/1000 [00:12<01:08, 12.55it/s]127.0.0.1 - - [28/May/2026 09:11:05] "GET /.well-known/appspecific/com.chrome.devtools.json HTTP/1.1" 404 -
+INFO:werkzeug:127.0.0.1 - - [28/May/2026 09:11:05] "[33mGET /.well-known/appspecific/com.chrome.devtools.json HTTP/1.1[0m" 404 -
+
+Sampling:  14%|█▍        | 139/1000 [00:12<01:11, 12.10it/s][A
+
+Sampling:  14%|█▍        | 145/1000 [00:12<01:10, 12.18it/s][A[ASampling:  14%|█▍        | 145/1000 [00:12<01:07, 12.59it/s]
+Sampling:  14%|█▍        | 141/1000 [00:12<01:10, 12.23it/s][A
+
+Sampling:  15%|█▍        | 147/1000 [00:12<01:09, 12.27it/s][A[ASampling:  15%|█▍        | 147/1000 [00:12<01:06, 12.78it/s]
+Sampling:  14%|█▍        | 143/1000 [00:12<01:08, 12.43it/s][A
+
+Sampling:  15%|█▍        | 149/1000 [00:12<01:08, 12.40it/s][A[ASampling:  15%|█▍        | 149/1000 [00:12<01:05, 12.97it/s]
+Sampling:  14%|█▍        | 145/1000 [00:12<01:08, 12.57it/s][A
+
+Sampling:  15%|█▌        | 151/1000 [00:12<01:07, 12.52it/s][A[ASampling:  15%|█▌        | 151/1000 [00:12<01:04, 13.09it/s]
+Sampling:  15%|█▍        | 147/1000 [00:12<01:06, 12.75it/s][A
+
+Sampling:  15%|█▌        | 153/1000 [00:12<01:07, 12.54it/s][A[ASampling:  15%|█▌        | 153/1000 [00:12<01:04, 13.08it/s]
+Sampling:  15%|█▍        | 149/1000 [00:12<01:06, 12.71it/s][A
+
+Sampling:  16%|█▌        | 155/1000 [00:12<01:07, 12.46it/s][A[ASampling:  16%|█▌        | 155/1000 [00:12<01:05, 12.90it/s]
+Sampling:  15%|█▌        | 151/1000 [00:13<01:07, 12.66it/s][A
+
+Sampling:  16%|█▌        | 157/1000 [00:13<01:08, 12.39it/s][A[ASampling:  16%|█▌        | 157/1000 [00:13<01:05, 12.85it/s]
+Sampling:  15%|█▌        | 153/1000 [00:13<01:07, 12.62it/s][A
+
+Sampling:  16%|█▌        | 159/1000 [00:13<01:07, 12.42it/s][A[ASampling:  16%|█▌        | 159/1000 [00:13<01:05, 12.90it/s]
+Sampling:  16%|█▌        | 155/1000 [00:13<01:06, 12.65it/s][A
+
+Sampling:  16%|█▌        | 161/1000 [00:13<01:07, 12.43it/s][A[ASampling:  16%|█▌        | 161/1000 [00:13<01:04, 12.94it/s]
+Sampling:  16%|█▌        | 157/1000 [00:13<01:06, 12.64it/s][A
+
+Sampling:  16%|█▋        | 163/1000 [00:13<01:06, 12.49it/s][A[ASampling:  16%|█▋        | 163/1000 [00:13<01:05, 12.84it/s]
+Sampling:  16%|█▌        | 159/1000 [00:13<01:07, 12.50it/s][A
+
+Sampling:  16%|█▋        | 165/1000 [00:13<01:06, 12.50it/s][A[ASampling:  16%|█▋        | 165/1000 [00:13<01:04, 12.86it/s]
+Sampling:  16%|█▌        | 161/1000 [00:13<01:06, 12.57it/s][A127.0.0.1 - - [28/May/2026 09:11:07] "GET /api/generation-progress HTTP/1.1" 200 -
+INFO:werkzeug:127.0.0.1 - - [28/May/2026 09:11:07] "GET /api/generation-progress HTTP/1.1" 200 -
+
+
+Sampling:  17%|█▋        | 167/1000 [00:13<01:07, 12.43it/s][A[ASampling:  17%|█▋        | 167/1000 [00:13<01:05, 12.74it/s]
+Sampling:  16%|█▋        | 163/1000 [00:13<01:07, 12.48it/s][ASampling:  17%|█▋        | 169/1000 [00:14<01:05, 12.63it/s]
+
+Sampling:  17%|█▋        | 169/1000 [00:14<01:07, 12.30it/s][A[A
+Sampling:  16%|█▋        | 165/1000 [00:14<01:07, 12.43it/s][A127.0.0.1 - - [28/May/2026 09:11:07] "GET /api/generation-progress HTTP/1.1" 200 -
+INFO:werkzeug:127.0.0.1 - - [28/May/2026 09:11:07] "GET /api/generation-progress HTTP/1.1" 200 -
+Sampling:  17%|█▋        | 171/1000 [00:14<01:06, 12.41it/s]
+
+Sampling:  17%|█▋        | 171/1000 [00:14<01:08, 12.13it/s][A[A
+Sampling:  17%|█▋        | 167/1000 [00:14<01:08, 12.22it/s][ASampling:  17%|█▋        | 173/1000 [00:14<01:06, 12.39it/s]
+
+Sampling:  17%|█▋        | 173/1000 [00:14<01:08, 12.03it/s][A[A127.0.0.1 - - [28/May/2026 09:11:08] "GET /api/generation-progress HTTP/1.1" 200 -
+INFO:werkzeug:127.0.0.1 - - [28/May/2026 09:11:08] "GET /api/generation-progress HTTP/1.1" 200 -
+
+Sampling:  17%|█▋        | 169/1000 [00:14<01:09, 12.04it/s][ASampling:  18%|█▊        | 175/1000 [00:14<01:07, 12.31it/s]
+
+Sampling:  18%|█▊        | 175/1000 [00:14<01:09, 11.93it/s][A[A
+Sampling:  17%|█▋        | 171/1000 [00:14<01:08, 12.03it/s][ASampling:  18%|█▊        | 177/1000 [00:14<01:06, 12.38it/s]
+
+Sampling:  18%|█▊        | 177/1000 [00:14<01:09, 11.89it/s][A[A127.0.0.1 - - [28/May/2026 09:11:08] "GET /api/generation-progress HTTP/1.1" 200 -
+INFO:werkzeug:127.0.0.1 - - [28/May/2026 09:11:08] "GET /api/generation-progress HTTP/1.1" 200 -
+
+Sampling:  17%|█▋        | 173/1000 [00:14<01:09, 11.88it/s][ASampling:  18%|█▊        | 179/1000 [00:14<01:07, 12.07it/s]
+
+Sampling:  18%|█▊        | 179/1000 [00:14<01:10, 11.66it/s][A[A
+Sampling:  18%|█▊        | 175/1000 [00:15<01:10, 11.71it/s][ASampling:  18%|█▊        | 181/1000 [00:15<01:08, 12.03it/s]
+
+Sampling:  18%|█▊        | 181/1000 [00:15<01:09, 11.77it/s][A[A127.0.0.1 - - [28/May/2026 09:11:08] "GET /api/generation-progress HTTP/1.1" 200 -
+INFO:werkzeug:127.0.0.1 - - [28/May/2026 09:11:08] "GET /api/generation-progress HTTP/1.1" 200 -
+
+Sampling:  18%|█▊        | 177/1000 [00:15<01:09, 11.90it/s][ASampling:  18%|█▊        | 183/1000 [00:15<01:06, 12.22it/s]
+
+Sampling:  18%|█▊        | 183/1000 [00:15<01:08, 11.99it/s][A[A
+Sampling:  18%|█▊        | 179/1000 [00:15<01:07, 12.12it/s][ASampling:  18%|█▊        | 185/1000 [00:15<01:05, 12.36it/s]127.0.0.1 - - [28/May/2026 09:11:08] "GET /api/generation-progress HTTP/1.1" 200 -
+INFO:werkzeug:127.0.0.1 - - [28/May/2026 09:11:08] "GET /api/generation-progress HTTP/1.1" 200 -
+
+
+Sampling:  18%|█▊        | 185/1000 [00:15<01:07, 12.09it/s][A[A
+Sampling:  18%|█▊        | 181/1000 [00:15<01:08, 12.03it/s][ASampling:  19%|█▊        | 187/1000 [00:15<01:06, 12.23it/s]
+
+Sampling:  19%|█▊        | 187/1000 [00:15<01:07, 12.05it/s][A[A
+Sampling:  18%|█▊        | 183/1000 [00:15<01:08, 11.86it/s][A127.0.0.1 - - [28/May/2026 09:11:09] "GET /api/generation-progress HTTP/1.1" 200 -
+INFO:werkzeug:127.0.0.1 - - [28/May/2026 09:11:09] "GET /api/generation-progress HTTP/1.1" 200 -
+Sampling:  19%|█▉        | 189/1000 [00:15<01:07, 12.07it/s]
+
+Sampling:  19%|█▉        | 189/1000 [00:15<01:08, 11.82it/s][A[A
+Sampling:  18%|█▊        | 185/1000 [00:15<01:09, 11.77it/s][ASampling:  19%|█▉        | 191/1000 [00:15<01:08, 11.89it/s]
+
+Sampling:  19%|█▉        | 191/1000 [00:15<01:08, 11.83it/s][A[A
+Sampling:  19%|█▊        | 187/1000 [00:16<01:10, 11.58it/s][A127.0.0.1 - - [28/May/2026 09:11:09] "GET /api/generation-progress HTTP/1.1" 200 -
+INFO:werkzeug:127.0.0.1 - - [28/May/2026 09:11:09] "GET /api/generation-progress HTTP/1.1" 200 -
+Sampling:  19%|█▉        | 193/1000 [00:16<01:08, 11.79it/s]
+
+Sampling:  19%|█▉        | 193/1000 [00:16<01:07, 11.91it/s][A[A
+Sampling:  19%|█▉        | 189/1000 [00:16<01:09, 11.59it/s][ASampling:  20%|█▉        | 195/1000 [00:16<01:07, 11.89it/s]
+
+Sampling:  20%|█▉        | 195/1000 [00:16<01:07, 11.93it/s][A[A127.0.0.1 - - [28/May/2026 09:11:09] "GET /api/generation-progress HTTP/1.1" 200 -
+INFO:werkzeug:127.0.0.1 - - [28/May/2026 09:11:09] "GET /api/generation-progress HTTP/1.1" 200 -
+
+Sampling:  19%|█▉        | 191/1000 [00:16<01:10, 11.46it/s][ASampling:  20%|█▉        | 197/1000 [00:16<01:07, 11.82it/s]
+
+Sampling:  20%|█▉        | 197/1000 [00:16<01:07, 11.93it/s][A[A
+Sampling:  19%|█▉        | 193/1000 [00:16<01:10, 11.49it/s][ASampling:  20%|█▉        | 199/1000 [00:16<01:07, 11.83it/s]
+
+Sampling:  20%|█▉        | 199/1000 [00:16<01:06, 12.04it/s][A[A127.0.0.1 - - [28/May/2026 09:11:10] "GET /api/generation-progress HTTP/1.1" 200 -
+INFO:werkzeug:127.0.0.1 - - [28/May/2026 09:11:10] "GET /api/generation-progress HTTP/1.1" 200 -
+
+Sampling:  20%|█▉        | 195/1000 [00:16<01:10, 11.41it/s][ASampling:  20%|██        | 201/1000 [00:16<01:07, 11.82it/s]
+
+Sampling:  20%|██        | 201/1000 [00:16<01:06, 11.99it/s][A[A
+Sampling:  20%|█▉        | 197/1000 [00:16<01:10, 11.42it/s][ASampling:  20%|██        | 203/1000 [00:16<01:07, 11.79it/s]
+
+Sampling:  20%|██        | 203/1000 [00:16<01:07, 11.78it/s][A[A127.0.0.1 - - [28/May/2026 09:11:10] "GET /api/generation-progress HTTP/1.1" 200 -
+INFO:werkzeug:127.0.0.1 - - [28/May/2026 09:11:10] "GET /api/generation-progress HTTP/1.1" 200 -
+
+Sampling:  20%|█▉        | 199/1000 [00:17<01:10, 11.31it/s][ASampling:  20%|██        | 205/1000 [00:17<01:07, 11.69it/s]
+
+Sampling:  20%|██        | 205/1000 [00:17<01:07, 11.79it/s][A[A
+Sampling:  20%|██        | 201/1000 [00:17<01:10, 11.36it/s][ASampling:  21%|██        | 207/1000 [00:17<01:07, 11.79it/s]127.0.0.1 - - [28/May/2026 09:11:10] "GET /api/generation-progress HTTP/1.1" 200 -
+INFO:werkzeug:127.0.0.1 - - [28/May/2026 09:11:10] "GET /api/generation-progress HTTP/1.1" 200 -
+
+
+Sampling:  21%|██        | 207/1000 [00:17<01:07, 11.83it/s][A[A
+Sampling:  20%|██        | 203/1000 [00:17<01:10, 11.32it/s][ASampling:  21%|██        | 209/1000 [00:17<01:07, 11.71it/s]
+
+Sampling:  21%|██        | 209/1000 [00:17<01:07, 11.80it/s][A[A127.0.0.1 - - [28/May/2026 09:11:11] "GET /api/generation-progress HTTP/1.1" 200 -
+INFO:werkzeug:127.0.0.1 - - [28/May/2026 09:11:11] "GET /api/generation-progress HTTP/1.1" 200 -
+
+Sampling:  20%|██        | 205/1000 [00:17<01:10, 11.34it/s][ASampling:  21%|██        | 211/1000 [00:17<01:07, 11.68it/s]
+
+Sampling:  21%|██        | 211/1000 [00:17<01:06, 11.87it/s][A[ASampling:  21%|██        | 206/1000 [00:17<01:08, 11.64it/s]
+Sampling:  21%|██▏       | 213/1000 [00:17<01:10, 11.19it/s]
+
+Sampling:  21%|██▏       | 213/1000 [00:17<01:09, 11.28it/s][A[A127.0.0.1 - - [28/May/2026 09:11:11] "GET /api/generation-progress HTTP/1.1" 200 -
+INFO:werkzeug:127.0.0.1 - - [28/May/2026 09:11:11] "GET /api/generation-progress HTTP/1.1" 200 -
+Sampling:  22%|██▏       | 215/1000 [00:17<01:09, 11.25it/s]
+
+Sampling:  22%|██▏       | 215/1000 [00:18<01:09, 11.27it/s][A[ASampling:  22%|██▏       | 217/1000 [00:18<01:08, 11.41it/s]
+
+Sampling:  22%|██▏       | 217/1000 [00:18<01:08, 11.45it/s][A[A127.0.0.1 - - [28/May/2026 09:11:11] "GET /api/generation-progress HTTP/1.1" 200 -
+INFO:werkzeug:127.0.0.1 - - [28/May/2026 09:11:11] "GET /api/generation-progress HTTP/1.1" 200 -
+Sampling:  22%|██▏       | 219/1000 [00:18<01:07, 11.55it/s]
+
+Sampling:  22%|██▏       | 219/1000 [00:18<01:07, 11.55it/s][A[ASampling:  22%|██▏       | 221/1000 [00:18<01:06, 11.73it/s]
+
+Sampling:  22%|██▏       | 221/1000 [00:18<01:06, 11.76it/s][A[A127.0.0.1 - - [28/May/2026 09:11:12] "GET /api/generation-progress HTTP/1.1" 200 -
+INFO:werkzeug:127.0.0.1 - - [28/May/2026 09:11:12] "GET /api/generation-progress HTTP/1.1" 200 -
+Sampling:  22%|██▏       | 223/1000 [00:18<01:05, 11.92it/s]
+
+Sampling:  22%|██▏       | 223/1000 [00:18<01:05, 11.82it/s][A[ASampling:  22%|██▎       | 225/1000 [00:18<01:04, 11.93it/s]127.0.0.1 - - [28/May/2026 09:11:12] "GET /api/generation-progress HTTP/1.1" 200 -
+INFO:werkzeug:127.0.0.1 - - [28/May/2026 09:11:12] "GET /api/generation-progress HTTP/1.1" 200 -
+
+
+Sampling:  22%|██▎       | 225/1000 [00:18<01:05, 11.82it/s][A[ASampling:  23%|██▎       | 227/1000 [00:18<01:05, 11.86it/s]
+
+Sampling:  23%|██▎       | 227/1000 [00:19<01:09, 11.09it/s][A[A127.0.0.1 - - [28/May/2026 09:11:12] "GET /api/generation-progress HTTP/1.1" 200 -
+INFO:werkzeug:127.0.0.1 - - [28/May/2026 09:11:12] "GET /api/generation-progress HTTP/1.1" 200 -
+Sampling:  23%|██▎       | 229/1000 [00:19<01:07, 11.42it/s]127.0.0.1 - - [28/May/2026 09:11:12] "POST /api/project/generate-chunk-audio HTTP/1.1" 200 -
+INFO:werkzeug:127.0.0.1 - - [28/May/2026 09:11:12] "POST /api/project/generate-chunk-audio HTTP/1.1" 200 -
+
+
+Sampling:  23%|██▎       | 229/1000 [00:19<01:09, 11.15it/s][A[ASampling:  23%|██▎       | 231/1000 [00:19<01:02, 12.37it/s]
+
+Sampling:  23%|██▎       | 231/1000 [00:19<01:03, 12.10it/s][A[ASampling:  23%|██▎       | 233/1000 [00:19<00:57, 13.33it/s]127.0.0.1 - - [28/May/2026 09:11:12] "GET /api/generation-progress HTTP/1.1" 200 -
+INFO:werkzeug:127.0.0.1 - - [28/May/2026 09:11:12] "GET /api/generation-progress HTTP/1.1" 200 -
+
+
+Sampling:  23%|██▎       | 233/1000 [00:19<00:57, 13.37it/s][A[A127.0.0.1 - - [28/May/2026 09:11:13] "GET /api/project/info HTTP/1.1" 200 -
+INFO:werkzeug:127.0.0.1 - - [28/May/2026 09:11:13] "GET /api/project/info HTTP/1.1" 200 -
+Sampling:  24%|██▎       | 235/1000 [00:19<00:55, 13.88it/s]
+
+Sampling:  24%|██▎       | 235/1000 [00:19<00:53, 14.38it/s][A[ASampling:  24%|██▎       | 237/1000 [00:19<00:53, 14.33it/s]
+
+Sampling:  24%|██▎       | 237/1000 [00:19<00:50, 15.20it/s][A[A127.0.0.1 - - [28/May/2026 09:11:13] "GET /api/generation-progress HTTP/1.1" 200 -
+INFO:werkzeug:127.0.0.1 - - [28/May/2026 09:11:13] "GET /api/generation-progress HTTP/1.1" 200 -
+
+
+Sampling:  24%|██▍       | 239/1000 [00:19<00:47, 15.95it/s][A[ASampling:  24%|██▍       | 239/1000 [00:19<00:52, 14.60it/s]
+
+Sampling:  24%|██▍       | 241/1000 [00:19<00:47, 15.90it/s][A[ASampling:  24%|██▍       | 241/1000 [00:19<00:52, 14.55it/s]
+
+Sampling:  24%|██▍       | 243/1000 [00:20<00:46, 16.20it/s][A[A127.0.0.1 - - [28/May/2026 09:11:13] "GET /api/generation-progress HTTP/1.1" 200 -
+INFO:werkzeug:127.0.0.1 - - [28/May/2026 09:11:13] "GET /api/generation-progress HTTP/1.1" 200 -
+Sampling:  24%|██▍       | 243/1000 [00:20<00:57, 13.07it/s]
+
+Sampling:  24%|██▍       | 245/1000 [00:20<00:53, 14.08it/s][A[ASampling:  24%|██▍       | 245/1000 [00:20<00:53, 14.12it/s]
+
+Sampling:  25%|██▍       | 247/1000 [00:20<00:51, 14.68it/s][A[ASampling:  25%|██▍       | 247/1000 [00:20<00:49, 15.18it/s]127.0.0.1 - - [28/May/2026 09:11:13] "GET /api/generation-progress HTTP/1.1" 200 -
+INFO:werkzeug:127.0.0.1 - - [28/May/2026 09:11:13] "GET /api/generation-progress HTTP/1.1" 200 -
+
+
+Sampling:  25%|██▍       | 249/1000 [00:20<00:49, 15.31it/s][A[ASampling:  25%|██▍       | 249/1000 [00:20<00:47, 15.65it/s]127.0.0.1 - - [28/May/2026 09:11:14] "GET /api/generation-progress HTTP/1.1" 200 -
+INFO:werkzeug:127.0.0.1 - - [28/May/2026 09:11:14] "GET /api/generation-progress HTTP/1.1" 200 -
+
+
+Sampling:  25%|██▌       | 251/1000 [00:20<01:02, 11.94it/s][A[ASampling:  25%|██▌       | 251/1000 [00:20<01:01, 12.28it/s]
+
+Sampling:  25%|██▌       | 253/1000 [00:20<01:13, 10.20it/s][A[ASampling:  25%|██▌       | 253/1000 [00:21<01:12, 10.36it/s]
+
+Sampling:  26%|██▌       | 255/1000 [00:21<01:09, 10.72it/s][A[ASampling:  26%|██▌       | 255/1000 [00:21<01:08, 10.84it/s]
+
+Sampling:  26%|██▌       | 257/1000 [00:21<01:07, 11.07it/s][A[ASampling:  26%|██▌       | 257/1000 [00:21<01:06, 11.20it/s]127.0.0.1 - - [28/May/2026 09:11:14] "GET /api/generation-progress HTTP/1.1" 200 -
+INFO:werkzeug:127.0.0.1 - - [28/May/2026 09:11:14] "GET /api/generation-progress HTTP/1.1" 200 -
+
+
+Sampling:  26%|██▌       | 259/1000 [00:21<01:06, 11.06it/s][A[ASampling:  26%|██▌       | 259/1000 [00:21<01:06, 11.13it/s]127.0.0.1 - - [28/May/2026 09:11:15] "POST /api/project/transcribe-take HTTP/1.1" 200 -
+INFO:werkzeug:127.0.0.1 - - [28/May/2026 09:11:15] "POST /api/project/transcribe-take HTTP/1.1" 200 -
+
+
+Sampling:  26%|██▌       | 261/1000 [00:21<00:59, 12.44it/s][A[ASampling:  26%|██▌       | 261/1000 [00:21<01:00, 12.30it/s]127.0.0.1 - - [28/May/2026 09:11:15] "GET /api/generation-progress HTTP/1.1" 200 -
+INFO:werkzeug:127.0.0.1 - - [28/May/2026 09:11:15] "GET /api/generation-progress HTTP/1.1" 200 -
+
+
+Sampling:  26%|██▋       | 263/1000 [00:21<00:54, 13.49it/s][A[ASampling:  26%|██▋       | 263/1000 [00:21<00:56, 13.14it/s]
+
+Sampling:  26%|██▋       | 265/1000 [00:21<00:50, 14.54it/s][A[ASampling:  26%|██▋       | 265/1000 [00:21<00:53, 13.77it/s]
+
+Sampling:  27%|██▋       | 267/1000 [00:21<00:48, 15.22it/s][A[ASampling:  27%|██▋       | 267/1000 [00:22<00:51, 14.14it/s]
+
+Sampling:  27%|██▋       | 269/1000 [00:22<00:45, 16.12it/s][A[ASampling:  27%|██▋       | 269/1000 [00:22<00:50, 14.38it/s]
+
+Sampling:  27%|██▋       | 271/1000 [00:22<00:44, 16.52it/s][A[ASampling:  27%|██▋       | 271/1000 [00:22<00:48, 14.95it/s]
+
+Sampling:  27%|██▋       | 273/1000 [00:22<00:43, 16.81it/s][A[A127.0.0.1 - - [28/May/2026 09:11:15] "GET /api/generation-progress HTTP/1.1" 200 -
+INFO:werkzeug:127.0.0.1 - - [28/May/2026 09:11:15] "GET /api/generation-progress HTTP/1.1" 200 -
+Sampling:  27%|██▋       | 273/1000 [00:22<00:48, 15.09it/s]
+
+Sampling:  28%|██▊       | 275/1000 [00:22<00:42, 17.00it/s][A[A
+
+Sampling:  28%|██▊       | 277/1000 [00:22<00:42, 16.94it/s][A[ASampling:  28%|██▊       | 275/1000 [00:22<00:48, 15.09it/s]
+
+Sampling:  28%|██▊       | 279/1000 [00:22<00:41, 17.21it/s][A[ASampling:  28%|██▊       | 277/1000 [00:22<00:47, 15.14it/s]127.0.0.1 - - [28/May/2026 09:11:16] "GET /api/generation-progress HTTP/1.1" 200 -
+INFO:werkzeug:127.0.0.1 - - [28/May/2026 09:11:16] "GET /api/generation-progress HTTP/1.1" 200 -
+
+
+Sampling:  28%|██▊       | 281/1000 [00:22<00:41, 17.19it/s][A[ASampling:  28%|██▊       | 279/1000 [00:22<00:46, 15.35it/s]
+
+Sampling:  28%|██▊       | 283/1000 [00:22<00:41, 17.14it/s][A[ASampling:  28%|██▊       | 281/1000 [00:22<00:46, 15.60it/s]
+
+Sampling:  28%|██▊       | 285/1000 [00:22<00:41, 17.33it/s][A[ASampling:  28%|██▊       | 283/1000 [00:23<00:45, 15.64it/s]
+
+Sampling:  29%|██▊       | 287/1000 [00:23<00:41, 17.23it/s][A[ASampling:  28%|██▊       | 285/1000 [00:23<00:45, 15.78it/s]
+
+Sampling:  29%|██▉       | 289/1000 [00:23<00:41, 17.10it/s][A[ASampling:  29%|██▊       | 287/1000 [00:23<00:44, 15.90it/s]
+
+Sampling:  29%|██▉       | 291/1000 [00:23<00:41, 17.01it/s][A[A127.0.0.1 - - [28/May/2026 09:11:16] "GET /api/generation-progress HTTP/1.1" 200 -
+INFO:werkzeug:127.0.0.1 - - [28/May/2026 09:11:16] "GET /api/generation-progress HTTP/1.1" 200 -
+Sampling:  29%|██▉       | 289/1000 [00:23<00:44, 15.82it/s]
+
+Sampling:  29%|██▉       | 293/1000 [00:23<00:41, 17.17it/s][A[ASampling:  29%|██▉       | 291/1000 [00:23<00:44, 15.83it/s]
+
+Sampling:  30%|██▉       | 295/1000 [00:23<00:40, 17.25it/s][A[A127.0.0.1 - - [28/May/2026 09:11:17] "GET /api/generation-progress HTTP/1.1" 200 -
+INFO:werkzeug:127.0.0.1 - - [28/May/2026 09:11:17] "GET /api/generation-progress HTTP/1.1" 200 -
+Sampling:  29%|██▉       | 293/1000 [00:23<00:44, 15.83it/s]
+
+Sampling:  30%|██▉       | 297/1000 [00:23<00:41, 17.07it/s][A[ASampling:  30%|██▉       | 295/1000 [00:23<00:44, 15.97it/s]
+
+Sampling:  30%|██▉       | 299/1000 [00:23<00:40, 17.21it/s][A[ASampling:  30%|██▉       | 297/1000 [00:23<00:43, 16.12it/s]
+
+Sampling:  30%|███       | 301/1000 [00:23<00:40, 17.22it/s][A[A
+
+Sampling:  30%|███       | 303/1000 [00:24<00:39, 17.47it/s][A[ASampling:  30%|██▉       | 299/1000 [00:24<00:44, 15.79it/s]
+
+Sampling:  30%|███       | 305/1000 [00:24<00:39, 17.54it/s][A[ASampling:  30%|███       | 301/1000 [00:24<00:44, 15.76it/s]
+
+Sampling:  31%|███       | 307/1000 [00:24<00:39, 17.47it/s][A[ASampling:  30%|███       | 303/1000 [00:24<00:44, 15.54it/s]127.0.0.1 - - [28/May/2026 09:11:17] "GET /api/generation-progress HTTP/1.1" 200 -
+INFO:werkzeug:127.0.0.1 - - [28/May/2026 09:11:17] "GET /api/generation-progress HTTP/1.1" 200 -
+
+
+Sampling:  31%|███       | 309/1000 [00:24<00:39, 17.45it/s][A[ASampling:  30%|███       | 305/1000 [00:24<00:44, 15.69it/s]
+
+Sampling:  31%|███       | 311/1000 [00:24<00:39, 17.31it/s][A[ASampling:  31%|███       | 307/1000 [00:24<00:43, 15.82it/s]
+
+Sampling:  31%|███▏      | 313/1000 [00:24<00:39, 17.38it/s][A[A127.0.0.1 - - [28/May/2026 09:11:18] "GET /api/generation-progress HTTP/1.1" 200 -
+INFO:werkzeug:127.0.0.1 - - [28/May/2026 09:11:18] "GET /api/generation-progress HTTP/1.1" 200 -
+Sampling:  31%|███       | 309/1000 [00:24<00:44, 15.52it/s]
+
+Sampling:  32%|███▏      | 315/1000 [00:24<00:39, 17.34it/s][A[ASampling:  31%|███       | 311/1000 [00:24<00:44, 15.53it/s]
+
+Sampling:  32%|███▏      | 317/1000 [00:24<00:39, 17.38it/s][A[ASampling:  31%|███▏      | 313/1000 [00:24<00:43, 15.72it/s]
+
+Sampling:  32%|███▏      | 319/1000 [00:24<00:38, 17.47it/s][A[A
+
+Sampling:  32%|███▏      | 321/1000 [00:25<00:38, 17.51it/s][A[ASampling:  32%|███▏      | 315/1000 [00:25<00:44, 15.57it/s]
+
+Sampling:  32%|███▏      | 323/1000 [00:25<00:38, 17.36it/s][A[ASampling:  32%|███▏      | 317/1000 [00:25<00:43, 15.55it/s]
+
+Sampling:  32%|███▎      | 325/1000 [00:25<00:39, 17.26it/s][A[ASampling:  32%|███▏      | 319/1000 [00:25<00:43, 15.51it/s]127.0.0.1 - - [28/May/2026 09:11:18] "GET /api/generation-progress HTTP/1.1" 200 -
+INFO:werkzeug:127.0.0.1 - - [28/May/2026 09:11:18] "GET /api/generation-progress HTTP/1.1" 200 -
+
+
+Sampling:  33%|███▎      | 327/1000 [00:25<00:38, 17.43it/s][A[ASampling:  32%|███▏      | 321/1000 [00:25<00:44, 15.26it/s]
+
+Sampling:  33%|███▎      | 329/1000 [00:25<00:38, 17.42it/s][A[ASampling:  32%|███▏      | 323/1000 [00:25<00:44, 15.30it/s]
+
+Sampling:  33%|███▎      | 331/1000 [00:25<00:38, 17.36it/s][A[A127.0.0.1 - - [28/May/2026 09:11:19] "GET /api/generation-progress HTTP/1.1" 200 -
+INFO:werkzeug:127.0.0.1 - - [28/May/2026 09:11:19] "GET /api/generation-progress HTTP/1.1" 200 -
+Sampling:  32%|███▎      | 325/1000 [00:25<00:43, 15.36it/s]
+
+Sampling:  33%|███▎      | 333/1000 [00:25<00:38, 17.23it/s][A[ASampling:  33%|███▎      | 327/1000 [00:25<00:42, 15.67it/s]
+
+Sampling:  34%|███▎      | 335/1000 [00:25<00:38, 17.08it/s][A[ASampling:  33%|███▎      | 329/1000 [00:25<00:42, 15.86it/s]
+
+Sampling:  34%|███▎      | 337/1000 [00:26<00:39, 17.00it/s][A[ASampling:  33%|███▎      | 331/1000 [00:26<00:42, 15.75it/s]
+
+Sampling:  34%|███▍      | 339/1000 [00:26<00:38, 17.09it/s][A[A
+
+Sampling:  34%|███▍      | 341/1000 [00:26<00:37, 17.47it/s][A[ASampling:  33%|███▎      | 333/1000 [00:26<00:43, 15.39it/s]
+
+Sampling:  34%|███▍      | 343/1000 [00:26<00:37, 17.56it/s][A[A127.0.0.1 - - [28/May/2026 09:11:19] "GET /api/generation-progress HTTP/1.1" 200 -
+INFO:werkzeug:127.0.0.1 - - [28/May/2026 09:11:19] "GET /api/generation-progress HTTP/1.1" 200 -
+Sampling:  34%|███▎      | 335/1000 [00:26<00:43, 15.35it/s]
+
+Sampling:  34%|███▍      | 345/1000 [00:26<00:37, 17.49it/s][A[ASampling:  34%|███▎      | 337/1000 [00:26<00:43, 15.41it/s]
+
+Sampling:  35%|███▍      | 347/1000 [00:26<00:37, 17.64it/s][A[ASampling:  34%|███▍      | 339/1000 [00:26<00:43, 15.35it/s]127.0.0.1 - - [28/May/2026 09:11:20] "GET /api/generation-progress HTTP/1.1" 200 -
+INFO:werkzeug:127.0.0.1 - - [28/May/2026 09:11:20] "GET /api/generation-progress HTTP/1.1" 200 -
+
+
+Sampling:  35%|███▍      | 349/1000 [00:26<00:37, 17.20it/s][A[ASampling:  34%|███▍      | 341/1000 [00:26<00:43, 15.20it/s]
+
+Sampling:  35%|███▌      | 351/1000 [00:26<00:37, 17.30it/s][A[ASampling:  34%|███▍      | 343/1000 [00:26<00:43, 15.08it/s]
+
+Sampling:  35%|███▌      | 353/1000 [00:26<00:37, 17.44it/s][A[ASampling:  34%|███▍      | 345/1000 [00:27<00:42, 15.33it/s]
+
+Sampling:  36%|███▌      | 355/1000 [00:27<00:36, 17.47it/s][A[A
+
+Sampling:  36%|███▌      | 357/1000 [00:27<00:36, 17.56it/s][A[ASampling:  35%|███▍      | 347/1000 [00:27<00:42, 15.45it/s]
+
+Sampling:  36%|███▌      | 359/1000 [00:27<00:36, 17.64it/s][A[ASampling:  35%|███▍      | 349/1000 [00:27<00:41, 15.59it/s]127.0.0.1 - - [28/May/2026 09:11:20] "GET /api/generation-progress HTTP/1.1" 200 -
+INFO:werkzeug:127.0.0.1 - - [28/May/2026 09:11:20] "GET /api/generation-progress HTTP/1.1" 200 -
+
+
+Sampling:  36%|███▌      | 361/1000 [00:27<00:36, 17.52it/s][A[ASampling:  35%|███▌      | 351/1000 [00:27<00:41, 15.69it/s]
+
+Sampling:  36%|███▋      | 363/1000 [00:27<00:36, 17.60it/s][A[ASampling:  35%|███▌      | 353/1000 [00:27<00:41, 15.67it/s]
+
+Sampling:  36%|███▋      | 365/1000 [00:27<00:36, 17.19it/s][A[ASampling:  36%|███▌      | 355/1000 [00:27<00:41, 15.51it/s]127.0.0.1 - - [28/May/2026 09:11:21] "GET /api/generation-progress HTTP/1.1" 200 -
+INFO:werkzeug:127.0.0.1 - - [28/May/2026 09:11:21] "GET /api/generation-progress HTTP/1.1" 200 -
+
+
+Sampling:  37%|███▋      | 367/1000 [00:27<00:37, 17.10it/s][A[ASampling:  36%|███▌      | 357/1000 [00:27<00:41, 15.60it/s]
+
+Sampling:  37%|███▋      | 369/1000 [00:27<00:36, 17.30it/s][A[ASampling:  36%|███▌      | 359/1000 [00:27<00:41, 15.44it/s]
+
+Sampling:  37%|███▋      | 371/1000 [00:27<00:36, 17.12it/s][A[ASampling:  36%|███▌      | 361/1000 [00:28<00:40, 15.77it/s]
+
+Sampling:  37%|███▋      | 373/1000 [00:28<00:36, 17.34it/s][A[ASampling:  36%|███▋      | 363/1000 [00:28<00:40, 15.65it/s]
+
+Sampling:  38%|███▊      | 375/1000 [00:28<00:36, 17.35it/s][A[A
+
+Sampling:  38%|███▊      | 377/1000 [00:28<00:35, 17.50it/s][A[ASampling:  36%|███▋      | 365/1000 [00:28<00:40, 15.63it/s]127.0.0.1 - - [28/May/2026 09:11:21] "GET /api/generation-progress HTTP/1.1" 200 -
+INFO:werkzeug:127.0.0.1 - - [28/May/2026 09:11:21] "GET /api/generation-progress HTTP/1.1" 200 -
+
+
+Sampling:  38%|███▊      | 379/1000 [00:28<00:35, 17.40it/s][A[ASampling:  37%|███▋      | 367/1000 [00:28<00:40, 15.66it/s]
+
+Sampling:  38%|███▊      | 381/1000 [00:28<00:35, 17.44it/s][A[ASampling:  37%|███▋      | 369/1000 [00:28<00:39, 15.79it/s]
+
+Sampling:  38%|███▊      | 383/1000 [00:28<00:35, 17.54it/s][A[A127.0.0.1 - - [28/May/2026 09:11:22] "GET /api/generation-progress HTTP/1.1" 200 -
+INFO:werkzeug:127.0.0.1 - - [28/May/2026 09:11:22] "GET /api/generation-progress HTTP/1.1" 200 -
+Sampling:  37%|███▋      | 371/1000 [00:28<00:39, 15.74it/s]
+
+Sampling:  38%|███▊      | 385/1000 [00:28<00:35, 17.15it/s][A[ASampling:  37%|███▋      | 373/1000 [00:28<00:40, 15.67it/s]
+
+Sampling:  39%|███▊      | 387/1000 [00:28<00:35, 17.31it/s][A[ASampling:  38%|███▊      | 375/1000 [00:28<00:39, 15.71it/s]
+
+Sampling:  39%|███▉      | 389/1000 [00:29<00:35, 16.98it/s][A[ASampling:  38%|███▊      | 377/1000 [00:29<00:39, 15.63it/s]
+
+Sampling:  39%|███▉      | 391/1000 [00:29<00:35, 17.24it/s][A[ASampling:  38%|███▊      | 379/1000 [00:29<00:39, 15.68it/s]
+
+Sampling:  39%|███▉      | 393/1000 [00:29<00:35, 17.28it/s][A[ASampling:  38%|███▊      | 381/1000 [00:29<00:39, 15.81it/s]
+
+Sampling:  40%|███▉      | 395/1000 [00:29<00:34, 17.40it/s][A[A127.0.0.1 - - [28/May/2026 09:11:22] "GET /api/generation-progress HTTP/1.1" 200 -
+INFO:werkzeug:127.0.0.1 - - [28/May/2026 09:11:22] "GET /api/generation-progress HTTP/1.1" 200 -
+Sampling:  38%|███▊      | 383/1000 [00:29<00:38, 15.85it/s]
+
+Sampling:  40%|███▉      | 397/1000 [00:29<00:34, 17.58it/s][A[ASampling:  38%|███▊      | 385/1000 [00:29<00:38, 15.99it/s]
+
+Sampling:  40%|███▉      | 399/1000 [00:29<00:34, 17.34it/s][A[A127.0.0.1 - - [28/May/2026 09:11:23] "GET /api/generation-progress HTTP/1.1" 200 -
+INFO:werkzeug:127.0.0.1 - - [28/May/2026 09:11:23] "GET /api/generation-progress HTTP/1.1" 200 -
+
+
+Sampling:  40%|████      | 401/1000 [00:29<00:34, 17.44it/s][A[ASampling:  39%|███▊      | 387/1000 [00:29<00:38, 16.06it/s]
+
+Sampling:  40%|████      | 403/1000 [00:29<00:33, 17.68it/s][A[ASampling:  39%|███▉      | 389/1000 [00:29<00:38, 15.85it/s]
+
+Sampling:  40%|████      | 405/1000 [00:29<00:33, 17.66it/s][A[ASampling:  39%|███▉      | 391/1000 [00:29<00:38, 15.97it/s]
+
+Sampling:  41%|████      | 407/1000 [00:30<00:34, 17.32it/s][A[ASampling:  39%|███▉      | 393/1000 [00:30<00:37, 16.11it/s]
+
+Sampling:  41%|████      | 409/1000 [00:30<00:34, 17.23it/s][A[ASampling:  40%|███▉      | 395/1000 [00:30<00:38, 15.74it/s]
+
+Sampling:  41%|████      | 411/1000 [00:30<00:33, 17.44it/s][A[ASampling:  40%|███▉      | 397/1000 [00:30<00:38, 15.78it/s]127.0.0.1 - - [28/May/2026 09:11:23] "GET /api/generation-progress HTTP/1.1" 200 -
+INFO:werkzeug:127.0.0.1 - - [28/May/2026 09:11:23] "GET /api/generation-progress HTTP/1.1" 200 -
+
+
+Sampling:  41%|████▏     | 413/1000 [00:30<00:33, 17.35it/s][A[ASampling:  40%|███▉      | 399/1000 [00:30<00:37, 15.92it/s]
+
+Sampling:  42%|████▏     | 415/1000 [00:30<00:33, 17.34it/s][A[ASampling:  40%|████      | 401/1000 [00:30<00:37, 15.96it/s]
+
+Sampling:  42%|████▏     | 417/1000 [00:30<00:33, 17.33it/s][A[A127.0.0.1 - - [28/May/2026 09:11:24] "GET /api/generation-progress HTTP/1.1" 200 -
+INFO:werkzeug:127.0.0.1 - - [28/May/2026 09:11:24] "GET /api/generation-progress HTTP/1.1" 200 -
+Sampling:  40%|████      | 403/1000 [00:30<00:37, 15.93it/s]
+
+Sampling:  42%|████▏     | 419/1000 [00:30<00:33, 17.22it/s][A[ASampling:  40%|████      | 405/1000 [00:30<00:36, 16.21it/s]
+
+Sampling:  42%|████▏     | 421/1000 [00:30<00:33, 17.18it/s][A[ASampling:  41%|████      | 407/1000 [00:30<00:37, 15.84it/s]
+
+Sampling:  42%|████▏     | 423/1000 [00:30<00:33, 17.31it/s][A[A
+
+Sampling:  42%|████▎     | 425/1000 [00:31<00:32, 17.54it/s][A[ASampling:  41%|████      | 409/1000 [00:31<00:37, 15.86it/s]
+
+Sampling:  43%|████▎     | 427/1000 [00:31<00:32, 17.61it/s][A[ASampling:  41%|████      | 411/1000 [00:31<00:36, 15.98it/s]
+
+Sampling:  43%|████▎     | 429/1000 [00:31<00:32, 17.47it/s][A[ASampling:  41%|████▏     | 413/1000 [00:31<00:36, 16.12it/s]127.0.0.1 - - [28/May/2026 09:11:24] "GET /api/generation-progress HTTP/1.1" 200 -
+INFO:werkzeug:127.0.0.1 - - [28/May/2026 09:11:24] "GET /api/generation-progress HTTP/1.1" 200 -
+
+
+Sampling:  43%|████▎     | 431/1000 [00:31<00:32, 17.27it/s][A[ASampling:  42%|████▏     | 415/1000 [00:31<00:36, 15.82it/s]
+
+Sampling:  43%|████▎     | 433/1000 [00:31<00:32, 17.46it/s][A[ASampling:  42%|████▏     | 417/1000 [00:31<00:37, 15.74it/s]
+
+Sampling:  44%|████▎     | 435/1000 [00:31<00:32, 17.38it/s][A[A127.0.0.1 - - [28/May/2026 09:11:25] "GET /api/generation-progress HTTP/1.1" 200 -
+INFO:werkzeug:127.0.0.1 - - [28/May/2026 09:11:25] "GET /api/generation-progress HTTP/1.1" 200 -
+Sampling:  42%|████▏     | 419/1000 [00:31<00:36, 15.74it/s]
+
+Sampling:  44%|████▎     | 437/1000 [00:31<00:32, 17.38it/s][A[ASampling:  42%|████▏     | 421/1000 [00:31<00:37, 15.52it/s]
+
+Sampling:  44%|████▍     | 439/1000 [00:31<00:31, 17.68it/s][A[ASampling:  42%|████▏     | 423/1000 [00:31<00:36, 15.68it/s]
+
+Sampling:  44%|████▍     | 441/1000 [00:31<00:32, 17.36it/s][A[ASampling:  42%|████▎     | 425/1000 [00:32<00:36, 15.91it/s]
+
+Sampling:  44%|████▍     | 443/1000 [00:32<00:31, 17.46it/s][A[A
+
+Sampling:  44%|████▍     | 445/1000 [00:32<00:31, 17.74it/s][A[ASampling:  43%|████▎     | 427/1000 [00:32<00:35, 16.07it/s]
+
+Sampling:  45%|████▍     | 447/1000 [00:32<00:31, 17.70it/s][A[ASampling:  43%|████▎     | 429/1000 [00:32<00:35, 16.04it/s]127.0.0.1 - - [28/May/2026 09:11:25] "GET /api/generation-progress HTTP/1.1" 200 -
+INFO:werkzeug:127.0.0.1 - - [28/May/2026 09:11:25] "GET /api/generation-progress HTTP/1.1" 200 -
+
+
+Sampling:  45%|████▍     | 449/1000 [00:32<00:31, 17.47it/s][A[ASampling:  43%|████▎     | 431/1000 [00:32<00:36, 15.73it/s]
+
+Sampling:  45%|████▌     | 451/1000 [00:32<00:31, 17.47it/s][A[ASampling:  43%|████▎     | 433/1000 [00:32<00:35, 15.78it/s]
+
+Sampling:  45%|████▌     | 453/1000 [00:32<00:31, 17.37it/s][A[A127.0.0.1 - - [28/May/2026 09:11:26] "GET /api/generation-progress HTTP/1.1" 200 -
+INFO:werkzeug:127.0.0.1 - - [28/May/2026 09:11:26] "GET /api/generation-progress HTTP/1.1" 200 -
+Sampling:  44%|████▎     | 435/1000 [00:32<00:35, 15.74it/s]
+
+Sampling:  46%|████▌     | 455/1000 [00:32<00:31, 17.38it/s][A[ASampling:  44%|████▎     | 437/1000 [00:32<00:35, 15.84it/s]
+
+Sampling:  46%|████▌     | 457/1000 [00:32<00:31, 17.27it/s][A[ASampling:  44%|████▍     | 439/1000 [00:32<00:35, 15.68it/s]
+
+Sampling:  46%|████▌     | 459/1000 [00:33<00:31, 16.99it/s][A[ASampling:  44%|████▍     | 441/1000 [00:33<00:35, 15.62it/s]
+
+Sampling:  46%|████▌     | 461/1000 [00:33<00:31, 17.22it/s][A[ASampling:  44%|████▍     | 443/1000 [00:33<00:35, 15.77it/s]
+
+Sampling:  46%|████▋     | 463/1000 [00:33<00:31, 17.29it/s][A[A127.0.0.1 - - [28/May/2026 09:11:26] "GET /api/generation-progress HTTP/1.1" 200 -
+INFO:werkzeug:127.0.0.1 - - [28/May/2026 09:11:26] "GET /api/generation-progress HTTP/1.1" 200 -
+Sampling:  44%|████▍     | 445/1000 [00:33<00:35, 15.58it/s]
+
+Sampling:  46%|████▋     | 465/1000 [00:33<00:31, 17.01it/s][A[ASampling:  45%|████▍     | 447/1000 [00:33<00:35, 15.78it/s]
+
+Sampling:  47%|████▋     | 467/1000 [00:33<00:31, 17.10it/s][A[A
+
+Sampling:  47%|████▋     | 469/1000 [00:33<00:31, 17.10it/s][A[ASampling:  45%|████▍     | 449/1000 [00:33<00:34, 15.77it/s]127.0.0.1 - - [28/May/2026 09:11:27] "GET /api/generation-progress HTTP/1.1" 200 -
+INFO:werkzeug:127.0.0.1 - - [28/May/2026 09:11:27] "GET /api/generation-progress HTTP/1.1" 200 -
+
+
+Sampling:  47%|████▋     | 471/1000 [00:33<00:30, 17.40it/s][A[ASampling:  45%|████▌     | 451/1000 [00:33<00:35, 15.63it/s]
+
+Sampling:  47%|████▋     | 473/1000 [00:33<00:30, 17.56it/s][A[ASampling:  45%|████▌     | 453/1000 [00:33<00:34, 15.64it/s]
+
+Sampling:  48%|████▊     | 475/1000 [00:33<00:30, 17.23it/s][A[ASampling:  46%|████▌     | 455/1000 [00:33<00:34, 15.71it/s]
+
+Sampling:  48%|████▊     | 477/1000 [00:34<00:29, 17.53it/s][A[ASampling:  46%|████▌     | 457/1000 [00:34<00:34, 15.83it/s]
+
+Sampling:  48%|████▊     | 479/1000 [00:34<00:29, 17.65it/s][A[ASampling:  46%|████▌     | 459/1000 [00:34<00:34, 15.82it/s]
+
+Sampling:  48%|████▊     | 481/1000 [00:34<00:29, 17.83it/s][A[A127.0.0.1 - - [28/May/2026 09:11:27] "GET /api/generation-progress HTTP/1.1" 200 -
+INFO:werkzeug:127.0.0.1 - - [28/May/2026 09:11:27] "GET /api/generation-progress HTTP/1.1" 200 -
+Sampling:  46%|████▌     | 461/1000 [00:34<00:34, 15.63it/s]
+
+Sampling:  48%|████▊     | 483/1000 [00:34<00:29, 17.76it/s][A[ASampling:  46%|████▋     | 463/1000 [00:34<00:34, 15.70it/s]
+
+Sampling:  48%|████▊     | 485/1000 [00:34<00:30, 17.11it/s][A[ASampling:  46%|████▋     | 465/1000 [00:34<00:34, 15.62it/s]
+
+Sampling:  49%|████▊     | 487/1000 [00:34<00:29, 17.21it/s][A[A127.0.0.1 - - [28/May/2026 09:11:28] "GET /api/generation-progress HTTP/1.1" 200 -
+INFO:werkzeug:127.0.0.1 - - [28/May/2026 09:11:28] "GET /api/generation-progress HTTP/1.1" 200 -
+
+
+Sampling:  49%|████▉     | 489/1000 [00:34<00:29, 17.33it/s][A[ASampling:  47%|████▋     | 467/1000 [00:34<00:34, 15.50it/s]
+
+Sampling:  49%|████▉     | 491/1000 [00:34<00:29, 17.46it/s][A[ASampling:  47%|████▋     | 469/1000 [00:34<00:34, 15.55it/s]
+
+Sampling:  49%|████▉     | 493/1000 [00:34<00:29, 17.26it/s][A[ASampling:  47%|████▋     | 471/1000 [00:35<00:33, 15.59it/s]
+
+Sampling:  50%|████▉     | 495/1000 [00:35<00:29, 17.37it/s][A[ASampling:  47%|████▋     | 473/1000 [00:35<00:33, 15.58it/s]
+
+Sampling:  50%|████▉     | 497/1000 [00:35<00:28, 17.51it/s][A[ASampling:  48%|████▊     | 475/1000 [00:35<00:33, 15.72it/s]
+
+Sampling:  50%|████▉     | 499/1000 [00:35<00:28, 17.42it/s][A[A127.0.0.1 - - [28/May/2026 09:11:28] "GET /api/generation-progress HTTP/1.1" 200 -
+INFO:werkzeug:127.0.0.1 - - [28/May/2026 09:11:28] "GET /api/generation-progress HTTP/1.1" 200 -
+Sampling:  48%|████▊     | 477/1000 [00:35<00:33, 15.80it/s]
+
+Sampling:  50%|█████     | 501/1000 [00:35<00:28, 17.34it/s][A[ASampling:  48%|████▊     | 479/1000 [00:35<00:33, 15.77it/s]
+
+Sampling:  50%|█████     | 503/1000 [00:35<00:28, 17.45it/s][A[ASampling:  48%|████▊     | 481/1000 [00:35<00:32, 15.99it/s]
+
+Sampling:  50%|█████     | 505/1000 [00:35<00:28, 17.30it/s][A[A127.0.0.1 - - [28/May/2026 09:11:29] "GET /api/generation-progress HTTP/1.1" 200 -
+INFO:werkzeug:127.0.0.1 - - [28/May/2026 09:11:29] "GET /api/generation-progress HTTP/1.1" 200 -
+Sampling:  48%|████▊     | 483/1000 [00:35<00:31, 16.22it/s]
+
+Sampling:  51%|█████     | 507/1000 [00:35<00:28, 17.30it/s][A[ASampling:  48%|████▊     | 485/1000 [00:35<00:31, 16.25it/s]
+
+Sampling:  51%|█████     | 509/1000 [00:35<00:28, 17.46it/s][A[A
+
+Sampling:  51%|█████     | 511/1000 [00:36<00:28, 17.35it/s][A[ASampling:  49%|████▊     | 487/1000 [00:36<00:31, 16.16it/s]
+
+Sampling:  51%|█████▏    | 513/1000 [00:36<00:27, 17.48it/s][A[ASampling:  49%|████▉     | 489/1000 [00:36<00:31, 16.13it/s]
+
+Sampling:  52%|█████▏    | 515/1000 [00:36<00:28, 17.31it/s][A[ASampling:  49%|████▉     | 491/1000 [00:36<00:31, 15.97it/s]
+
+Sampling:  52%|█████▏    | 517/1000 [00:36<00:27, 17.40it/s][A[A127.0.0.1 - - [28/May/2026 09:11:29] "GET /api/generation-progress HTTP/1.1" 200 -
+INFO:werkzeug:127.0.0.1 - - [28/May/2026 09:11:29] "GET /api/generation-progress HTTP/1.1" 200 -
+Sampling:  49%|████▉     | 493/1000 [00:36<00:32, 15.83it/s]
+
+Sampling:  52%|█████▏    | 519/1000 [00:36<00:27, 17.52it/s][A[ASampling:  50%|████▉     | 495/1000 [00:36<00:31, 15.81it/s]
+
+Sampling:  52%|█████▏    | 521/1000 [00:36<00:27, 17.48it/s][A[ASampling:  50%|████▉     | 497/1000 [00:36<00:31, 15.73it/s]127.0.0.1 - - [28/May/2026 09:11:30] "GET /api/generation-progress HTTP/1.1" 200 -
+INFO:werkzeug:127.0.0.1 - - [28/May/2026 09:11:30] "GET /api/generation-progress HTTP/1.1" 200 -
+
+
+Sampling:  52%|█████▏    | 523/1000 [00:36<00:27, 17.45it/s][A[ASampling:  50%|████▉     | 499/1000 [00:36<00:31, 15.81it/s]
+
+Sampling:  52%|█████▎    | 525/1000 [00:36<00:27, 17.29it/s][A[ASampling:  50%|█████     | 501/1000 [00:36<00:31, 15.96it/s]
+
+Sampling:  53%|█████▎    | 527/1000 [00:36<00:27, 17.14it/s][A[ASampling:  50%|█████     | 503/1000 [00:37<00:31, 15.97it/s]
+
+Sampling:  53%|█████▎    | 529/1000 [00:37<00:27, 17.24it/s][A[ASampling:  50%|█████     | 505/1000 [00:37<00:30, 16.01it/s]
+
+Sampling:  53%|█████▎    | 531/1000 [00:37<00:27, 17.17it/s][A[ASampling:  51%|█████     | 507/1000 [00:37<00:30, 16.01it/s]
+
+Sampling:  53%|█████▎    | 533/1000 [00:37<00:27, 17.06it/s][A[A127.0.0.1 - - [28/May/2026 09:11:30] "GET /api/generation-progress HTTP/1.1" 200 -
+INFO:werkzeug:127.0.0.1 - - [28/May/2026 09:11:30] "GET /api/generation-progress HTTP/1.1" 200 -
+Sampling:  51%|█████     | 509/1000 [00:37<00:30, 16.04it/s]
+
+Sampling:  54%|█████▎    | 535/1000 [00:37<00:27, 17.13it/s][A[A
+
+Sampling:  54%|█████▎    | 537/1000 [00:37<00:26, 17.23it/s][A[ASampling:  51%|█████     | 511/1000 [00:37<00:31, 15.67it/s]
+
+Sampling:  54%|█████▍    | 539/1000 [00:37<00:26, 17.41it/s][A[ASampling:  51%|█████▏    | 513/1000 [00:37<00:31, 15.57it/s]127.0.0.1 - - [28/May/2026 09:11:31] "GET /api/generation-progress HTTP/1.1" 200 -
+INFO:werkzeug:127.0.0.1 - - [28/May/2026 09:11:31] "GET /api/generation-progress HTTP/1.1" 200 -
+
+
+Sampling:  54%|█████▍    | 541/1000 [00:37<00:26, 17.41it/s][A[ASampling:  52%|█████▏    | 515/1000 [00:37<00:31, 15.57it/s]
+
+Sampling:  54%|█████▍    | 543/1000 [00:37<00:26, 17.31it/s][A[ASampling:  52%|█████▏    | 517/1000 [00:37<00:31, 15.49it/s]
+
+Sampling:  55%|█████▍    | 545/1000 [00:37<00:26, 17.38it/s][A[ASampling:  52%|█████▏    | 519/1000 [00:38<00:31, 15.51it/s]
+
+Sampling:  55%|█████▍    | 547/1000 [00:38<00:25, 17.61it/s][A[ASampling:  52%|█████▏    | 521/1000 [00:38<00:30, 15.71it/s]
+
+Sampling:  55%|█████▍    | 549/1000 [00:38<00:25, 17.59it/s][A[ASampling:  52%|█████▏    | 523/1000 [00:38<00:29, 15.91it/s]
+
+Sampling:  55%|█████▌    | 551/1000 [00:38<00:25, 17.53it/s][A[ASampling:  55%|█████▌    | 551/1000 [00:38<00:31, 14.38it/s]
+127.0.0.1 - - [28/May/2026 09:11:31] "GET /api/generation-progress HTTP/1.1" 200 -
+INFO:werkzeug:127.0.0.1 - - [28/May/2026 09:11:31] "GET /api/generation-progress HTTP/1.1" 200 -
+Sampling:  53%|█████▎    | 526/1000 [00:38<00:27, 17.27it/s]Sampling:  53%|█████▎    | 528/1000 [00:38<00:26, 17.78it/s]Sampling:  53%|█████▎    | 530/1000 [00:38<00:25, 18.10it/s]127.0.0.1 - - [28/May/2026 09:11:32] "GET /api/generation-progress HTTP/1.1" 200 -
+INFO:werkzeug:127.0.0.1 - - [28/May/2026 09:11:32] "GET /api/generation-progress HTTP/1.1" 200 -
+Sampling:  53%|█████▎    | 532/1000 [00:38<00:26, 17.87it/s]Sampling:  53%|█████▎    | 534/1000 [00:38<00:25, 18.14it/s]Sampling:  54%|█████▎    | 536/1000 [00:38<00:25, 18.06it/s]Sampling:  54%|█████▍    | 538/1000 [00:39<00:25, 18.14it/s]Sampling:  54%|█████▍    | 540/1000 [00:39<00:25, 17.91it/s]127.0.0.1 - - [28/May/2026 09:11:32] "GET /api/generation-progress HTTP/1.1" 200 -
+INFO:werkzeug:127.0.0.1 - - [28/May/2026 09:11:32] "GET /api/generation-progress HTTP/1.1" 200 -
+Sampling:  54%|█████▍    | 543/1000 [00:39<00:24, 18.45it/s]Sampling:  55%|█████▍    | 546/1000 [00:39<00:23, 19.38it/s]127.0.0.1 - - [28/May/2026 09:11:33] "POST /api/project/generate-chunk-audio HTTP/1.1" 200 -
+INFO:werkzeug:127.0.0.1 - - [28/May/2026 09:11:33] "POST /api/project/generate-chunk-audio HTTP/1.1" 200 -
+Sampling:  55%|█████▌    | 550/1000 [00:39<00:20, 21.50it/s]127.0.0.1 - - [28/May/2026 09:11:33] "GET /api/generation-progress HTTP/1.1" 200 -
+INFO:werkzeug:127.0.0.1 - - [28/May/2026 09:11:33] "GET /api/generation-progress HTTP/1.1" 200 -
+Sampling:  56%|█████▌    | 555/1000 [00:39<00:16, 27.10it/s]Sampling:  56%|█████▌    | 560/1000 [00:39<00:13, 32.23it/s]127.0.0.1 - - [28/May/2026 09:11:33] "GET /api/project/info HTTP/1.1" 200 -
+INFO:werkzeug:127.0.0.1 - - [28/May/2026 09:11:33] "GET /api/project/info HTTP/1.1" 200 -
+Sampling:  56%|█████▋    | 565/1000 [00:40<00:12, 34.49it/s]Sampling:  57%|█████▋    | 570/1000 [00:40<00:11, 38.11it/s]Sampling:  57%|█████▊    | 575/1000 [00:40<00:10, 41.11it/s]Sampling:  58%|█████▊    | 580/1000 [00:40<00:09, 42.61it/s]Sampling:  58%|█████▊    | 585/1000 [00:40<00:11, 35.31it/s]127.0.0.1 - - [28/May/2026 09:11:34] "GET /api/generation-progress HTTP/1.1" 200 -
+INFO:werkzeug:127.0.0.1 - - [28/May/2026 09:11:34] "GET /api/generation-progress HTTP/1.1" 200 -
+Sampling:  59%|█████▉    | 589/1000 [00:40<00:14, 27.65it/s]Sampling:  59%|█████▉    | 593/1000 [00:41<00:17, 22.91it/s]Sampling:  60%|█████▉    | 596/1000 [00:41<00:19, 20.84it/s]Sampling:  60%|█████▉    | 599/1000 [00:41<00:20, 19.98it/s]127.0.0.1 - - [28/May/2026 09:11:34] "POST /api/project/transcribe-take HTTP/1.1" 200 -
+INFO:werkzeug:127.0.0.1 - - [28/May/2026 09:11:34] "POST /api/project/transcribe-take HTTP/1.1" 200 -
+Sampling:  60%|██████    | 602/1000 [00:41<00:19, 20.88it/s]Sampling:  61%|██████    | 607/1000 [00:41<00:14, 26.69it/s]127.0.0.1 - - [28/May/2026 09:11:35] "GET /api/generation-progress HTTP/1.1" 200 -
+INFO:werkzeug:127.0.0.1 - - [28/May/2026 09:11:35] "GET /api/generation-progress HTTP/1.1" 200 -
+Sampling:  61%|██████    | 612/1000 [00:41<00:12, 31.69it/s]Sampling:  62%|██████▏   | 617/1000 [00:41<00:10, 36.03it/s]Sampling:  62%|██████▏   | 622/1000 [00:41<00:09, 39.51it/s]Sampling:  63%|██████▎   | 626/1000 [00:41<00:25, 14.91it/s]
+127.0.0.1 - - [28/May/2026 09:11:36] "GET /api/generation-progress HTTP/1.1" 200 -
+INFO:werkzeug:127.0.0.1 - - [28/May/2026 09:11:36] "GET /api/generation-progress HTTP/1.1" 200 -
+127.0.0.1 - - [28/May/2026 09:11:36] "POST /api/project/generate-chunk-audio HTTP/1.1" 200 -
+INFO:werkzeug:127.0.0.1 - - [28/May/2026 09:11:36] "POST /api/project/generate-chunk-audio HTTP/1.1" 200 -
+127.0.0.1 - - [28/May/2026 09:11:37] "GET /api/project/info HTTP/1.1" 200 -
+INFO:werkzeug:127.0.0.1 - - [28/May/2026 09:11:37] "GET /api/project/info HTTP/1.1" 200 -
+127.0.0.1 - - [28/May/2026 09:11:37] "GET /api/project/flags HTTP/1.1" 200 -
+INFO:werkzeug:127.0.0.1 - - [28/May/2026 09:11:37] "GET /api/project/flags HTTP/1.1" 200 -
+127.0.0.1 - - [28/May/2026 09:11:37] "POST /api/project/transcribe-take HTTP/1.1" 200 -
+INFO:werkzeug:127.0.0.1 - - [28/May/2026 09:11:37] "POST /api/project/transcribe-take HTTP/1.1" 200 -
+Error getting GPU stats: nvidia-ml-py does not seem to be installed or it can't be imported.
+Error getting GPU stats: nvidia-ml-py does not seem to be installed or it can't be imported.
+Error getting GPU stats: nvidia-ml-py does not seem to be installed or it can't be imported.
+Error getting GPU stats: nvidia-ml-py does not seem to be installed or it can't be imported.
+Error getting GPU stats: nvidia-ml-py does not seem to be installed or it can't be imported.
+Error getting GPU stats: nvidia-ml-py does not seem to be installed or it can't be imported.
+Error getting GPU stats: nvidia-ml-py does not seem to be installed or it can't be imported.
+Error getting GPU stats: nvidia-ml-py does not seem to be installed or it can't be imported.
+Error getting GPU stats: nvidia-ml-py does not seem to be installed or it can't be imported.
+Error getting GPU stats: nvidia-ml-py does not seem to be installed or it can't be imported.
+Error getting GPU stats: nvidia-ml-py does not seem to be installed or it can't be imported.
+Error getting GPU stats: nvidia-ml-py does not seem to be installed or it can't be imported.
+Error getting GPU stats: nvidia-ml-py does not seem to be installed or it can't be imported.
+Error getting GPU stats: nvidia-ml-py does not seem to be installed or it can't be imported.
+Error getting GPU stats: nvidia-ml-py does not seem to be installed or it can't be imported.
+Error getting GPU stats: nvidia-ml-py does not seem to be installed or it can't be imported.
+Error getting GPU stats: nvidia-ml-py does not seem to be installed or it can't be imported.
+Error getting GPU stats: nvidia-ml-py does not seem to be installed or it can't be imported.
+Error getting GPU stats: nvidia-ml-py does not seem to be installed or it can't be imported.
+Error getting GPU stats: nvidia-ml-py does not seem to be installed or it can't be imported.
+Error getting GPU stats: nvidia-ml-py does not seem to be installed or it can't be imported.
+Error getting GPU stats: nvidia-ml-py does not seem to be installed or it can't be imported.
+Error getting GPU stats: nvidia-ml-py does not seem to be installed or it can't be imported.
+Error getting GPU stats: nvidia-ml-py does not seem to be installed or it can't be imported.
+Error getting GPU stats: nvidia-ml-py does not seem to be installed or it can't be imported.
+Error getting GPU stats: nvidia-ml-py does not seem to be installed or it can't be imported.
+Error getting GPU stats: nvidia-ml-py does not seem to be installed or it can't be imported.
+Error getting GPU stats: nvidia-ml-py does not seem to be installed or it can't be imported.
+Error getting GPU stats: nvidia-ml-py does not seem to be installed or it can't be imported.
+Error getting GPU stats: nvidia-ml-py does not seem to be installed or it can't be imported.
+Error getting GPU stats: nvidia-ml-py does not seem to be installed or it can't be imported.
+Error getting GPU stats: nvidia-ml-py does not seem to be installed or it can't be imported.
+Error getting GPU stats: nvidia-ml-py does not seem to be installed or it can't be imported.
+Error getting GPU stats: nvidia-ml-py does not seem to be installed or it can't be imported.
+Error getting GPU stats: nvidia-ml-py does not seem to be installed or it can't be imported.
+Error getting GPU stats: nvidia-ml-py does not seem to be installed or it can't be imported.
+Error getting GPU stats: nvidia-ml-py does not seem to be installed or it can't be imported.
+Error getting GPU stats: nvidia-ml-py does not seem to be installed or it can't be imported.
+Error getting GPU stats: nvidia-ml-py does not seem to be installed or it can't be imported.
+Error getting GPU stats: nvidia-ml-py does not seem to be installed or it can't be imported.
+Error getting GPU stats: nvidia-ml-py does not seem to be installed or it can't be imported.
+Error getting GPU stats: nvidia-ml-py does not seem to be installed or it can't be imported.
+Error getting GPU stats: nvidia-ml-py does not seem to be installed or it can't be imported.
+Error getting GPU stats: nvidia-ml-py does not seem to be installed or it can't be imported.
+Error getting GPU stats: nvidia-ml-py does not seem to be installed or it can't be imported.
+Error getting GPU stats: nvidia-ml-py does not seem to be installed or it can't be imported.
+Error getting GPU stats: nvidia-ml-py does not seem to be installed or it can't be imported.
+Error getting GPU stats: nvidia-ml-py does not seem to be installed or it can't be imported.
+Error getting GPU stats: nvidia-ml-py does not seem to be installed or it can't be imported.
+Error getting GPU stats: nvidia-ml-py does not seem to be installed or it can't be imported.
+Error getting GPU stats: nvidia-ml-py does not seem to be installed or it can't be imported.
+Error getting GPU stats: nvidia-ml-py does not seem to be installed or it can't be imported.
+Error getting GPU stats: nvidia-ml-py does not seem to be installed or it can't be imported.
+Error getting GPU stats: nvidia-ml-py does not seem to be installed or it can't be imported.
+Generated wav type: <class 'torch.Tensor'>, shape: torch.Size([1, 197760])
+Converted to numpy, shape: (1, 197760), dtype: float32
+After flattening, shape: (197760,)
+Final audio shape: (197760,), Sample rate: 24000, dtype: int16
+Successfully wrote WAV file to: Projects\kllpp\audio\chunk2_1779973836507.wav
+Error getting GPU stats: nvidia-ml-py does not seem to be installed or it can't be imported.
+
+=== Generation Stats ===
+Characters: 153
+Audio Duration: 8.24s
+Generation Time: 36200ms (36.20s)
+Speed: 4.23 chars/sec
+========================
+
+
+[TTS METADATA SAVED]
+  Model saved as: chatterbox
+  Model requested: chatterbox
+  Emotion tags in input: False
+Error getting GPU stats: nvidia-ml-py does not seem to be installed or it can't be imported.
+Error getting GPU stats: nvidia-ml-py does not seem to be installed or it can't be imported.
+[Transcription] Loading audio from: C:\Users\danie\Desktop\Git\Henty\Projects\kllpp\audio\chunk2_1779973836507.wav
+Loading Whisper base.en model for transcription scoring...
+Error getting GPU stats: nvidia-ml-py does not seem to be installed or it can't be imported.
+Error getting GPU stats: nvidia-ml-py does not seem to be installed or it can't be imported.
+Whisper model loaded.
+Error getting GPU stats: nvidia-ml-py does not seem to be installed or it can't be imported.
+Error getting GPU stats: nvidia-ml-py does not seem to be installed or it can't be imported.
+[Transcription] chunk2_1779973836507.wav: score=100.0%
+Error getting GPU stats: nvidia-ml-py does not seem to be installed or it can't be imported.
+Error getting GPU stats: nvidia-ml-py does not seem to be installed or it can't be imported.
+Error getting GPU stats: nvidia-ml-py does not seem to be installed or it can't be imported.
+Error getting GPU stats: nvidia-ml-py does not seem to be installed or it can't be imported.
+Error getting GPU stats: nvidia-ml-py does not seem to be installed or it can't be imported.
+Error getting GPU stats: nvidia-ml-py does not seem to be installed or it can't be imported.
+Error getting GPU stats: nvidia-ml-py does not seem to be installed or it can't be imported.
+Error getting GPU stats: nvidia-ml-py does not seem to be installed or it can't be imported.
+Error getting GPU stats: nvidia-ml-py does not seem to be installed or it can't be imported.
+Error getting GPU stats: nvidia-ml-py does not seem to be installed or it can't be imported.
+Error getting GPU stats: nvidia-ml-py does not seem to be installed or it can't be imported.
+Error getting GPU stats: nvidia-ml-py does not seem to be installed or it can't be imported.
+Error getting GPU stats: nvidia-ml-py does not seem to be installed or it can't be imported.
+Error getting GPU stats: nvidia-ml-py does not seem to be installed or it can't be imported.
+Error getting GPU stats: nvidia-ml-py does not seem to be installed or it can't be imported.
+Error getting GPU stats: nvidia-ml-py does not seem to be installed or it can't be imported.
+Error getting GPU stats: nvidia-ml-py does not seem to be installed or it can't be imported.
+Error getting GPU stats: nvidia-ml-py does not seem to be installed or it can't be imported.
+Error getting GPU stats: nvidia-ml-py does not seem to be installed or it can't be imported.
+Error getting GPU stats: nvidia-ml-py does not seem to be installed or it can't be imported.
+Error getting GPU stats: nvidia-ml-py does not seem to be installed or it can't be imported.
+Error getting GPU stats: nvidia-ml-py does not seem to be installed or it can't be imported.
+Error getting GPU stats: nvidia-ml-py does not seem to be installed or it can't be imported.
+Error getting GPU stats: nvidia-ml-py does not seem to be installed or it can't be imported.
+Error getting GPU stats: nvidia-ml-py does not seem to be installed or it can't be imported.
+Error getting GPU stats: nvidia-ml-py does not seem to be installed or it can't be imported.
+Error getting GPU stats: nvidia-ml-py does not seem to be installed or it can't be imported.
+Error getting GPU stats: nvidia-ml-py does not seem to be installed or it can't be imported.
+Error getting GPU stats: nvidia-ml-py does not seem to be installed or it can't be imported.
+Error getting GPU stats: nvidia-ml-py does not seem to be installed or it can't be imported.
+Error getting GPU stats: nvidia-ml-py does not seem to be installed or it can't be imported.
+Error getting GPU stats: nvidia-ml-py does not seem to be installed or it can't be imported.
+Error getting GPU stats: nvidia-ml-py does not seem to be installed or it can't be imported.
+Error getting GPU stats: nvidia-ml-py does not seem to be installed or it can't be imported.
+Error getting GPU stats: nvidia-ml-py does not seem to be installed or it can't be imported.
+Error getting GPU stats: nvidia-ml-py does not seem to be installed or it can't be imported.
+Generated wav type: <class 'torch.Tensor'>, shape: torch.Size([1, 528960])
+Converted to numpy, shape: (1, 528960), dtype: float32
+After flattening, shape: (528960,)
+Final audio shape: (528960,), Sample rate: 24000, dtype: int16
+Successfully wrote WAV file to: Projects\kllpp\audio\chunk1_1779973835886.wav
+Error getting GPU stats: nvidia-ml-py does not seem to be installed or it can't be imported.
+
+=== Generation Stats ===
+Characters: 350
+Audio Duration: 22.04s
+Generation Time: 57258ms (57.26s)
+Speed: 6.11 chars/sec
+========================
+
+
+[TTS METADATA SAVED]
+  Model saved as: chatterbox
+  Model requested: chatterbox
+  Emotion tags in input: False
+Error getting GPU stats: nvidia-ml-py does not seem to be installed or it can't be imported.
+[Transcription] Loading audio from: C:\Users\danie\Desktop\Git\Henty\Projects\kllpp\audio\chunk1_1779973835886.wav
+Error getting GPU stats: nvidia-ml-py does not seem to be installed or it can't be imported.
+[Transcription] chunk1_1779973835886.wav: score=94.3%
+Error getting GPU stats: nvidia-ml-py does not seem to be installed or it can't be imported.
+Error getting GPU stats: nvidia-ml-py does not seem to be installed or it can't be imported.
+Generated wav type: <class 'torch.Tensor'>, shape: torch.Size([1, 600960])
+Converted to numpy, shape: (1, 600960), dtype: float32
+After flattening, shape: (600960,)
+Final audio shape: (600960,), Sample rate: 24000, dtype: int16
+Successfully wrote WAV file to: Projects\kllpp\audio\chunk0_1779973833857.wav
+Error getting GPU stats: nvidia-ml-py does not seem to be installed or it can't be imported.
+
+=== Generation Stats ===
+Characters: 479
+Audio Duration: 25.04s
+Generation Time: 62821ms (62.82s)
+Speed: 7.62 chars/sec
+========================
+
+
+[TTS METADATA SAVED]
+  Model saved as: chatterbox
+  Model requested: chatterbox
+  Emotion tags in input: False
+[Transcription] Loading audio from: C:\Users\danie\Desktop\Git\Henty\Projects\kllpp\audio\chunk0_1779973833857.wav
+[Transcription] chunk0_1779973833857.wav: score=79.5%
+
+[TTS MODEL SELECTION]
+  Requested: chatterbox
+  HAS_TURBO available: True
+  Paralinguistic tags detected: False
+  → No emotion tags, using requested model: chatterbox
+  ✓ Final model to use: chatterbox
+
+=== Generating audio for chunk 3 on GPU ===
+Text file ID: dd4285e3-4c3f-4454-9541-7cd055e2ba5b
+Voice: Haggard.wav
+Model: chatterbox (requested=chatterbox, emotion_tags=False, turbo_available=True)
+Parameters: Exaggeration=0.6, CFG=0.4, Temp=0.8
+Error getting GPU stats: nvidia-ml-py does not seem to be installed or it can't be imported.
+
+[TTS MODEL LOADING]
+  Model: chatterbox, HAS_TURBO=True
+  → Loading Standard model...
+  ✓ Loaded: ChatterboxTTS (Standard)
+
+=== Validating voice sample: voice_samples\Haggard.wav ===
+Voice sample format validation: OK (48000 Hz)
+Voice sample ready for use
+Generating with parameters: {'exaggeration': 0.6000000238418579, 'cfg_weight': 0.4000000059604645, 'audio_prompt_path': 'voice_samples\\Haggard.wav'}
+Text length: 70 characters
+Device: GPU
+Sampling:   0%|          | 0/1000 [00:00<?, ?it/s]Sampling:   0%|          | 5/1000 [00:00<00:22, 44.79it/s]Sampling:   1%|          | 10/1000 [00:00<00:21, 45.42it/s]Sampling:   2%|▏         | 15/1000 [00:00<00:21, 46.30it/s]Sampling:   2%|▏         | 20/1000 [00:00<00:21, 45.88it/s]Sampling:   2%|▎         | 25/1000 [00:00<00:22, 44.26it/s]Sampling:   3%|▎         | 30/1000 [00:00<00:21, 45.07it/s]Sampling:   4%|▎         | 35/1000 [00:00<00:21, 45.67it/s]Sampling:   4%|▍         | 40/1000 [00:00<00:20, 46.47it/s]Sampling:   4%|▍         | 45/1000 [00:00<00:20, 45.60it/s]Sampling:   5%|▌         | 50/1000 [00:01<00:20, 45.75it/s]127.0.0.1 - - [28/May/2026 09:12:04] "GET /api/generation-progress HTTP/1.1" 200 -
+INFO:werkzeug:127.0.0.1 - - [28/May/2026 09:12:04] "GET /api/generation-progress HTTP/1.1" 200 -
+Sampling:   6%|▌         | 55/1000 [00:01<00:20, 45.53it/s]Sampling:   6%|▌         | 60/1000 [00:01<00:20, 45.57it/s]Sampling:   6%|▋         | 65/1000 [00:01<00:20, 45.64it/s]Sampling:   7%|▋         | 70/1000 [00:01<00:20, 45.77it/s]Sampling:   8%|▊         | 75/1000 [00:01<00:19, 46.31it/s]Sampling:   8%|▊         | 80/1000 [00:01<00:19, 46.11it/s]Sampling:   8%|▊         | 85/1000 [00:01<00:19, 46.82it/s]Sampling:   9%|▉         | 90/1000 [00:01<00:19, 47.32it/s]Sampling:  10%|▉         | 95/1000 [00:02<00:19, 47.61it/s]127.0.0.1 - - [28/May/2026 09:12:05] "GET /api/generation-progress HTTP/1.1" 200 -
+INFO:werkzeug:127.0.0.1 - - [28/May/2026 09:12:05] "GET /api/generation-progress HTTP/1.1" 200 -
+Sampling:  10%|█         | 100/1000 [00:02<00:19, 45.04it/s]Sampling:  10%|█         | 105/1000 [00:02<00:20, 44.32it/s]Sampling:  11%|█         | 110/1000 [00:02<00:20, 43.89it/s]Sampling:  12%|█▏        | 115/1000 [00:02<00:20, 43.65it/s]Sampling:  12%|█▏        | 117/1000 [00:02<00:19, 45.40it/s]
+127.0.0.1 - - [28/May/2026 09:12:05] "POST /api/project/generate-chunk-audio HTTP/1.1" 200 -
+INFO:werkzeug:127.0.0.1 - - [28/May/2026 09:12:05] "POST /api/project/generate-chunk-audio HTTP/1.1" 200 -
+127.0.0.1 - - [28/May/2026 09:12:06] "GET /api/generation-progress HTTP/1.1" 200 -
+INFO:werkzeug:127.0.0.1 - - [28/May/2026 09:12:06] "GET /api/generation-progress HTTP/1.1" 200 -
+127.0.0.1 - - [28/May/2026 09:12:06] "GET /api/project/info HTTP/1.1" 200 -
+INFO:werkzeug:127.0.0.1 - - [28/May/2026 09:12:06] "GET /api/project/info HTTP/1.1" 200 -
+127.0.0.1 - - [28/May/2026 09:12:06] "GET /api/project/flags HTTP/1.1" 200 -
+INFO:werkzeug:127.0.0.1 - - [28/May/2026 09:12:06] "GET /api/project/flags HTTP/1.1" 200 -
+127.0.0.1 - - [28/May/2026 09:12:07] "POST /api/project/transcribe-take HTTP/1.1" 200 -
+INFO:werkzeug:127.0.0.1 - - [28/May/2026 09:12:07] "POST /api/project/transcribe-take HTTP/1.1" 200 -
+Error getting GPU stats: nvidia-ml-py does not seem to be installed or it can't be imported.
+Error getting GPU stats: nvidia-ml-py does not seem to be installed or it can't be imported.
+Generated wav type: <class 'torch.Tensor'>, shape: torch.Size([1, 112320])
+Converted to numpy, shape: (1, 112320), dtype: float32
+After flattening, shape: (112320,)
+Final audio shape: (112320,), Sample rate: 24000, dtype: int16
+Successfully wrote WAV file to: Projects\kllpp\audio\chunk3_1779973922775.wav
+Error getting GPU stats: nvidia-ml-py does not seem to be installed or it can't be imported.
+
+=== Generation Stats ===
+Characters: 70
+Audio Duration: 4.68s
+Generation Time: 3190ms (3.19s)
+Speed: 21.94 chars/sec
+========================
+
+
+[TTS METADATA SAVED]
+  Model saved as: chatterbox
+  Model requested: chatterbox
+  Emotion tags in input: False
+Error getting GPU stats: nvidia-ml-py does not seem to be installed or it can't be imported.
+[Transcription] Loading audio from: C:\Users\danie\Desktop\Git\Henty\Projects\kllpp\audio\chunk3_1779973922775.wav
+[Transcription] chunk3_1779973922775.wav: score=92.3%
+
+[TTS MODEL SELECTION]
+  Requested: chatterbox
+  HAS_TURBO available: True
+  Paralinguistic tags detected: False
+  → No emotion tags, using requested model: chatterbox
+  ✓ Final model to use: chatterbox
+
+=== Generating audio for chunk 4 on GPU ===
+Text file ID: dd4285e3-4c3f-4454-9541-7cd055e2ba5b
+Voice: Haggard.wav
+Model: chatterbox (requested=chatterbox, emotion_tags=False, turbo_available=True)
+Parameters: Exaggeration=0.6, CFG=0.4, Temp=0.8
+Error getting GPU stats: nvidia-ml-py does not seem to be installed or it can't be imported.
+
+[TTS MODEL LOADING]
+  Model: chatterbox, HAS_TURBO=True
+  → Loading Standard model...
+  ✓ Loaded: ChatterboxTTS (Standard)
+
+=== Validating voice sample: voice_samples\Haggard.wav ===
+Voice sample format validation: OK (48000 Hz)
+Voice sample ready for use
+Generating with parameters: {'exaggeration': 0.6000000238418579, 'cfg_weight': 0.4000000059604645, 'audio_prompt_path': 'voice_samples\\Haggard.wav'}
+Text length: 401 characters
+Device: GPU
+Sampling:   0%|          | 0/1000 [00:00<?, ?it/s]Sampling:   0%|          | 1/1000 [00:00<01:46,  9.39it/s]Sampling:   1%|          | 6/1000 [00:00<00:31, 31.57it/s]Sampling:   1%|          | 11/1000 [00:00<00:25, 39.02it/s]Sampling:   2%|▏         | 16/1000 [00:00<00:23, 41.93it/s]Sampling:   2%|▏         | 21/1000 [00:00<00:22, 42.66it/s]Sampling:   3%|▎         | 26/1000 [00:00<00:27, 34.88it/s]
+[TTS MODEL SELECTION]
+  Requested: chatterbox
+  HAS_TURBO available: True
+  Paralinguistic tags detected: False
+  → No emotion tags, using requested model: chatterbox
+  ✓ Final model to use: chatterbox
+
+=== Generating audio for chunk 5 on GPU ===
+Text file ID: dd4285e3-4c3f-4454-9541-7cd055e2ba5b
+Voice: Haggard.wav
+Model: chatterbox (requested=chatterbox, emotion_tags=False, turbo_available=True)
+Parameters: Exaggeration=0.6, CFG=0.4, Temp=0.8
+Error getting GPU stats: nvidia-ml-py does not seem to be installed or it can't be imported.
+
+[TTS MODEL LOADING]
+  Model: chatterbox, HAS_TURBO=True
+  → Loading Standard model...
+  ✓ Loaded: ChatterboxTTS (Standard)
+
+=== Validating voice sample: voice_samples\Haggard.wav ===
+Voice sample format validation: OK (48000 Hz)
+Voice sample ready for use
+Generating with parameters: {'exaggeration': 0.6000000238418579, 'cfg_weight': 0.4000000059604645, 'audio_prompt_path': 'voice_samples\\Haggard.wav'}
+Text length: 100 characters
+Device: GPU
+
+Sampling:   0%|          | 0/1000 [00:00<?, ?it/s][ASampling:   3%|▎         | 30/1000 [00:00<00:35, 27.50it/s]
+Sampling:   0%|          | 2/1000 [00:00<00:56, 17.70it/s][A
+Sampling:   0%|          | 4/1000 [00:00<00:53, 18.72it/s][A127.0.0.1 - - [28/May/2026 09:12:15] "GET /api/generation-progress HTTP/1.1" 200 -
+INFO:werkzeug:127.0.0.1 - - [28/May/2026 09:12:15] "GET /api/generation-progress HTTP/1.1" 200 -
+Sampling:   3%|▎         | 34/1000 [00:01<00:42, 22.55it/s]
+Sampling:   1%|          | 6/1000 [00:00<01:04, 15.44it/s][A
+[TTS MODEL SELECTION]
+  Requested: chatterbox
+  HAS_TURBO available: True
+  Paralinguistic tags detected: False
+  → No emotion tags, using requested model: chatterbox
+  ✓ Final model to use: chatterbox
+
+=== Generating audio for chunk 6 on GPU ===
+Text file ID: dd4285e3-4c3f-4454-9541-7cd055e2ba5b
+Voice: Haggard.wav
+Model: chatterbox (requested=chatterbox, emotion_tags=False, turbo_available=True)
+Parameters: Exaggeration=0.6, CFG=0.4, Temp=0.8
+Error getting GPU stats: nvidia-ml-py does not seem to be installed or it can't be imported.
+
+[TTS MODEL LOADING]
+  Model: chatterbox, HAS_TURBO=True
+  → Loading Standard model...
+  ✓ Loaded: ChatterboxTTS (Standard)
+
+=== Validating voice sample: voice_samples\Haggard.wav ===
+Voice sample format validation: OK (48000 Hz)
+Voice sample ready for use
+Generating with parameters: {'exaggeration': 0.6000000238418579, 'cfg_weight': 0.4000000059604645, 'audio_prompt_path': 'voice_samples\\Haggard.wav'}
+Text length: 66 characters
+Device: GPU
+Error getting GPU stats: nvidia-ml-py does not seem to be installed or it can't be imported.
+
+
+Sampling:   0%|          | 0/1000 [00:00<?, ?it/s][A[A
+Sampling:   1%|          | 8/1000 [00:00<01:10, 13.99it/s][ASampling:   4%|▎         | 37/1000 [00:01<00:50, 18.91it/s]
+
+Sampling:   0%|          | 2/1000 [00:00<01:26, 11.56it/s][A[A
+Sampling:   1%|          | 10/1000 [00:00<01:18, 12.56it/s][A127.0.0.1 - - [28/May/2026 09:12:15] "GET /api/generation-progress HTTP/1.1" 200 -
+INFO:werkzeug:127.0.0.1 - - [28/May/2026 09:12:15] "GET /api/generation-progress HTTP/1.1" 200 -
+
+
+Sampling:   0%|          | 4/1000 [00:00<01:30, 11.01it/s][A[ASampling:   4%|▍         | 40/1000 [00:01<01:00, 15.87it/s]
+Sampling:   1%|          | 12/1000 [00:00<01:29, 11.09it/s][A
+
+Sampling:   1%|          | 6/1000 [00:00<01:30, 10.95it/s][A[ASampling:   4%|▍         | 42/1000 [00:01<01:05, 14.53it/s]
+Sampling:   1%|▏         | 14/1000 [00:01<01:34, 10.40it/s][A127.0.0.1 - - [28/May/2026 09:12:16] "GET /api/generation-progress HTTP/1.1" 200 -
+INFO:werkzeug:127.0.0.1 - - [28/May/2026 09:12:16] "GET /api/generation-progress HTTP/1.1" 200 -
+
+
+Sampling:   1%|          | 8/1000 [00:00<01:30, 11.00it/s][A[ASampling:   4%|▍         | 44/1000 [00:02<01:09, 13.66it/s]
+Sampling:   2%|▏         | 16/1000 [00:01<01:39,  9.91it/s][ASampling:   5%|▍         | 46/1000 [00:02<01:13, 13.05it/s]
+
+Sampling:   1%|          | 10/1000 [00:00<01:30, 10.96it/s][A[A127.0.0.1 - - [28/May/2026 09:12:16] "GET /api/generation-progress HTTP/1.1" 200 -
+INFO:werkzeug:127.0.0.1 - - [28/May/2026 09:12:16] "GET /api/generation-progress HTTP/1.1" 200 -
+
+Sampling:   2%|▏         | 18/1000 [00:01<01:40,  9.81it/s][ASampling:   5%|▍         | 48/1000 [00:02<01:16, 12.45it/s]
+
+Sampling:   1%|          | 12/1000 [00:01<01:30, 10.94it/s][A[ASampling:   5%|▌         | 50/1000 [00:02<01:18, 12.04it/s]
+Sampling:   2%|▏         | 20/1000 [00:01<01:39,  9.84it/s][A
+
+Sampling:   1%|▏         | 14/1000 [00:01<01:30, 10.92it/s][A[A127.0.0.1 - - [28/May/2026 09:12:16] "GET /api/generation-progress HTTP/1.1" 200 -
+INFO:werkzeug:127.0.0.1 - - [28/May/2026 09:12:16] "GET /api/generation-progress HTTP/1.1" 200 -
+Sampling:   5%|▌         | 52/1000 [00:02<01:20, 11.73it/s]
+
+Sampling:   2%|▏         | 16/1000 [00:01<01:28, 11.07it/s][A[A
+Sampling:   2%|▏         | 22/1000 [00:02<01:41,  9.64it/s][A
+Sampling:   2%|▏         | 23/1000 [00:02<01:42,  9.52it/s][ASampling:   5%|▌         | 54/1000 [00:02<01:21, 11.55it/s]
+
+Sampling:   2%|▏         | 18/1000 [00:01<01:28, 11.11it/s][A[A127.0.0.1 - - [28/May/2026 09:12:17] "GET /api/generation-progress HTTP/1.1" 200 -
+INFO:werkzeug:127.0.0.1 - - [28/May/2026 09:12:17] "GET /api/generation-progress HTTP/1.1" 200 -
+
+Sampling:   2%|▏         | 24/1000 [00:02<01:44,  9.34it/s][ASampling:   6%|▌         | 56/1000 [00:03<01:22, 11.38it/s]
+
+Sampling:   2%|▏         | 20/1000 [00:01<01:28, 11.05it/s][A[A
+Sampling:   2%|▎         | 25/1000 [00:02<01:44,  9.31it/s][A
+Sampling:   3%|▎         | 26/1000 [00:02<01:44,  9.35it/s][A127.0.0.1 - - [28/May/2026 09:12:17] "GET /api/generation-progress HTTP/1.1" 200 -
+INFO:werkzeug:127.0.0.1 - - [28/May/2026 09:12:17] "GET /api/generation-progress HTTP/1.1" 200 -
+Sampling:   6%|▌         | 58/1000 [00:03<01:23, 11.22it/s]
+
+Sampling:   2%|▏         | 22/1000 [00:01<01:28, 11.02it/s][A[A
+Sampling:   3%|▎         | 27/1000 [00:02<01:44,  9.31it/s][A
+Sampling:   3%|▎         | 28/1000 [00:02<01:43,  9.39it/s][ASampling:   6%|▌         | 60/1000 [00:03<01:23, 11.22it/s]
+
+Sampling:   2%|▏         | 24/1000 [00:02<01:28, 11.02it/s][A[A
+Sampling:   3%|▎         | 29/1000 [00:02<01:43,  9.36it/s][A127.0.0.1 - - [28/May/2026 09:12:17] "GET /api/generation-progress HTTP/1.1" 200 -
+INFO:werkzeug:127.0.0.1 - - [28/May/2026 09:12:17] "GET /api/generation-progress HTTP/1.1" 200 -
+Sampling:   6%|▌         | 62/1000 [00:03<01:23, 11.18it/s]
+Sampling:   3%|▎         | 30/1000 [00:02<01:42,  9.45it/s][A
+
+Sampling:   3%|▎         | 26/1000 [00:02<01:29, 10.90it/s][A[A
+Sampling:   3%|▎         | 31/1000 [00:02<01:42,  9.42it/s][ASampling:   6%|▋         | 64/1000 [00:03<01:23, 11.21it/s]
+
+Sampling:   3%|▎         | 28/1000 [00:02<01:29, 10.87it/s][A[A
+Sampling:   3%|▎         | 32/1000 [00:03<01:43,  9.33it/s][A
+Sampling:   3%|▎         | 33/1000 [00:03<01:44,  9.27it/s][A127.0.0.1 - - [28/May/2026 09:12:18] "GET /api/generation-progress HTTP/1.1" 200 -
+INFO:werkzeug:127.0.0.1 - - [28/May/2026 09:12:18] "GET /api/generation-progress HTTP/1.1" 200 -
+Sampling:   7%|▋         | 66/1000 [00:04<01:24, 11.03it/s]
+
+Sampling:   3%|▎         | 30/1000 [00:02<01:29, 10.84it/s][A[A
+Sampling:   3%|▎         | 34/1000 [00:03<01:44,  9.27it/s][A
+Sampling:   4%|▎         | 35/1000 [00:03<01:44,  9.23it/s][ASampling:   7%|▋         | 68/1000 [00:04<01:24, 11.00it/s]
+
+Sampling:   3%|▎         | 32/1000 [00:02<01:28, 10.96it/s][A[A127.0.0.1 - - [28/May/2026 09:12:18] "GET /api/generation-progress HTTP/1.1" 200 -
+INFO:werkzeug:127.0.0.1 - - [28/May/2026 09:12:18] "GET /api/generation-progress HTTP/1.1" 200 -
+
+Sampling:   4%|▎         | 36/1000 [00:03<01:43,  9.27it/s][ASampling:   7%|▋         | 70/1000 [00:04<01:24, 11.03it/s]
+
+Sampling:   3%|▎         | 34/1000 [00:03<01:27, 11.02it/s][A[A
+Sampling:   4%|▎         | 37/1000 [00:03<01:42,  9.44it/s][A
+Sampling:   4%|▍         | 38/1000 [00:03<01:43,  9.27it/s][ASampling:   7%|▋         | 72/1000 [00:04<01:23, 11.06it/s]
+
+Sampling:   4%|▎         | 36/1000 [00:03<01:26, 11.13it/s][A[A127.0.0.1 - - [28/May/2026 09:12:18] "GET /api/generation-progress HTTP/1.1" 200 -
+INFO:werkzeug:127.0.0.1 - - [28/May/2026 09:12:18] "GET /api/generation-progress HTTP/1.1" 200 -
+
+Sampling:   4%|▍         | 39/1000 [00:03<01:41,  9.46it/s][A
+Sampling:   4%|▍         | 40/1000 [00:03<01:44,  9.22it/s][ASampling:   7%|▋         | 74/1000 [00:04<01:24, 10.92it/s]
+
+Sampling:   4%|▍         | 38/1000 [00:03<01:27, 10.93it/s][A[A
+Sampling:   4%|▍         | 41/1000 [00:04<01:45,  9.10it/s][ASampling:   8%|▊         | 76/1000 [00:04<01:24, 10.97it/s]
+
+Sampling:   4%|▍         | 40/1000 [00:03<01:27, 10.99it/s][A[A
+Sampling:   4%|▍         | 42/1000 [00:04<01:45,  9.11it/s][A127.0.0.1 - - [28/May/2026 09:12:19] "GET /api/generation-progress HTTP/1.1" 200 -
+INFO:werkzeug:127.0.0.1 - - [28/May/2026 09:12:19] "GET /api/generation-progress HTTP/1.1" 200 -
+
+Sampling:   4%|▍         | 43/1000 [00:04<01:45,  9.04it/s][ASampling:   8%|▊         | 78/1000 [00:05<01:23, 11.02it/s]
+
+Sampling:   4%|▍         | 42/1000 [00:03<01:27, 10.94it/s][A[A
+Sampling:   4%|▍         | 44/1000 [00:04<01:46,  9.00it/s][A127.0.0.1 - - [28/May/2026 09:12:19] "GET /api/generation-progress HTTP/1.1" 200 -
+INFO:werkzeug:127.0.0.1 - - [28/May/2026 09:12:19] "GET /api/generation-progress HTTP/1.1" 200 -
+Sampling:   8%|▊         | 80/1000 [00:05<01:23, 10.98it/s]
+Sampling:   4%|▍         | 45/1000 [00:04<01:48,  8.83it/s][A
+
+Sampling:   4%|▍         | 44/1000 [00:04<01:27, 10.91it/s][A[A
+Sampling:   5%|▍         | 46/1000 [00:04<01:45,  9.03it/s][ASampling:   8%|▊         | 82/1000 [00:05<01:23, 10.99it/s]
+
+Sampling:   5%|▍         | 46/1000 [00:04<01:26, 11.00it/s][A[A
+Sampling:   5%|▍         | 47/1000 [00:04<01:43,  9.17it/s][A127.0.0.1 - - [28/May/2026 09:12:19] "GET /api/generation-progress HTTP/1.1" 200 -
+INFO:werkzeug:127.0.0.1 - - [28/May/2026 09:12:19] "GET /api/generation-progress HTTP/1.1" 200 -
+
+Sampling:   5%|▍         | 48/1000 [00:04<01:42,  9.29it/s][ASampling:   8%|▊         | 84/1000 [00:05<01:23, 10.99it/s]
+
+Sampling:   5%|▍         | 48/1000 [00:04<01:26, 10.98it/s][A[A
+Sampling:   5%|▍         | 49/1000 [00:04<01:43,  9.15it/s][ASampling:   9%|▊         | 86/1000 [00:05<01:22, 11.09it/s]
+Sampling:   5%|▌         | 50/1000 [00:05<01:44,  9.12it/s][A
+
+Sampling:   5%|▌         | 50/1000 [00:04<01:26, 10.96it/s][A[A
+Sampling:   5%|▌         | 51/1000 [00:05<01:44,  9.07it/s][A127.0.0.1 - - [28/May/2026 09:12:20] "GET /api/generation-progress HTTP/1.1" 200 -
+INFO:werkzeug:127.0.0.1 - - [28/May/2026 09:12:20] "GET /api/generation-progress HTTP/1.1" 200 -
+Sampling:   9%|▉         | 88/1000 [00:06<01:23, 10.97it/s]
+
+Sampling:   5%|▌         | 52/1000 [00:04<01:26, 11.00it/s][A[A
+Sampling:   5%|▌         | 52/1000 [00:05<01:45,  8.96it/s][A
+Sampling:   5%|▌         | 53/1000 [00:05<01:44,  9.02it/s][ASampling:   9%|▉         | 90/1000 [00:06<01:22, 10.97it/s]
+
+Sampling:   5%|▌         | 54/1000 [00:04<01:25, 11.04it/s][A[A
+Sampling:   5%|▌         | 54/1000 [00:05<01:43,  9.15it/s][A127.0.0.1 - - [28/May/2026 09:12:20] "GET /api/generation-progress HTTP/1.1" 200 -
+INFO:werkzeug:127.0.0.1 - - [28/May/2026 09:12:20] "GET /api/generation-progress HTTP/1.1" 200 -
+Sampling:   9%|▉         | 92/1000 [00:06<01:22, 11.02it/s]
+Sampling:   6%|▌         | 55/1000 [00:05<01:41,  9.30it/s][A
+
+Sampling:   6%|▌         | 56/1000 [00:05<01:25, 11.03it/s][A[A
+Sampling:   6%|▌         | 56/1000 [00:05<01:44,  9.04it/s][ASampling:   9%|▉         | 94/1000 [00:06<01:22, 10.98it/s]
+
+Sampling:   6%|▌         | 58/1000 [00:05<01:25, 11.02it/s][A[A127.0.0.1 - - [28/May/2026 09:12:20] "GET /api/generation-progress HTTP/1.1" 200 -
+INFO:werkzeug:127.0.0.1 - - [28/May/2026 09:12:20] "GET /api/generation-progress HTTP/1.1" 200 -
+
+Sampling:   6%|▌         | 57/1000 [00:05<01:44,  9.05it/s][A
+Sampling:   6%|▌         | 58/1000 [00:05<01:42,  9.21it/s][ASampling:  10%|▉         | 96/1000 [00:06<01:22, 11.01it/s]
+
+Sampling:   6%|▌         | 60/1000 [00:05<01:25, 11.01it/s][A[A
+Sampling:   6%|▌         | 59/1000 [00:06<01:42,  9.22it/s][ASampling:  10%|▉         | 98/1000 [00:06<01:21, 11.03it/s]
+Sampling:   6%|▌         | 60/1000 [00:06<01:41,  9.26it/s][A
+
+Sampling:   6%|▌         | 62/1000 [00:05<01:24, 11.04it/s][A[A127.0.0.1 - - [28/May/2026 09:12:21] "GET /api/generation-progress HTTP/1.1" 200 -
+INFO:werkzeug:127.0.0.1 - - [28/May/2026 09:12:21] "GET /api/generation-progress HTTP/1.1" 200 -
+
+Sampling:   6%|▌         | 61/1000 [00:06<01:42,  9.18it/s][ASampling:  10%|█         | 100/1000 [00:07<01:21, 11.00it/s]
+
+Sampling:   6%|▋         | 64/1000 [00:05<01:24, 11.06it/s][A[A
+Sampling:   6%|▌         | 62/1000 [00:06<01:42,  9.12it/s][A
+Sampling:   6%|▋         | 63/1000 [00:06<01:43,  9.02it/s][ASampling:  10%|█         | 102/1000 [00:07<01:21, 11.03it/s]127.0.0.1 - - [28/May/2026 09:12:21] "GET /api/generation-progress HTTP/1.1" 200 -
+INFO:werkzeug:127.0.0.1 - - [28/May/2026 09:12:21] "GET /api/generation-progress HTTP/1.1" 200 -
+
+
+Sampling:   7%|▋         | 66/1000 [00:05<01:24, 11.04it/s][A[A
+Sampling:   6%|▋         | 64/1000 [00:06<01:44,  8.95it/s][ASampling:  10%|█         | 104/1000 [00:07<01:21, 11.04it/s]
+
+Sampling:   7%|▋         | 68/1000 [00:06<01:24, 11.01it/s][A[A
+Sampling:   6%|▋         | 65/1000 [00:06<01:43,  9.02it/s][A
+Sampling:   7%|▋         | 66/1000 [00:06<01:43,  9.02it/s][A127.0.0.1 - - [28/May/2026 09:12:21] "GET /api/generation-progress HTTP/1.1" 200 -
+INFO:werkzeug:127.0.0.1 - - [28/May/2026 09:12:21] "GET /api/generation-progress HTTP/1.1" 200 -
+Sampling:  11%|█         | 106/1000 [00:07<01:20, 11.08it/s]
+
+Sampling:   7%|▋         | 70/1000 [00:06<01:24, 10.97it/s][A[A
+Sampling:   7%|▋         | 67/1000 [00:06<01:43,  9.03it/s][A
+Sampling:   7%|▋         | 68/1000 [00:07<01:42,  9.07it/s][ASampling:  11%|█         | 108/1000 [00:07<01:20, 11.10it/s]
+
+Sampling:   7%|▋         | 72/1000 [00:06<01:24, 11.03it/s][A[A
+Sampling:   7%|▋         | 69/1000 [00:07<01:42,  9.05it/s][A127.0.0.1 - - [28/May/2026 09:12:22] "GET /api/generation-progress HTTP/1.1" 200 -
+INFO:werkzeug:127.0.0.1 - - [28/May/2026 09:12:22] "GET /api/generation-progress HTTP/1.1" 200 -
+Sampling:  11%|█         | 110/1000 [00:08<01:20, 11.09it/s]
+
+Sampling:   7%|▋         | 74/1000 [00:06<01:23, 11.03it/s][A[A
+Sampling:   7%|▋         | 70/1000 [00:07<01:40,  9.25it/s][A
+Sampling:   7%|▋         | 71/1000 [00:07<01:39,  9.38it/s][ASampling:  11%|█         | 112/1000 [00:08<01:19, 11.10it/s]
+
+Sampling:   8%|▊         | 76/1000 [00:06<01:23, 11.12it/s][A[A
+Sampling:   7%|▋         | 72/1000 [00:07<01:40,  9.22it/s][A127.0.0.1 - - [28/May/2026 09:12:22] "GET /api/generation-progress HTTP/1.1" 200 -
+INFO:werkzeug:127.0.0.1 - - [28/May/2026 09:12:22] "GET /api/generation-progress HTTP/1.1" 200 -
+
+Sampling:   7%|▋         | 73/1000 [00:07<01:39,  9.28it/s][ASampling:  11%|█▏        | 114/1000 [00:08<01:19, 11.09it/s]
+
+Sampling:   8%|▊         | 78/1000 [00:07<01:22, 11.12it/s][A[A
+Sampling:   7%|▋         | 74/1000 [00:07<01:37,  9.47it/s][ASampling:  12%|█▏        | 116/1000 [00:08<01:19, 11.11it/s]
+
+Sampling:   8%|▊         | 80/1000 [00:07<01:22, 11.11it/s][A[A
+Sampling:   8%|▊         | 75/1000 [00:07<01:38,  9.42it/s][A127.0.0.1 - - [28/May/2026 09:12:22] "GET /api/generation-progress HTTP/1.1" 200 -
+INFO:werkzeug:127.0.0.1 - - [28/May/2026 09:12:22] "GET /api/generation-progress HTTP/1.1" 200 -
+
+Sampling:   8%|▊         | 76/1000 [00:07<01:40,  9.23it/s][ASampling:  12%|█▏        | 118/1000 [00:08<01:19, 11.03it/s]
+
+Sampling:   8%|▊         | 82/1000 [00:07<01:23, 10.98it/s][A[A
+Sampling:   8%|▊         | 77/1000 [00:08<01:41,  9.10it/s][A
+Sampling:   8%|▊         | 78/1000 [00:08<01:42,  8.98it/s][ASampling:  12%|█▏        | 120/1000 [00:08<01:19, 11.08it/s]
+
+Sampling:   8%|▊         | 84/1000 [00:07<01:22, 11.08it/s][A[A127.0.0.1 - - [28/May/2026 09:12:23] "GET /api/generation-progress HTTP/1.1" 200 -
+INFO:werkzeug:127.0.0.1 - - [28/May/2026 09:12:23] "GET /api/generation-progress HTTP/1.1" 200 -
+
+Sampling:   8%|▊         | 79/1000 [00:08<01:42,  8.99it/s][ASampling:  12%|█▏        | 122/1000 [00:09<01:18, 11.12it/s]
+
+Sampling:   9%|▊         | 86/1000 [00:07<01:22, 11.11it/s][A[A
+Sampling:   8%|▊         | 80/1000 [00:08<01:42,  8.95it/s][A
+Sampling:   8%|▊         | 81/1000 [00:08<01:43,  8.89it/s][ASampling:  12%|█▏        | 124/1000 [00:09<01:19, 11.08it/s]
+
+Sampling:   9%|▉         | 88/1000 [00:07<01:22, 11.10it/s][A[A127.0.0.1 - - [28/May/2026 09:12:23] "GET /api/generation-progress HTTP/1.1" 200 -
+INFO:werkzeug:127.0.0.1 - - [28/May/2026 09:12:23] "GET /api/generation-progress HTTP/1.1" 200 -
+
+Sampling:   8%|▊         | 82/1000 [00:08<01:42,  8.96it/s][ASampling:  13%|█▎        | 126/1000 [00:09<01:19, 10.98it/s]
+Sampling:   8%|▊         | 83/1000 [00:08<01:41,  9.06it/s][A
+
+Sampling:   9%|▉         | 90/1000 [00:08<01:22, 11.06it/s][A[A
+Sampling:   8%|▊         | 84/1000 [00:08<01:42,  8.92it/s][A127.0.0.1 - - [28/May/2026 09:12:23] "GET /api/generation-progress HTTP/1.1" 200 -
+INFO:werkzeug:127.0.0.1 - - [28/May/2026 09:12:23] "GET /api/generation-progress HTTP/1.1" 200 -
+Sampling:  13%|█▎        | 128/1000 [00:09<01:19, 10.98it/s]
+
+Sampling:   9%|▉         | 92/1000 [00:08<01:22, 10.99it/s][A[A
+Sampling:   8%|▊         | 85/1000 [00:08<01:42,  8.92it/s][A
+Sampling:   9%|▊         | 86/1000 [00:09<01:41,  9.00it/s][ASampling:  13%|█▎        | 130/1000 [00:09<01:20, 10.85it/s]
+
+Sampling:   9%|▉         | 94/1000 [00:08<01:23, 10.91it/s][A[A
+Sampling:   9%|▊         | 87/1000 [00:09<01:41,  9.04it/s][A127.0.0.1 - - [28/May/2026 09:12:24] "GET /api/generation-progress HTTP/1.1" 200 -
+INFO:werkzeug:127.0.0.1 - - [28/May/2026 09:12:24] "GET /api/generation-progress HTTP/1.1" 200 -
+Sampling:  13%|█▎        | 132/1000 [00:10<01:19, 10.87it/s]
+Sampling:   9%|▉         | 88/1000 [00:09<01:40,  9.09it/s][A
+
+Sampling:  10%|▉         | 96/1000 [00:08<01:22, 10.94it/s][A[A
+Sampling:   9%|▉         | 89/1000 [00:09<01:41,  8.94it/s][ASampling:  13%|█▎        | 134/1000 [00:10<01:19, 10.93it/s]
+
+Sampling:  10%|▉         | 98/1000 [00:08<01:22, 10.98it/s][A[A
+Sampling:   9%|▉         | 90/1000 [00:09<01:42,  8.88it/s][A127.0.0.1 - - [28/May/2026 09:12:24] "GET /api/generation-progress HTTP/1.1" 200 -
+INFO:werkzeug:127.0.0.1 - - [28/May/2026 09:12:24] "GET /api/generation-progress HTTP/1.1" 200 -
+
+Sampling:   9%|▉         | 91/1000 [00:09<01:43,  8.80it/s][ASampling:  14%|█▎        | 136/1000 [00:10<01:18, 11.00it/s]
+
+Sampling:  10%|█         | 100/1000 [00:09<01:22, 10.93it/s][A[A
+Sampling:   9%|▉         | 92/1000 [00:09<01:41,  8.93it/s][ASampling:  14%|█▍        | 138/1000 [00:10<01:18, 11.02it/s]
+
+Sampling:  10%|█         | 102/1000 [00:09<01:21, 11.00it/s][A[A
+Sampling:   9%|▉         | 93/1000 [00:09<01:38,  9.18it/s][A127.0.0.1 - - [28/May/2026 09:12:24] "GET /api/generation-progress HTTP/1.1" 200 -
+INFO:werkzeug:127.0.0.1 - - [28/May/2026 09:12:24] "GET /api/generation-progress HTTP/1.1" 200 -
+
+Sampling:   9%|▉         | 94/1000 [00:09<01:40,  9.04it/s][ASampling:  14%|█▍        | 140/1000 [00:10<01:17, 11.03it/s]
+
+Sampling:  10%|█         | 104/1000 [00:09<01:21, 11.01it/s][A[A
+Sampling:  10%|▉         | 95/1000 [00:10<01:40,  9.04it/s][A
+Sampling:  10%|▉         | 96/1000 [00:10<01:41,  8.89it/s][ASampling:  14%|█▍        | 142/1000 [00:10<01:18, 10.98it/s]
+
+Sampling:  11%|█         | 106/1000 [00:09<01:20, 11.05it/s][A[A127.0.0.1 - - [28/May/2026 09:12:25] "GET /api/generation-progress HTTP/1.1" 200 -
+INFO:werkzeug:127.0.0.1 - - [28/May/2026 09:12:25] "GET /api/generation-progress HTTP/1.1" 200 -
+
+Sampling:  10%|▉         | 97/1000 [00:10<01:42,  8.80it/s][ASampling:  14%|█▍        | 144/1000 [00:11<01:18, 10.90it/s]
+
+Sampling:  11%|█         | 108/1000 [00:09<01:20, 11.05it/s][A[A
+Sampling:  10%|▉         | 98/1000 [00:10<01:42,  8.78it/s][A
+Sampling:  10%|▉         | 99/1000 [00:10<01:42,  8.83it/s][A
+
+Sampling:  11%|█         | 110/1000 [00:09<01:20, 11.08it/s][A[A127.0.0.1 - - [28/May/2026 09:12:25] "GET /api/generation-progress HTTP/1.1" 200 -
+INFO:werkzeug:127.0.0.1 - - [28/May/2026 09:12:25] "GET /api/generation-progress HTTP/1.1" 200 -
+Sampling:  15%|█▍        | 146/1000 [00:11<01:18, 10.83it/s]
+Sampling:  10%|█         | 100/1000 [00:10<01:41,  8.84it/s][A
+
+Sampling:  11%|█         | 112/1000 [00:10<01:20, 11.09it/s][A[A
+Sampling:  10%|█         | 101/1000 [00:10<01:39,  9.06it/s][ASampling:  15%|█▍        | 148/1000 [00:11<01:18, 10.90it/s]
+Sampling:  10%|█         | 102/1000 [00:10<01:39,  8.98it/s][A127.0.0.1 - - [28/May/2026 09:12:25] "GET /api/generation-progress HTTP/1.1" 200 -
+INFO:werkzeug:127.0.0.1 - - [28/May/2026 09:12:25] "GET /api/generation-progress HTTP/1.1" 200 -
+
+
+Sampling:  11%|█▏        | 114/1000 [00:10<01:20, 11.06it/s][A[ASampling:  15%|█▌        | 150/1000 [00:11<01:18, 10.83it/s]
+Sampling:  10%|█         | 103/1000 [00:10<01:41,  8.81it/s][A
+Sampling:  10%|█         | 104/1000 [00:11<01:42,  8.73it/s][A
+
+Sampling:  12%|█▏        | 116/1000 [00:10<01:19, 11.14it/s][A[ASampling:  15%|█▌        | 152/1000 [00:11<01:17, 10.91it/s]
+Sampling:  10%|█         | 105/1000 [00:11<01:44,  8.59it/s][A127.0.0.1 - - [28/May/2026 09:12:26] "GET /api/generation-progress HTTP/1.1" 200 -
+INFO:werkzeug:127.0.0.1 - - [28/May/2026 09:12:26] "GET /api/generation-progress HTTP/1.1" 200 -
+
+
+Sampling:  12%|█▏        | 118/1000 [00:10<01:19, 11.09it/s][A[ASampling:  12%|█▏        | 118/1000 [00:10<01:20, 11.02it/s]
+Sampling:  15%|█▌        | 154/1000 [00:12<01:17, 10.91it/s]
+Sampling:  11%|█         | 106/1000 [00:11<01:42,  8.68it/s][A
+Sampling:  11%|█         | 107/1000 [00:11<01:41,  8.79it/s][ASampling:  16%|█▌        | 156/1000 [00:12<01:17, 10.84it/s]
+Sampling:  11%|█         | 108/1000 [00:11<01:40,  8.90it/s][A127.0.0.1 - - [28/May/2026 09:12:26] "GET /api/generation-progress HTTP/1.1" 200 -
+INFO:werkzeug:127.0.0.1 - - [28/May/2026 09:12:26] "GET /api/generation-progress HTTP/1.1" 200 -
+
+Sampling:  11%|█         | 109/1000 [00:11<01:39,  8.98it/s][ASampling:  16%|█▌        | 158/1000 [00:12<01:18, 10.74it/s]
+Sampling:  11%|█         | 110/1000 [00:11<01:38,  9.06it/s][ASampling:  16%|█▌        | 160/1000 [00:12<01:18, 10.67it/s]127.0.0.1 - - [28/May/2026 09:12:26] "GET /api/generation-progress HTTP/1.1" 200 -
+INFO:werkzeug:127.0.0.1 - - [28/May/2026 09:12:26] "GET /api/generation-progress HTTP/1.1" 200 -
+
+Sampling:  11%|█         | 111/1000 [00:11<01:38,  9.02it/s][A
+Sampling:  11%|█         | 112/1000 [00:11<01:38,  9.03it/s][ASampling:  16%|█▌        | 162/1000 [00:12<01:18, 10.62it/s]
+Sampling:  11%|█▏        | 113/1000 [00:12<01:37,  9.08it/s][A
+Sampling:  11%|█▏        | 114/1000 [00:12<01:37,  9.10it/s][ASampling:  16%|█▋        | 164/1000 [00:13<01:18, 10.62it/s]127.0.0.1 - - [28/May/2026 09:12:27] "GET /api/generation-progress HTTP/1.1" 200 -
+INFO:werkzeug:127.0.0.1 - - [28/May/2026 09:12:27] "GET /api/generation-progress HTTP/1.1" 200 -
+
+Sampling:  12%|█▏        | 115/1000 [00:12<01:37,  9.09it/s][A
+Sampling:  12%|█▏        | 116/1000 [00:12<01:38,  9.01it/s][ASampling:  17%|█▋        | 166/1000 [00:13<01:18, 10.64it/s]
+Sampling:  12%|█▏        | 117/1000 [00:12<01:38,  8.97it/s][A127.0.0.1 - - [28/May/2026 09:12:27] "GET /api/generation-progress HTTP/1.1" 200 -
+INFO:werkzeug:127.0.0.1 - - [28/May/2026 09:12:27] "GET /api/generation-progress HTTP/1.1" 200 -
+Sampling:  17%|█▋        | 168/1000 [00:13<01:18, 10.64it/s]
+Sampling:  12%|█▏        | 119/1000 [00:12<01:26, 10.17it/s][A127.0.0.1 - - [28/May/2026 09:12:27] "POST /api/project/generate-chunk-audio HTTP/1.1" 200 -
+INFO:werkzeug:127.0.0.1 - - [28/May/2026 09:12:27] "POST /api/project/generate-chunk-audio HTTP/1.1" 200 -
+Sampling:  17%|█▋        | 170/1000 [00:13<01:13, 11.24it/s]
+Sampling:  12%|█▏        | 121/1000 [00:12<01:14, 11.85it/s][A127.0.0.1 - - [28/May/2026 09:12:27] "GET /api/generation-progress HTTP/1.1" 200 -
+INFO:werkzeug:127.0.0.1 - - [28/May/2026 09:12:27] "GET /api/generation-progress HTTP/1.1" 200 -
+Sampling:  17%|█▋        | 173/1000 [00:13<00:59, 13.83it/s]
+Sampling:  12%|█▏        | 123/1000 [00:12<01:03, 13.81it/s][ASampling:  18%|█▊        | 175/1000 [00:13<00:55, 14.79it/s]127.0.0.1 - - [28/May/2026 09:12:27] "GET /api/project/info HTTP/1.1" 200 -
+INFO:werkzeug:127.0.0.1 - - [28/May/2026 09:12:27] "GET /api/project/info HTTP/1.1" 200 -
+
+Sampling:  12%|█▎        | 125/1000 [00:13<01:05, 13.39it/s][ASampling:  18%|█▊        | 177/1000 [00:13<00:54, 15.01it/s]
+Sampling:  13%|█▎        | 127/1000 [00:13<01:02, 13.86it/s][ASampling:  18%|█▊        | 179/1000 [00:14<00:52, 15.50it/s]127.0.0.1 - - [28/May/2026 09:12:28] "GET /api/generation-progress HTTP/1.1" 200 -
+INFO:werkzeug:127.0.0.1 - - [28/May/2026 09:12:28] "GET /api/generation-progress HTTP/1.1" 200 -
+
+Sampling:  13%|█▎        | 129/1000 [00:13<01:05, 13.35it/s][ASampling:  18%|█▊        | 181/1000 [00:14<00:52, 15.55it/s]Sampling:  18%|█▊        | 183/1000 [00:14<00:52, 15.56it/s]
+Sampling:  13%|█▎        | 131/1000 [00:13<01:04, 13.43it/s][ASampling:  18%|█▊        | 185/1000 [00:14<00:56, 14.48it/s]127.0.0.1 - - [28/May/2026 09:12:28] "POST /api/project/transcribe-take HTTP/1.1" 200 -
+INFO:werkzeug:127.0.0.1 - - [28/May/2026 09:12:28] "POST /api/project/transcribe-take HTTP/1.1" 200 -
+
+Sampling:  13%|█▎        | 133/1000 [00:13<01:10, 12.36it/s][A127.0.0.1 - - [28/May/2026 09:12:28] "GET /api/generation-progress HTTP/1.1" 200 -
+INFO:werkzeug:127.0.0.1 - - [28/May/2026 09:12:28] "GET /api/generation-progress HTTP/1.1" 200 -
+Sampling:  19%|█▊        | 187/1000 [00:14<00:57, 14.15it/s]
+Sampling:  14%|█▎        | 135/1000 [00:13<01:06, 12.99it/s][ASampling:  19%|█▉        | 189/1000 [00:14<00:53, 15.05it/s]
+Sampling:  14%|█▎        | 137/1000 [00:13<01:07, 12.80it/s][ASampling:  19%|█▉        | 191/1000 [00:14<00:52, 15.40it/s]
+Sampling:  14%|█▍        | 139/1000 [00:14<01:06, 13.00it/s][ASampling:  19%|█▉        | 193/1000 [00:14<00:52, 15.33it/s]
+Sampling:  14%|█▍        | 141/1000 [00:14<01:05, 13.09it/s][A127.0.0.1 - - [28/May/2026 09:12:29] "GET /api/generation-progress HTTP/1.1" 200 -
+INFO:werkzeug:127.0.0.1 - - [28/May/2026 09:12:29] "GET /api/generation-progress HTTP/1.1" 200 -
+Sampling:  20%|█▉        | 195/1000 [00:15<00:52, 15.38it/s]Sampling:  20%|█▉        | 197/1000 [00:15<00:52, 15.34it/s]
+Sampling:  14%|█▍        | 143/1000 [00:14<01:04, 13.24it/s][ASampling:  20%|█▉        | 199/1000 [00:15<00:51, 15.51it/s]
+Sampling:  14%|█▍        | 145/1000 [00:14<01:04, 13.22it/s][ASampling:  20%|██        | 201/1000 [00:15<00:50, 15.71it/s]
+Sampling:  15%|█▍        | 147/1000 [00:14<01:02, 13.61it/s][A127.0.0.1 - - [28/May/2026 09:12:29] "GET /api/generation-progress HTTP/1.1" 200 -
+INFO:werkzeug:127.0.0.1 - - [28/May/2026 09:12:29] "GET /api/generation-progress HTTP/1.1" 200 -
+Sampling:  20%|██        | 203/1000 [00:15<00:52, 15.32it/s]
+Sampling:  15%|█▍        | 149/1000 [00:14<01:02, 13.52it/s][ASampling:  20%|██        | 205/1000 [00:15<00:51, 15.52it/s]
+Sampling:  15%|█▌        | 151/1000 [00:15<01:03, 13.33it/s][ASampling:  21%|██        | 207/1000 [00:15<00:50, 15.70it/s]
+Sampling:  15%|█▌        | 153/1000 [00:15<01:04, 13.21it/s][ASampling:  21%|██        | 209/1000 [00:16<00:49, 16.01it/s]127.0.0.1 - - [28/May/2026 09:12:30] "GET /api/generation-progress HTTP/1.1" 200 -
+INFO:werkzeug:127.0.0.1 - - [28/May/2026 09:12:30] "GET /api/generation-progress HTTP/1.1" 200 -
+Sampling:  21%|██        | 211/1000 [00:16<00:49, 15.97it/s]
+Sampling:  16%|█▌        | 155/1000 [00:15<01:04, 13.08it/s][ASampling:  21%|██▏       | 213/1000 [00:16<00:48, 16.37it/s]
+Sampling:  16%|█▌        | 157/1000 [00:15<01:04, 13.02it/s][ASampling:  22%|██▏       | 215/1000 [00:16<00:48, 16.29it/s]
+Sampling:  16%|█▌        | 159/1000 [00:15<01:04, 13.02it/s][ASampling:  22%|██▏       | 217/1000 [00:16<00:48, 16.11it/s]127.0.0.1 - - [28/May/2026 09:12:30] "GET /api/generation-progress HTTP/1.1" 200 -
+INFO:werkzeug:127.0.0.1 - - [28/May/2026 09:12:30] "GET /api/generation-progress HTTP/1.1" 200 -
+
+Sampling:  16%|█▌        | 161/1000 [00:15<01:03, 13.21it/s][ASampling:  22%|██▏       | 219/1000 [00:16<00:48, 16.05it/s]Sampling:  22%|██▏       | 221/1000 [00:16<00:48, 16.06it/s]
+Sampling:  16%|█▋        | 163/1000 [00:15<01:03, 13.13it/s][ASampling:  16%|█▋        | 164/1000 [00:16<01:21, 10.24it/s]
+Sampling:  22%|██▏       | 223/1000 [00:16<00:47, 16.35it/s]Sampling:  22%|██▎       | 225/1000 [00:16<00:46, 16.73it/s]Sampling:  23%|██▎       | 227/1000 [00:17<00:45, 16.84it/s]127.0.0.1 - - [28/May/2026 09:12:31] "GET /api/generation-progress HTTP/1.1" 200 -
+INFO:werkzeug:127.0.0.1 - - [28/May/2026 09:12:31] "GET /api/generation-progress HTTP/1.1" 200 -
+Sampling:  23%|██▎       | 229/1000 [00:17<00:46, 16.60it/s]Sampling:  23%|██▎       | 231/1000 [00:17<00:45, 16.87it/s]Sampling:  23%|██▎       | 233/1000 [00:17<00:46, 16.54it/s]Sampling:  24%|██▎       | 235/1000 [00:17<00:46, 16.59it/s]127.0.0.1 - - [28/May/2026 09:12:31] "GET /api/generation-progress HTTP/1.1" 200 -
+INFO:werkzeug:127.0.0.1 - - [28/May/2026 09:12:31] "GET /api/generation-progress HTTP/1.1" 200 -
+Sampling:  24%|██▎       | 237/1000 [00:17<00:46, 16.47it/s]Sampling:  24%|██▍       | 239/1000 [00:17<00:45, 16.76it/s]Sampling:  24%|██▍       | 241/1000 [00:17<00:45, 16.74it/s]Sampling:  24%|██▍       | 243/1000 [00:18<00:43, 17.40it/s]127.0.0.1 - - [28/May/2026 09:12:32] "POST /api/project/generate-chunk-audio HTTP/1.1" 200 -
+INFO:werkzeug:127.0.0.1 - - [28/May/2026 09:12:32] "POST /api/project/generate-chunk-audio HTTP/1.1" 200 -
+127.0.0.1 - - [28/May/2026 09:12:32] "GET /api/generation-progress HTTP/1.1" 200 -
+INFO:werkzeug:127.0.0.1 - - [28/May/2026 09:12:32] "GET /api/generation-progress HTTP/1.1" 200 -
+Sampling:  25%|██▍       | 246/1000 [00:18<00:38, 19.50it/s]Sampling:  25%|██▌       | 251/1000 [00:18<00:27, 27.22it/s]Sampling:  26%|██▌       | 256/1000 [00:18<00:22, 32.93it/s]127.0.0.1 - - [28/May/2026 09:12:32] "GET /api/project/info HTTP/1.1" 200 -
+INFO:werkzeug:127.0.0.1 - - [28/May/2026 09:12:32] "GET /api/project/info HTTP/1.1" 200 -
+Sampling:  26%|██▌       | 260/1000 [00:18<00:21, 34.89it/s]Sampling:  26%|██▋       | 265/1000 [00:18<00:19, 38.10it/s]Sampling:  27%|██▋       | 270/1000 [00:18<00:17, 40.71it/s]Sampling:  28%|██▊       | 275/1000 [00:18<00:17, 42.09it/s]Sampling:  28%|██▊       | 280/1000 [00:19<00:23, 31.25it/s]127.0.0.1 - - [28/May/2026 09:12:33] "GET /api/generation-progress HTTP/1.1" 200 -
+INFO:werkzeug:127.0.0.1 - - [28/May/2026 09:12:33] "GET /api/generation-progress HTTP/1.1" 200 -
+127.0.0.1 - - [28/May/2026 09:12:33] "POST /api/project/transcribe-take HTTP/1.1" 200 -
+INFO:werkzeug:127.0.0.1 - - [28/May/2026 09:12:33] "POST /api/project/transcribe-take HTTP/1.1" 200 -
+Sampling:  28%|██▊       | 284/1000 [00:19<00:24, 29.61it/s]Sampling:  29%|██▉       | 289/1000 [00:19<00:21, 33.51it/s]Sampling:  29%|██▉       | 294/1000 [00:19<00:19, 36.92it/s]Sampling:  30%|██▉       | 299/1000 [00:19<00:17, 39.50it/s]Sampling:  30%|███       | 304/1000 [00:19<00:16, 41.20it/s]Sampling:  31%|███       | 309/1000 [00:19<00:16, 42.63it/s]Sampling:  31%|███▏      | 314/1000 [00:19<00:15, 44.03it/s]Sampling:  32%|███▏      | 319/1000 [00:19<00:15, 44.98it/s]Sampling:  32%|███▏      | 324/1000 [00:20<00:14, 45.12it/s]127.0.0.1 - - [28/May/2026 09:12:34] "GET /api/generation-progress HTTP/1.1" 200 -
+INFO:werkzeug:127.0.0.1 - - [28/May/2026 09:12:34] "GET /api/generation-progress HTTP/1.1" 200 -
+Sampling:  33%|███▎      | 329/1000 [00:20<00:14, 45.53it/s]Sampling:  33%|███▎      | 334/1000 [00:20<00:14, 46.19it/s]Sampling:  34%|███▍      | 339/1000 [00:20<00:14, 46.73it/s]Sampling:  34%|███▍      | 344/1000 [00:20<00:13, 46.86it/s]Sampling:  35%|███▍      | 349/1000 [00:20<00:13, 46.56it/s]Sampling:  35%|███▌      | 354/1000 [00:20<00:13, 46.87it/s]Sampling:  36%|███▌      | 359/1000 [00:20<00:13, 47.16it/s]Sampling:  36%|███▋      | 364/1000 [00:20<00:13, 47.43it/s]Sampling:  37%|███▋      | 369/1000 [00:21<00:13, 47.76it/s]127.0.0.1 - - [28/May/2026 09:12:35] "GET /api/generation-progress HTTP/1.1" 200 -
+INFO:werkzeug:127.0.0.1 - - [28/May/2026 09:12:35] "GET /api/generation-progress HTTP/1.1" 200 -
+Sampling:  37%|███▋      | 374/1000 [00:21<00:13, 46.58it/s]Sampling:  38%|███▊      | 379/1000 [00:21<00:13, 46.17it/s]Sampling:  38%|███▊      | 384/1000 [00:21<00:13, 46.66it/s]Sampling:  39%|███▉      | 389/1000 [00:21<00:13, 46.81it/s]Sampling:  39%|███▉      | 394/1000 [00:21<00:12, 46.91it/s]Sampling:  40%|███▉      | 399/1000 [00:21<00:12, 47.32it/s]Sampling:  40%|████      | 404/1000 [00:21<00:12, 47.38it/s]Sampling:  41%|████      | 409/1000 [00:21<00:12, 47.38it/s]Sampling:  41%|████▏     | 414/1000 [00:21<00:12, 47.58it/s]Sampling:  42%|████▏     | 419/1000 [00:22<00:12, 47.66it/s]127.0.0.1 - - [28/May/2026 09:12:36] "GET /api/generation-progress HTTP/1.1" 200 -
+INFO:werkzeug:127.0.0.1 - - [28/May/2026 09:12:36] "GET /api/generation-progress HTTP/1.1" 200 -
+Sampling:  42%|████▏     | 424/1000 [00:22<00:12, 47.37it/s]Sampling:  43%|████▎     | 429/1000 [00:22<00:12, 47.58it/s]Sampling:  43%|████▎     | 434/1000 [00:22<00:11, 47.73it/s]Sampling:  44%|████▍     | 439/1000 [00:22<00:11, 47.62it/s]Sampling:  44%|████▍     | 444/1000 [00:22<00:11, 47.15it/s]Sampling:  45%|████▍     | 449/1000 [00:22<00:12, 42.63it/s]Sampling:  45%|████▌     | 454/1000 [00:22<00:13, 40.38it/s]Sampling:  46%|████▌     | 459/1000 [00:23<00:13, 41.11it/s]Sampling:  46%|████▋     | 464/1000 [00:23<00:12, 42.70it/s]127.0.0.1 - - [28/May/2026 09:12:37] "GET /api/generation-progress HTTP/1.1" 200 -
+INFO:werkzeug:127.0.0.1 - - [28/May/2026 09:12:37] "GET /api/generation-progress HTTP/1.1" 200 -
+Sampling:  47%|████▋     | 469/1000 [00:23<00:12, 43.72it/s]Sampling:  47%|████▋     | 474/1000 [00:23<00:11, 44.86it/s]Sampling:  48%|████▊     | 479/1000 [00:23<00:11, 45.78it/s]Sampling:  48%|████▊     | 484/1000 [00:23<00:11, 46.06it/s]Sampling:  49%|████▉     | 489/1000 [00:23<00:11, 46.19it/s]Sampling:  49%|████▉     | 494/1000 [00:23<00:10, 46.74it/s]Sampling:  50%|████▉     | 499/1000 [00:23<00:10, 47.06it/s]Sampling:  50%|█████     | 504/1000 [00:23<00:10, 47.36it/s]Sampling:  51%|█████     | 509/1000 [00:24<00:10, 47.64it/s]127.0.0.1 - - [28/May/2026 09:12:38] "GET /api/generation-progress HTTP/1.1" 200 -
+INFO:werkzeug:127.0.0.1 - - [28/May/2026 09:12:38] "GET /api/generation-progress HTTP/1.1" 200 -
+Sampling:  51%|█████▏    | 514/1000 [00:24<00:10, 47.38it/s]Sampling:  52%|█████▏    | 519/1000 [00:24<00:10, 47.59it/s]Sampling:  52%|█████▏    | 524/1000 [00:24<00:09, 47.78it/s]Sampling:  53%|█████▎    | 529/1000 [00:24<00:09, 47.66it/s]Sampling:  53%|█████▎    | 534/1000 [00:24<00:09, 47.92it/s]Sampling:  54%|█████▍    | 539/1000 [00:24<00:09, 48.03it/s]Sampling:  54%|█████▍    | 541/1000 [00:24<00:20, 21.88it/s]
+127.0.0.1 - - [28/May/2026 09:12:39] "GET /api/generation-progress HTTP/1.1" 200 -
+INFO:werkzeug:127.0.0.1 - - [28/May/2026 09:12:39] "GET /api/generation-progress HTTP/1.1" 200 -
+127.0.0.1 - - [28/May/2026 09:12:39] "POST /api/project/generate-chunk-audio HTTP/1.1" 200 -
+INFO:werkzeug:127.0.0.1 - - [28/May/2026 09:12:39] "POST /api/project/generate-chunk-audio HTTP/1.1" 200 -
+127.0.0.1 - - [28/May/2026 09:12:40] "GET /api/project/info HTTP/1.1" 200 -
+INFO:werkzeug:127.0.0.1 - - [28/May/2026 09:12:40] "GET /api/project/info HTTP/1.1" 200 -
+127.0.0.1 - - [28/May/2026 09:12:40] "GET /api/project/flags HTTP/1.1" 200 -
+INFO:werkzeug:127.0.0.1 - - [28/May/2026 09:12:40] "GET /api/project/flags HTTP/1.1" 200 -
+127.0.0.1 - - [28/May/2026 09:12:40] "POST /api/project/transcribe-take HTTP/1.1" 200 -
+INFO:werkzeug:127.0.0.1 - - [28/May/2026 09:12:40] "POST /api/project/transcribe-take HTTP/1.1" 200 -
+127.0.0.1 - - [28/May/2026 09:13:21] "GET /api/audio/chunk0_1779973833857.wav HTTP/1.1" 206 -
+INFO:werkzeug:127.0.0.1 - - [28/May/2026 09:13:21] "[35m[1mGET /api/audio/chunk0_1779973833857.wav HTTP/1.1[0m" 206 -
+45.79.190.216 - - [28/May/2026 10:18:20] "GET / HTTP/1.0" 200 -
+INFO:werkzeug:45.79.190.216 - - [28/May/2026 10:18:20] "GET / HTTP/1.0" 200 -
+45.79.190.216 - - [28/May/2026 10:18:20] code 400, message Bad request version ('RTSP/1.0')
+ERROR:werkzeug:45.79.190.216 - - [28/May/2026 10:18:20] code 400, message Bad request version ('RTSP/1.0')
+45.79.190.216 - - [28/May/2026 10:18:20] "OPTIONS / RTSP/1.0" 400 -
+INFO:werkzeug:45.79.190.216 - - [28/May/2026 10:18:20] "[31m[1mOPTIONS / RTSP/1.0[0m" 400 -
+45.79.190.216 - - [28/May/2026 10:18:25] code 400, message Bad HTTP/0.9 request type ('\x00')
+ERROR:werkzeug:45.79.190.216 - - [28/May/2026 10:18:25] code 400, message Bad HTTP/0.9 request type ('\x00')
+45.79.190.216 - - [28/May/2026 10:18:25] "\x00\x1e\x00\x06\x01\x00\x00\x01\x00\x00\x00\x00\x00\x00\x07version\x04bind\x00\x00\x10\x00\x03" 400 -
+INFO:werkzeug:45.79.190.216 - - [28/May/2026 10:18:25] "[31m[1m\x00\x1e\x00\x06\x01\x00\x00\x01\x00\x00\x00\x00\x00\x00\x07version\x04bind\x00\x00\x10\x00\x03[0m" 400 -
+45.79.190.216 - - [28/May/2026 10:18:30] code 400, message Bad request version ('0.12\x00')
+ERROR:werkzeug:45.79.190.216 - - [28/May/2026 10:18:30] code 400, message Bad request version ('0.12\x00')
+45.79.190.216 - - [28/May/2026 10:18:30] "\x00\x00\x00¤ÿSMBr\x00\x00\x00\x00\x08\x01@\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00@\x06\x00\x00\x01\x00\x00\x81\x00\x02PC NETWORK PROGRAM 1.0\x00\x02MICROSOFT NETWORKS 1.03\x00\x02MICROSOFT NETWORKS 3.0\x00\x02LANMAN1.0\x00\x02LM1.2X002\x00\x02Samba\x00\x02NT LANMAN 1.0\x00\x02NT LM 0.12\x00" 400 -
+INFO:werkzeug:45.79.190.216 - - [28/May/2026 10:18:30] "[31m[1m\x00\x00\x00¤ÿSMBr\x00\x00\x00\x00\x08\x01@\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00@\x06\x00\x00\x01\x00\x00\x81\x00\x02PC NETWORK PROGRAM 1.0\x00\x02MICROSOFT NETWORKS 1.03\x00\x02MICROSOFT NETWORKS 3.0\x00\x02LANMAN1.0\x00\x02LM1.2X002\x00\x02Samba\x00\x02NT LANMAN 1.0\x00\x02NT LM 0.12\x00[0m" 400 -
+45.79.190.216 - - [28/May/2026 10:18:35] code 400, message Bad request version ('GetClassName\x00\x00\x00\x02\x04\x00\x00\x00\x00\x01\x00')
+ERROR:werkzeug:45.79.190.216 - - [28/May/2026 10:18:35] code 400, message Bad request version ('GetClassName\x00\x00\x00\x02\x04\x00\x00\x00\x00\x01\x00')
+45.79.190.216 - - [28/May/2026 10:18:35] "\x00\x00\x00\x1f\x00\x00\x00\x00\x00\x00\x00\x0cGetClassName\x00\x00\x00\x02\x04\x00\x00\x00\x00\x01\x00" 400 -
+INFO:werkzeug:45.79.190.216 - - [28/May/2026 10:18:35] "[31m[1m\x00\x00\x00\x1f\x00\x00\x00\x00\x00\x00\x00\x0cGetClassName\x00\x00\x00\x02\x04\x00\x00\x00\x00\x01\x00[0m" 400 -
+45.79.190.216 - - [28/May/2026 10:18:35] "OPTIONS / HTTP/1.0" 200 -
+INFO:werkzeug:45.79.190.216 - - [28/May/2026 10:18:35] "OPTIONS / HTTP/1.0" 200 -
+45.79.190.216 - - [28/May/2026 10:18:40] code 400, message Bad request version ('\x00\x01\x97|\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00')
+ERROR:werkzeug:45.79.190.216 - - [28/May/2026 10:18:40] code 400, message Bad request version ('\x00\x01\x97|\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00')
+45.79.190.216 - - [28/May/2026 10:18:40] "\x80\x00\x00(rþ\x1d\x13\x00\x00\x00\x00\x00\x00\x00\x02\x00\x01\x86 \x00\x01\x97|\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00" 400 -
+INFO:werkzeug:45.79.190.216 - - [28/May/2026 10:18:40] "[31m[1m\x80\x00\x00(rþ\x1d\x13\x00\x00\x00\x00\x00\x00\x00\x02\x00\x01\x86 \x00\x01\x97|\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00[0m" 400 -
+45.79.190.216 - - [28/May/2026 10:18:45] code 400, message Bad HTTP/0.9 request type ('\x00')
+ERROR:werkzeug:45.79.190.216 - - [28/May/2026 10:18:45] code 400, message Bad HTTP/0.9 request type ('\x00')
+45.79.190.216 - - [28/May/2026 10:18:45] "\x00\x0c\x00\x00\x10\x00\x00\x00\x00\x00\x00\x00\x00\x00" 400 -
+INFO:werkzeug:45.79.190.216 - - [28/May/2026 10:18:45] "[31m[1m\x00\x0c\x00\x00\x10\x00\x00\x00\x00\x00\x00\x00\x00\x00[0m" 400 -
+45.79.190.216 - - [28/May/2026 10:18:45] code 400, message Bad request syntax ('HELP')
+ERROR:werkzeug:45.79.190.216 - - [28/May/2026 10:18:45] code 400, message Bad request syntax ('HELP')
+45.79.190.216 - - [28/May/2026 10:18:45] "HELP" 400 -
+INFO:werkzeug:45.79.190.216 - - [28/May/2026 10:18:45] "[31m[1mHELP[0m" 400 -
+45.79.190.216 - - [28/May/2026 10:18:45] code 400, message Bad request syntax ('\x16\x03\x00\x00S\x01\x00\x00O\x03\x00?G×÷º,îê²`~ó\x00ý\x82{¹Õ\x96Èw\x9bæÄÛ<=Ûoï\x10n\x00\x00(\x00\x16\x00\x13\x00')
+ERROR:werkzeug:45.79.190.216 - - [28/May/2026 10:18:45] code 400, message Bad request syntax ('\x16\x03\x00\x00S\x01\x00\x00O\x03\x00?G×÷º,îê²`~ó\x00ý\x82{¹Õ\x96Èw\x9bæÄÛ<=Ûoï\x10n\x00\x00(\x00\x16\x00\x13\x00')
+45.79.190.216 - - [28/May/2026 10:18:45] "\x16\x03\x00\x00S\x01\x00\x00O\x03\x00?G×÷º,îê²`~ó\x00ý\x82{¹Õ\x96Èw\x9bæÄÛ<=Ûoï\x10n\x00\x00(\x00\x16\x00\x13\x00" 400 -
+INFO:werkzeug:45.79.190.216 - - [28/May/2026 10:18:45] "[31m[1m\x16\x03\x00\x00S\x01\x00\x00O\x03\x00?G×÷º,îê²`~ó\x00ý\x82{¹Õ\x96Èw\x9bæÄÛ<=Ûoï\x10n\x00\x00(\x00\x16\x00\x13\x00[0m" 400 -
+45.79.190.216 - - [28/May/2026 10:18:46] code 400, message Bad HTTP/0.9 request type ('\x03\x00\x00*%à\x00\x00\x00\x00\x00Cookie:')
+ERROR:werkzeug:45.79.190.216 - - [28/May/2026 10:18:46] code 400, message Bad HTTP/0.9 request type ('\x03\x00\x00*%à\x00\x00\x00\x00\x00Cookie:')
+45.79.190.216 - - [28/May/2026 10:18:46] "\x03\x00\x00*%à\x00\x00\x00\x00\x00Cookie: mstshash=nmap" 400 -
+INFO:werkzeug:45.79.190.216 - - [28/May/2026 10:18:46] "[31m[1m\x03\x00\x00*%à\x00\x00\x00\x00\x00Cookie: mstshash=nmap[0m" 400 -
+45.79.190.216 - - [28/May/2026 10:18:46] code 400, message Bad request version ('\x00/\x00')
+ERROR:werkzeug:45.79.190.216 - - [28/May/2026 10:18:46] code 400, message Bad request version ('\x00/\x00')
+45.79.190.216 - - [28/May/2026 10:18:46] "\x16\x03\x00\x00i\x01\x00\x00e\x03\x03U\x1c§ärandom1random2random3random4\x00\x00\x0c\x00/\x00" 400 -
+INFO:werkzeug:45.79.190.216 - - [28/May/2026 10:18:46] "[31m[1m\x16\x03\x00\x00i\x01\x00\x00e\x03\x03U\x1c§ärandom1random2random3random4\x00\x00\x0c\x00/\x00[0m" 400 -
+45.79.190.216 - - [28/May/2026 10:18:46] code 400, message Bad request syntax ('\x00\x00\x00qj\x81n0\x81k¡\x03\x02\x01\x05¢\x03\x02\x01')
+ERROR:werkzeug:45.79.190.216 - - [28/May/2026 10:18:46] code 400, message Bad request syntax ('\x00\x00\x00qj\x81n0\x81k¡\x03\x02\x01\x05¢\x03\x02\x01')
+45.79.190.216 - - [28/May/2026 10:18:46] "\x00\x00\x00qj\x81n0\x81k¡\x03\x02\x01\x05¢\x03\x02\x01" 400 -
+INFO:werkzeug:45.79.190.216 - - [28/May/2026 10:18:46] "[31m[1m\x00\x00\x00qj\x81n0\x81k¡\x03\x02\x01\x05¢\x03\x02\x01[0m" 400 -
+45.79.190.216 - - [28/May/2026 10:18:51] code 400, message Bad HTTP/0.9 request type ('l\x00')
+ERROR:werkzeug:45.79.190.216 - - [28/May/2026 10:18:51] code 400, message Bad HTTP/0.9 request type ('l\x00')
+45.79.190.216 - - [28/May/2026 10:18:51] "l\x00\x0b\x00\x00\x00\x00\x00\x00\x00\x00\x00" 400 -
+INFO:werkzeug:45.79.190.216 - - [28/May/2026 10:18:51] "[31m[1ml\x00\x0b\x00\x00\x00\x00\x00\x00\x00\x00\x00[0m" 400 -
+45.79.190.216 - - [28/May/2026 10:18:51] "GET /nice%20ports,/Trinity.txt.bak HTTP/1.0" 404 -
+INFO:werkzeug:45.79.190.216 - - [28/May/2026 10:18:51] "[33mGET /nice%20ports,/Trinity.txt.bak HTTP/1.0[0m" 404 -
+45.79.190.216 - - [28/May/2026 10:18:51] code 400, message Bad request syntax ('\x01default')
+ERROR:werkzeug:45.79.190.216 - - [28/May/2026 10:18:51] code 400, message Bad request syntax ('\x01default')
+45.79.190.216 - - [28/May/2026 10:18:51] "\x01default" 400 -
+INFO:werkzeug:45.79.190.216 - - [28/May/2026 10:18:51] "[31m[1m\x01default[0m" 400 -
+45.79.190.216 - - [28/May/2026 10:18:51] code 400, message Bad request syntax ('0\x84\x00\x00\x00-\x02\x01\x07c\x84\x00\x00\x00$\x04\x00')
+ERROR:werkzeug:45.79.190.216 - - [28/May/2026 10:18:51] code 400, message Bad request syntax ('0\x84\x00\x00\x00-\x02\x01\x07c\x84\x00\x00\x00$\x04\x00')
+45.79.190.216 - - [28/May/2026 10:18:51] "0\x84\x00\x00\x00-\x02\x01\x07c\x84\x00\x00\x00$\x04\x00" 400 -
+INFO:werkzeug:45.79.190.216 - - [28/May/2026 10:18:51] "[31m[1m0\x84\x00\x00\x00-\x02\x01\x07c\x84\x00\x00\x00$\x04\x00[0m" 400 -
+45.79.190.216 - - [28/May/2026 10:18:56] code 400, message Bad HTTP/0.9 request type ('0')
+ERROR:werkzeug:45.79.190.216 - - [28/May/2026 10:18:56] code 400, message Bad HTTP/0.9 request type ('0')
+45.79.190.216 - - [28/May/2026 10:18:56] "0\x0c\x02\x01\x01`\x07\x02\x01\x02\x04\x00\x80\x00" 400 -
+INFO:werkzeug:45.79.190.216 - - [28/May/2026 10:18:56] "[31m[1m0\x0c\x02\x01\x01`\x07\x02\x01\x02\x04\x00\x80\x00[0m" 400 -
+45.79.190.216 - - [28/May/2026 10:18:56] code 400, message Bad request version ('SIP/2.0')
+ERROR:werkzeug:45.79.190.216 - - [28/May/2026 10:18:56] code 400, message Bad request version ('SIP/2.0')
+45.79.190.216 - - [28/May/2026 10:18:56] "OPTIONS sip:nm SIP/2.0" 400 -
+INFO:werkzeug:45.79.190.216 - - [28/May/2026 10:18:56] "[31m[1mOPTIONS sip:nm SIP/2.0[0m" 400 -
+45.79.190.216 - - [28/May/2026 10:19:01] code 400, message Bad request syntax ('TNMP\x04\x00\x00\x00TNME\x00\x00\x04\x00')
+ERROR:werkzeug:45.79.190.216 - - [28/May/2026 10:19:01] code 400, message Bad request syntax ('TNMP\x04\x00\x00\x00TNME\x00\x00\x04\x00')
+45.79.190.216 - - [28/May/2026 10:19:01] "TNMP\x04\x00\x00\x00TNME\x00\x00\x04\x00" 400 -
+INFO:werkzeug:45.79.190.216 - - [28/May/2026 10:19:01] "[31m[1mTNMP\x04\x00\x00\x00TNME\x00\x00\x04\x00[0m" 400 -
+45.79.190.216 - - [28/May/2026 10:19:06] code 400, message Bad HTTP/0.9 request type ('\x03\x00\x00')
+ERROR:werkzeug:45.79.190.216 - - [28/May/2026 10:19:06] code 400, message Bad HTTP/0.9 request type ('\x03\x00\x00')
+45.79.190.216 - - [28/May/2026 10:19:06] "\x03\x00\x00\x0b\x06à\x00\x00\x00\x00\x00" 400 -
+INFO:werkzeug:45.79.190.216 - - [28/May/2026 10:19:06] "[31m[1m\x03\x00\x00\x0b\x06à\x00\x00\x00\x00\x00[0m" 400 -
+45.79.190.216 - - [28/May/2026 10:19:11] code 400, message Bad request syntax ('DmdT\x00\x00\x00\x17\x00\x00\x00\x01\x00\x00\x00\x00\x11\x11\x00ÿ\x01ÿ\x13')
+ERROR:werkzeug:45.79.190.216 - - [28/May/2026 10:19:11] code 400, message Bad request syntax ('DmdT\x00\x00\x00\x17\x00\x00\x00\x01\x00\x00\x00\x00\x11\x11\x00ÿ\x01ÿ\x13')
+45.79.190.216 - - [28/May/2026 10:19:11] "DmdT\x00\x00\x00\x17\x00\x00\x00\x01\x00\x00\x00\x00\x11\x11\x00ÿ\x01ÿ\x13" 400 -
+INFO:werkzeug:45.79.190.216 - - [28/May/2026 10:19:11] "[31m[1mDmdT\x00\x00\x00\x17\x00\x00\x00\x01\x00\x00\x00\x00\x11\x11\x00ÿ\x01ÿ\x13[0m" 400 -
+45.79.190.216 - - [28/May/2026 10:19:16] code 400, message Bad HTTP/0.9 request type (':\x00\x00\x00/\x00\x00\x00\x02\x00\x00@\x02\x0f\x00\x01\x00=\x05\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00/\x00\x00\x00\x00\x00\x00\x00\x00\x00@')
+ERROR:werkzeug:45.79.190.216 - - [28/May/2026 10:19:16] code 400, message Bad HTTP/0.9 request type (':\x00\x00\x00/\x00\x00\x00\x02\x00\x00@\x02\x0f\x00\x01\x00=\x05\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00/\x00\x00\x00\x00\x00\x00\x00\x00\x00@')
+45.79.190.216 - - [28/May/2026 10:19:16] ":\x00\x00\x00/\x00\x00\x00\x02\x00\x00@\x02\x0f\x00\x01\x00=\x05\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00/\x00\x00\x00\x00\x00\x00\x00\x00\x00@\x1f\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00" 400 -
+INFO:werkzeug:45.79.190.216 - - [28/May/2026 10:19:16] "[31m[1m:\x00\x00\x00/\x00\x00\x00\x02\x00\x00@\x02\x0f\x00\x01\x00=\x05\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00/\x00\x00\x00\x00\x00\x00\x00\x00\x00@\x1f\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00[0m" 400 -
+45.79.190.216 - - [28/May/2026 10:19:21] code 400, message Bad request syntax ('JRMI\x00\x02K')
+ERROR:werkzeug:45.79.190.216 - - [28/May/2026 10:19:21] code 400, message Bad request syntax ('JRMI\x00\x02K')
+45.79.190.216 - - [28/May/2026 10:19:21] "JRMI\x00\x02K" 400 -
+INFO:werkzeug:45.79.190.216 - - [28/May/2026 10:19:21] "[31m[1mJRMI\x00\x02K[0m" 400 -
+45.79.190.216 - - [28/May/2026 10:19:26] code 400, message Bad request version ('\x00{\x000\x000\x000\x000\x00A\x00A\x000\x000\x00-\x000\x00A\x000\x000\x00-\x000\x000\x00a\x000\x00-\x00A\x00A\x000\x00A\x00-\x000\x000\x000\x000\x00A\x000\x00A\x00A\x000\x00A\x00A\x000\x00}\x00\x00\x00àmß_')
+ERROR:werkzeug:45.79.190.216 - - [28/May/2026 10:19:26] code 400, message Bad request version ('\x00{\x000\x000\x000\x000\x00A\x00A\x000\x000\x00-\x000\x00A\x000\x000\x00-\x000\x000\x00a\x000\x00-\x00A\x00A\x000\x00A\x00-\x000\x000\x000\x000\x00A\x000\x00A\x00A\x000\x00A\x00A\x000\x00}\x00\x00\x00àmß_')
+45.79.190.216 - - [28/May/2026 10:19:26] "\x01\x00\x00ýÎú\x0b° \x00\x00\x00MMS\x14\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x12\x00\x00\x00\x01\x00\x03\x00ðððð\x0b\x00\x04\x00\x1c\x00\x03\x00N\x00S\x00P\x00l\x00a\x00y\x00e\x00r\x00/\x009\x00.\x000\x00.\x000\x00.\x002\x009\x008\x000\x00;\x00 \x00{\x000\x000\x000\x000\x00A\x00A\x000\x000\x00-\x000\x00A\x000\x000\x00-\x000\x000\x00a\x000\x00-\x00A\x00A\x000\x00A\x00-\x000\x000\x000\x000\x00A\x000\x00A\x00A\x000\x00A\x00A\x000\x00}\x00\x00\x00àmß_" 400 -
+INFO:werkzeug:45.79.190.216 - - [28/May/2026 10:19:26] "[31m[1m\x01\x00\x00ýÎú\x0b° \x00\x00\x00MMS\x14\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x12\x00\x00\x00\x01\x00\x03\x00ðððð\x0b\x00\x04\x00\x1c\x00\x03\x00N\x00S\x00P\x00l\x00a\x00y\x00e\x00r\x00/\x009\x00.\x000\x00.\x000\x00.\x002\x009\x008\x000\x00;\x00 \x00{\x000\x000\x000\x000\x00A\x00A\x000\x000\x00-\x000\x00A\x000\x000\x00-\x000\x000\x00a\x000\x00-\x00A\x00A\x000\x00A\x00-\x000\x000\x000\x000\x00A\x000\x00A\x00A\x000\x00A\x00A\x000\x00}\x00\x00\x00àmß_[0m" 400 -
+45.79.190.216 - - [28/May/2026 10:19:31] code 400, message Bad HTTP/0.9 request type ('\x00Z\x00\x00\x01\x00\x00\x00\x016\x01,\x00\x00\x08\x00\x7fÿ\x7f\x08\x00\x00\x00\x01\x00')
+ERROR:werkzeug:45.79.190.216 - - [28/May/2026 10:19:31] code 400, message Bad HTTP/0.9 request type ('\x00Z\x00\x00\x01\x00\x00\x00\x016\x01,\x00\x00\x08\x00\x7fÿ\x7f\x08\x00\x00\x00\x01\x00')
+45.79.190.216 - - [28/May/2026 10:19:31] "\x00Z\x00\x00\x01\x00\x00\x00\x016\x01,\x00\x00\x08\x00\x7fÿ\x7f\x08\x00\x00\x00\x01\x00 \x00:\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x004æ\x00\x00\x00\x01\x00\x00\x00\x00\x00\x00\x00\x00(CONNECT_DATA=(COMMAND=version))" 400 -
+INFO:werkzeug:45.79.190.216 - - [28/May/2026 10:19:31] "[31m[1m\x00Z\x00\x00\x01\x00\x00\x00\x016\x01,\x00\x00\x08\x00\x7fÿ\x7f\x08\x00\x00\x00\x01\x00 \x00:\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x004æ\x00\x00\x00\x01\x00\x00\x00\x00\x00\x00\x00\x00(CONNECT_DATA=(COMMAND=version))[0m" 400 -
+45.79.190.216 - - [28/May/2026 10:19:36] code 400, message Bad request version ('\x03\x00(\x00\x04ÿ\x08\x00\x01U\x00\x00\x00MSSQLServer\x00H\x0f\x00\x00')
+ERROR:werkzeug:45.79.190.216 - - [28/May/2026 10:19:36] code 400, message Bad request version ('\x03\x00(\x00\x04ÿ\x08\x00\x01U\x00\x00\x00MSSQLServer\x00H\x0f\x00\x00')
+45.79.190.216 - - [28/May/2026 10:19:36] "\x12\x01\x004\x00\x00\x00\x00\x00\x00\x15\x00\x06\x01\x00\x1b\x00\x01\x02\x00\x1c\x00\x0c\x03\x00(\x00\x04ÿ\x08\x00\x01U\x00\x00\x00MSSQLServer\x00H\x0f\x00\x00" 400 -
+INFO:werkzeug:45.79.190.216 - - [28/May/2026 10:19:36] "[31m[1m\x12\x01\x004\x00\x00\x00\x00\x00\x00\x15\x00\x06\x01\x00\x1b\x00\x01\x02\x00\x1c\x00\x0c\x03\x00(\x00\x04ÿ\x08\x00\x01U\x00\x00\x00MSSQLServer\x00H\x0f\x00\x00[0m" 400 -
+45.79.190.216 - - [28/May/2026 10:19:41] code 400, message Bad request syntax ('\x00\x03\x00\x01\x00\x00\x00\x00\x00\x00\x00\x02\x00\x00\x00\x00\x0f\x00')
+ERROR:werkzeug:45.79.190.216 - - [28/May/2026 10:19:41] code 400, message Bad request syntax ('\x00\x03\x00\x01\x00\x00\x00\x00\x00\x00\x00\x02\x00\x00\x00\x00\x0f\x00')
+45.79.190.216 - - [28/May/2026 10:19:41] "\x00\x03\x00\x01\x00\x00\x00\x00\x00\x00\x00\x02\x00\x00\x00\x00\x0f\x00" 400 -
+INFO:werkzeug:45.79.190.216 - - [28/May/2026 10:19:41] "[31m[1m\x00\x03\x00\x01\x00\x00\x00\x00\x00\x00\x00\x02\x00\x00\x00\x00\x0f\x00[0m" 400 -
+45.79.190.216 - - [28/May/2026 10:19:46] code 400, message Bad request syntax ('GIOP\x01\x00\x01\x00$\x00\x00\x00\x00\x00\x00\x00\x01\x00\x00\x00\x01\x00\x00\x00\x06\x00\x00\x00abcdef\x00\x00\x04\x00\x00\x00get\x00\x00\x00\x00\x00')
+ERROR:werkzeug:45.79.190.216 - - [28/May/2026 10:19:46] code 400, message Bad request syntax ('GIOP\x01\x00\x01\x00$\x00\x00\x00\x00\x00\x00\x00\x01\x00\x00\x00\x01\x00\x00\x00\x06\x00\x00\x00abcdef\x00\x00\x04\x00\x00\x00get\x00\x00\x00\x00\x00')
+45.79.190.216 - - [28/May/2026 10:19:46] "GIOP\x01\x00\x01\x00$\x00\x00\x00\x00\x00\x00\x00\x01\x00\x00\x00\x01\x00\x00\x00\x06\x00\x00\x00abcdef\x00\x00\x04\x00\x00\x00get\x00\x00\x00\x00\x00" 400 -
+INFO:werkzeug:45.79.190.216 - - [28/May/2026 10:19:46] "[31m[1mGIOP\x01\x00\x01\x00$\x00\x00\x00\x00\x00\x00\x00\x01\x00\x00\x00\x01\x00\x00\x00\x06\x00\x00\x00abcdef\x00\x00\x04\x00\x00\x00get\x00\x00\x00\x00\x00[0m" 400 -
+45.79.190.216 - - [28/May/2026 10:19:51] code 400, message Bad HTTP/0.9 request type ('AMQP\x00\x00')
+ERROR:werkzeug:45.79.190.216 - - [28/May/2026 10:19:51] code 400, message Bad HTTP/0.9 request type ('AMQP\x00\x00')
+45.79.190.216 - - [28/May/2026 10:19:51] "AMQP\x00\x00\x09\x01" 400 -
+INFO:werkzeug:45.79.190.216 - - [28/May/2026 10:19:51] "[31m[1mAMQP\x00\x00\x09\x01[0m" 400 -
+45.79.190.216 - - [28/May/2026 10:19:52] "GET /devicedesc.xml HTTP/1.1" 404 -
+INFO:werkzeug:45.79.190.216 - - [28/May/2026 10:19:52] "[33mGET /devicedesc.xml HTTP/1.1[0m" 404 -
+45.79.190.216 - - [28/May/2026 10:19:52] code 400, message Bad request syntax ('CONNECT')
+ERROR:werkzeug:45.79.190.216 - - [28/May/2026 10:19:52] code 400, message Bad request syntax ('CONNECT')
+45.79.190.216 - - [28/May/2026 10:19:52] "CONNECT" 400 -
+INFO:werkzeug:45.79.190.216 - - [28/May/2026 10:19:52] "[31m[1mCONNECT[0m" 400 -
+45.79.190.216 - - [28/May/2026 10:19:57] code 400, message Bad HTTP/0.9 request type ('¤\x00\x00\x00\x00\x00\x00\x00')
+ERROR:werkzeug:45.79.190.216 - - [28/May/2026 10:19:57] code 400, message Bad HTTP/0.9 request type ('¤\x00\x00\x00\x00\x00\x00\x00')
+45.79.190.216 - - [28/May/2026 10:19:57] "¤\x00\x00\x00\x00\x00\x00\x00\x0b\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00¤\x00\x00\x00\x00\x00\x00\x00\x08\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00" 400 -
+INFO:werkzeug:45.79.190.216 - - [28/May/2026 10:19:57] "[31m[1m¤\x00\x00\x00\x00\x00\x00\x00\x0b\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00¤\x00\x00\x00\x00\x00\x00\x00\x08\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00[0m" 400 -
+45.79.190.216 - - [28/May/2026 10:20:02] code 400, message Bad request syntax ('\x01\x00\x00\x00')
+ERROR:werkzeug:45.79.190.216 - - [28/May/2026 10:20:02] code 400, message Bad request syntax ('\x01\x00\x00\x00')
+45.79.190.216 - - [28/May/2026 10:20:02] "\x01\x00\x00\x00" 400 -
+INFO:werkzeug:45.79.190.216 - - [28/May/2026 10:20:02] "[31m[1m\x01\x00\x00\x00[0m" 400 -
+45.79.190.216 - - [28/May/2026 10:20:07] code 400, message Bad request syntax ('c\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00ÁÞ¾Ñ\x00\x00\x00\x00')
+ERROR:werkzeug:45.79.190.216 - - [28/May/2026 10:20:07] code 400, message Bad request syntax ('c\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00ÁÞ¾Ñ\x00\x00\x00\x00')
+45.79.190.216 - - [28/May/2026 10:20:07] "c\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00ÁÞ¾Ñ\x00\x00\x00\x00" 400 -
+INFO:werkzeug:45.79.190.216 - - [28/May/2026 10:20:07] "[31m[1mc\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00ÁÞ¾Ñ\x00\x00\x00\x00[0m" 400 -
+45.79.190.216 - - [28/May/2026 10:20:07] code 400, message Bad request version ('\x00/\x00')
+ERROR:werkzeug:45.79.190.216 - - [28/May/2026 10:20:07] code 400, message Bad request version ('\x00/\x00')
+45.79.190.216 - - [28/May/2026 10:20:07] "\x16\x03\x00\x00i\x01\x00\x00e\x03\x03U\x1c§ärandom1random2random3random4\x00\x00\x0c\x00/\x00" 400 -
+INFO:werkzeug:45.79.190.216 - - [28/May/2026 10:20:07] "[31m[1m\x16\x03\x00\x00i\x01\x00\x00e\x03\x03U\x1c§ärandom1random2random3random4\x00\x00\x0c\x00/\x00[0m" 400 -
+45.79.190.216 - - [28/May/2026 10:20:12] "GET / HTTP/1.1" 200 -
+INFO:werkzeug:45.79.190.216 - - [28/May/2026 10:20:12] "GET / HTTP/1.1" 200 -
+45.79.190.216 - - [28/May/2026 10:20:17] code 400, message Bad request version ("\x94½\x06*#ÚüÊ¹]£\x17\x00\x9c\x13\x02\x13\x03\x13\x01\x003\x009\x005\x00/À,À0\x00£\x00\x9fÌ©Ì¨ÌªÀ¯À\xadÀ£À\x9fÀ]ÀaÀWÀSÀ+À/\x00¢\x00\x9eÀ®À¬À¢À\x9eÀ\\À`ÀVÀRÀ$À(\x00k\x00jÀsÀw\x00Ä\x00ÃÀ#À'\x00g\x00@ÀrÀv\x00¾\x00½À")
+ERROR:werkzeug:45.79.190.216 - - [28/May/2026 10:20:17] code 400, message Bad request version ("\x94½\x06*#ÚüÊ¹]£\x17\x00\x9c\x13\x02\x13\x03\x13\x01\x003\x009\x005\x00/À,À0\x00£\x00\x9fÌ©Ì¨ÌªÀ¯À\xadÀ£À\x9fÀ]ÀaÀWÀSÀ+À/\x00¢\x00\x9eÀ®À¬À¢À\x9eÀ\\À`ÀVÀRÀ$À(\x00k\x00jÀsÀw\x00Ä\x00ÃÀ#À'\x00g\x00@ÀrÀv\x00¾\x00½À")
+45.79.190.216 - - [28/May/2026 10:20:17] "\x16\x03\x01\x02\x00\x01\x00\x01ü\x03\x03Îü\x9b´á+\x90o^\x19MöP\x1e6ñÛy1Æ]£Ü¤S;ühbù¿\x98 \x04Õ@Ä5r4ýª\x93Jt©±òÞUÑ:\x1f\x94½\x06*#ÚüÊ¹]£\x17\x00\x9c\x13\x02\x13\x03\x13\x01\x003\x009\x005\x00/À,À0\x00£\x00\x9fÌ©Ì¨ÌªÀ¯À­À£À\x9fÀ]ÀaÀWÀSÀ+À/\x00¢\x00\x9eÀ®À¬À¢À\x9eÀ\\À`ÀVÀRÀ$À(\x00k\x00jÀsÀw\x00Ä\x00ÃÀ#À'\x00g\x00@ÀrÀv\x00¾\x00½À" 400 -
+INFO:werkzeug:45.79.190.216 - - [28/May/2026 10:20:17] "[31m[1m\x16\x03\x01\x02\x00\x01\x00\x01ü\x03\x03Îü\x9b´á+\x90o^\x19MöP\x1e6ñÛy1Æ]£Ü¤S;ühbù¿\x98 \x04Õ@Ä5r4ýª\x93Jt©±òÞUÑ:\x1f\x94½\x06*#ÚüÊ¹]£\x17\x00\x9c\x13\x02\x13\x03\x13\x01\x003\x009\x005\x00/À,À0\x00£\x00\x9fÌ©Ì¨ÌªÀ¯À­À£À\x9fÀ]ÀaÀWÀSÀ+À/\x00¢\x00\x9eÀ®À¬À¢À\x9eÀ\\À`ÀVÀRÀ$À(\x00k\x00jÀsÀw\x00Ä\x00ÃÀ#À'\x00g\x00@ÀrÀv\x00¾\x00½À[0m" 400 -
+45.79.190.216 - - [28/May/2026 10:20:18] code 400, message Bad HTTP/0.9 request type ('\x80\x00\x00(I-\x8d,\x00\x00\x00\x00\x00\x00\x00\x02\x00\x01\x86')
+ERROR:werkzeug:45.79.190.216 - - [28/May/2026 10:20:18] code 400, message Bad HTTP/0.9 request type ('\x80\x00\x00(I-\x8d,\x00\x00\x00\x00\x00\x00\x00\x02\x00\x01\x86')
+45.79.190.216 - - [28/May/2026 10:20:18] "\x80\x00\x00(I-\x8d,\x00\x00\x00\x00\x00\x00\x00\x02\x00\x01\x86 \x00\x00\x00\x02\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00" 400 -
+INFO:werkzeug:45.79.190.216 - - [28/May/2026 10:20:18] "[31m[1m\x80\x00\x00(I-\x8d,\x00\x00\x00\x00\x00\x00\x00\x02\x00\x01\x86 \x00\x00\x00\x02\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00[0m" 400 -

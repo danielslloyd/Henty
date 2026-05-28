@@ -1,37 +1,42 @@
 # Henty Project Dependencies
-# Updated: 2026-01-20 - Security patch release
-# CRITICAL: Updated gradio (6 CVEs) and flask-cors (4 CVEs)
+# Locked: 2026-05-28
+# Environment: Python 3.11.0, CUDA 13.0 (RTX 5070 Ti)
+# GPU Install: pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu130
 
 # Core Web Framework
-flask>=3.1.2
-flask-cors>=6.0.2
-flask-socketio>=5.6.0
-python-socketio>=5.16.0
+Flask==3.0.0
+Flask-CORS==6.0.1
+Flask-SocketIO==5.5.1
+python-socketio==5.15.0
 
-# Machine Learning / TTS
-torch>=2.9.1
-torchaudio>=2.9.1
-chatterbox-tts
+# Machine Learning / TTS (GPU-enabled)
+torch==2.12.0+cu130
+torchaudio==2.11.0+cu130
+torchvision==0.27.0+cu130
+chatterbox-tts==0.1.7
 
 # Scientific Computing
-numpy>=1.24,<2.3
-scipy>=1.17.0
+# CRITICAL: numpy must be <2.3 for numba compatibility (Chatterbox dependency)
+numpy==2.2.6
+scipy==1.16.3
 
 # Audio Processing
-pydub>=0.25.1
+pydub==0.25.1
+librosa==0.11.0
+soundfile==0.13.1
 
-# UI Framework (CRITICAL SECURITY UPDATE)
-gradio>=4.31.3
+# UI Framework
+gradio==6.8.0
 
 # HTTP Client
-requests>=2.32.5
+requests==2.31.0
 
 # HTML Parsing
-beautifulsoup4>=4.12.0
+beautifulsoup4==4.14.2
 
 # Utilities
-python-dotenv>=1.2.1
+python-dotenv==1.0.1
 
-# LLM Providers (optional)
-anthropic>=0.76.0
-ollama>=0.6.1
+# Optional LLM Providers (uncomment to enable)
+# anthropic>=0.76.0
+# ollama>=0.6.1
