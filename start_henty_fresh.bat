@@ -58,7 +58,8 @@ REM --- Run pre-flight dependency check (auto-repairs broken packages) ---
 echo.
 REM Load env vars
 setlocal enabledelayedexpansion
-for /f "delims==" %%a in ('type .env ^| findstr SKIP_PRECHECK') do set %%a
+set SKIP_PRECHECK=
+for /f "tokens=1,* delims==" %%a in ('type .env ^| findstr /b /c:"SKIP_PRECHECK"') do set "%%a=%%b"
 if "!SKIP_PRECHECK!"=="1" (
     echo [INFO] Pre-flight check skipped (SKIP_PRECHECK=1 in .env)
 ) else (
@@ -100,10 +101,11 @@ echo.
 echo [INFO] Starting server...
 echo.
 
-REM Start the server using the detected Python, logging output to server_log.txt
-REM Window stays open after crash so you can see the error
+REM Start the server in its own window. Output is shown live AND written to
+REM server_log.txt via Tee-Object. -u (unbuffered) ensures logs appear immediately
+REM instead of being buffered. -NoExit keeps the window open after a crash.
 if exist server_log.txt del server_log.txt
-start "Henty Server" cmd /k "%HENTY_PYTHON% server.py > server_log.txt 2>&1 || (echo. & echo ====== SERVER CRASHED - check server_log.txt ====== & echo.)"
+start "Henty Server" powershell -NoProfile -NoExit -Command "$env:PYTHONUNBUFFERED='1'; & '%HENTY_PYTHON%' -u server.py 2>&1 | Tee-Object -FilePath server_log.txt"
 
 REM Wait for server to start
 echo [INFO] Waiting for server to initialize...

@@ -1631,6 +1631,58 @@ class TTSTab {
         }
     }
 
+    async generateEntireBook() {
+        const confirmed = confirm(
+            'Generate audio for the ENTIRE book using default settings?\n\n' +
+            'This runs through every chapter and chunk. Chunks that already have a ' +
+            'take are skipped. This can take a long time for a full book.'
+        );
+        if (!confirmed) return;
+
+        // Send the project's resolved voice/settings. The voice MUST be set — the
+        // server refuses to use the Chatterbox default voice.
+        if (!this.projectDefaults.voice_sample) {
+            this.showStatus('No project voice is set. Choose a voice before generating.', 'error');
+            return;
+        }
+
+        this.showStatus('Generating entire book… this may take a while.', 'info');
+
+        try {
+            const response = await fetch(`${SERVER_URL}/api/project/generate-entire-book`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-API-Key': API_KEY
+                },
+                body: JSON.stringify({
+                    voice_sample: this.projectDefaults.voice_sample,
+                    exaggeration: this.projectDefaults.exaggeration,
+                    cfg_weight: this.projectDefaults.cfg_weight,
+                    language_id: 'en'
+                })
+            });
+
+            if (!response.ok) {
+                const err = await response.json().catch(() => ({}));
+                throw new Error(err.error || `Server error ${response.status}`);
+            }
+
+            const result = await response.json();
+            const msg = `Book generation complete — ${result.generated} generated, ` +
+                        `${result.skipped} skipped, ${result.errors} errors.`;
+            this.showStatus(msg, result.errors > 0 ? 'warning' : 'success');
+
+            // Refresh the current chapter view so new takes show up.
+            if (typeof this.refreshChapters === 'function') {
+                await this.refreshChapters();
+            }
+        } catch (error) {
+            console.error('Error generating entire book:', error);
+            this.showStatus('Error: ' + error.message, 'error');
+        }
+    }
+
 
     async stitchBestTakes() {
         if (!this.currentChapter) return;

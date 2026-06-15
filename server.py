@@ -2830,13 +2830,17 @@ def generate_project_chunk_audio():
 
         print(f"  ✓ Final model to use: {tts_model}")
 
-        # Construct voice sample path
-        audio_prompt_path = None
-        if voice_sample and voice_sample != 'none':
-            audio_prompt_path = os.path.join(converter.voice_samples_dir, voice_sample)
-            if not os.path.exists(audio_prompt_path):
-                print(f"Warning: Voice sample not found: {audio_prompt_path}")
-                audio_prompt_path = None
+        # Resolve voice sample — never fall back to the Chatterbox default voice.
+        audio_prompt_path = resolve_voice_sample_path(voice_sample)
+        if audio_prompt_path is None:
+            audio_prompt_path = resolve_voice_sample_path(getattr(config, 'DEFAULT_VOICE', None))
+        if audio_prompt_path is None:
+            return jsonify({
+                'error': 'No usable voice sample found. Refusing to generate with the '
+                         'Chatterbox default voice. Set a project voice or configure DEFAULT_VOICE.',
+                'requested_voice': voice_sample,
+            }), 400
+        voice_sample = os.path.basename(audio_prompt_path)
 
         # Check device before generation
         if converter.model is not None:
@@ -3541,13 +3545,17 @@ def generate_chunk():
         cfg_weight = float(request.form.get('cfg_weight', 0.5))
         voice_sample_name = request.form.get('voice_sample', None)
 
-        # Construct voice sample path
-        audio_prompt_path = None
-        if voice_sample_name and voice_sample_name != 'none':
-            audio_prompt_path = os.path.join(converter.voice_samples_dir, voice_sample_name)
-            if not os.path.exists(audio_prompt_path):
-                print(f"Warning: Voice sample not found: {audio_prompt_path}")
-                audio_prompt_path = None
+        # Resolve voice sample — never fall back to the Chatterbox default voice.
+        audio_prompt_path = resolve_voice_sample_path(voice_sample_name)
+        if audio_prompt_path is None:
+            audio_prompt_path = resolve_voice_sample_path(getattr(config, 'DEFAULT_VOICE', None))
+        if audio_prompt_path is None:
+            return jsonify({
+                'error': 'No usable voice sample found. Refusing to generate with the '
+                         'Chatterbox default voice. Set a project voice or configure DEFAULT_VOICE.',
+                'requested_voice': voice_sample_name,
+            }), 400
+        voice_sample_name = os.path.basename(audio_prompt_path)
 
         print(f"Generating chunk {chunk_id} for: {filename}")
         print(f"Chunk text length: {len(chunk_text)} characters")
@@ -4155,6 +4163,439 @@ def add_gutenberg_url_to_project():
     except Exception as e:
         import traceback
         print(f"Error adding Gutenberg URL to project: {str(e)}")
+        print(traceback.format_exc())
+        return jsonify({'error': str(e)}), 500
+
+
+def build_chapters_from_rewriter_blocks(blocks, variant='original'):
+    """Convert Rewriter book.json `blocks` into Henty chapter/chunk structures.
+
+    `variant`:
+      - 'original': speak the source `text` of each block
+      - 'rewrite' : speak the `rewrite` field (falls back to `text` when empty)
+
+    Heading blocks start a new chapter (their text becomes the chapter title and the
+    first spoken chunk). Content appearing before the first heading is gathered into a
+    leading 'Front Matter' chapter. `para`/`verse` blocks become text chunks; oversized
+    paragraphs are split with the converter's smart_chunk_text. Image/caption metadata
+    from the block is preserved on the chunk for later reader use.
+    """
+    import uuid as _uuid
+    from datetime import datetime
+
+    def block_text(b):
+        if variant == 'rewrite':
+            rw = b.get('rewrite')
+            if rw is not None and str(rw).strip():
+                return str(rw).strip()
+        if b.get('type') == 'verse':
+            return '\n'.join(b.get('lines', [])).strip()
+        return str(b.get('text') or '').strip()
+
+    chapters = []
+    current = None
+
+    def start_chapter(title):
+        nonlocal current
+        title = (title or 'Untitled').strip() or 'Untitled'
+        current = {
+            'id': str(_uuid.uuid4()),
+            'title': title,
+            'name': title,
+            'order': len(chapters),
+            'non_voiced': False,
+            'source': 'rewriter_json',
+            'added_at': datetime.now().isoformat(),
+            'chunks': [{
+                'id': 0,
+                'type': 'text',
+                'text': title,
+                'nickname': title[:50].strip() + ('...' if len(title) > 50 else ''),
+                'dirty': False,
+                'generated_audios': []
+            }],
+        }
+        chapters.append(current)
+
+    def add_content(text, block=None):
+        nonlocal current
+        if current is None:
+            start_chapter('Front Matter')
+        if not text:
+            return
+        # Split oversized paragraphs; most blocks become a single chunk.
+        pieces = converter.smart_chunk_text(text)
+        for piece in pieces:
+            ptext = piece['text']
+            chunk = {
+                'id': len(current['chunks']),
+                'type': 'text',
+                'text': ptext,
+                'nickname': ptext[:50].strip() + ('...' if len(ptext) > 50 else ''),
+                'dirty': False,
+                'generated_audios': []
+            }
+            if block is not None:
+                if block.get('image_prompt'):
+                    chunk['image_prompt'] = block['image_prompt']
+                if block.get('image'):
+                    chunk['image'] = block['image']
+                if block.get('caption'):
+                    chunk['caption'] = block['caption']
+                chunk['source_block_id'] = block.get('id')
+            current['chunks'].append(chunk)
+
+    for block in blocks:
+        btype = block.get('type')
+        if btype == 'heading':
+            start_chapter(block_text(block))
+        else:
+            add_content(block_text(block), block)
+
+    # Drop chapters that ended up with only a title and no body (e.g. stray headings)
+    return [ch for ch in chapters if len(ch['chunks']) > 0]
+
+
+@app.route('/api/rewriter/books', methods=['GET'])
+@auth_manager.require_api_key
+def list_rewriter_books():
+    """List Rewriter book folders (each containing a book.json) under the configured dir."""
+    try:
+        import json as _json
+        books_dir = config.REWRITER_BOOKS_DIR
+        books = []
+        if books_dir and os.path.isdir(books_dir):
+            for item in sorted(os.listdir(books_dir)):
+                folder = os.path.join(books_dir, item)
+                book_json = os.path.join(folder, 'book.json')
+                if not os.path.isfile(book_json):
+                    continue
+                title = item
+                block_count = 0
+                try:
+                    with open(book_json, 'r', encoding='utf-8') as f:
+                        data = _json.load(f)
+                    title = data.get('title') or item
+                    block_count = len(data.get('blocks', []))
+                except Exception as e:
+                    print(f"[REWRITER] Error reading {book_json}: {e}")
+                books.append({
+                    'folder': item,
+                    'title': title,
+                    'path': os.path.abspath(folder),
+                    'block_count': block_count,
+                    'has_project': os.path.isfile(os.path.join(folder, 'project.json')),
+                })
+        return jsonify({
+            'books_dir': os.path.abspath(books_dir) if books_dir else None,
+            'books': books
+        })
+    except Exception as e:
+        import traceback
+        print(traceback.format_exc())
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/project/import-rewriter', methods=['POST'])
+@auth_manager.require_api_key
+def import_rewriter_book():
+    """Create/refresh a Henty project from a Rewriter book.json.
+
+    The book's own folder becomes the project directory: project.json and the audio/
+    folder are saved alongside book.json. Chapters are built directly from the blocks
+    and locked (no Gutenberg parsing needed).
+
+    Body: { folder | book_path, variant: 'original'|'rewrite' }
+    """
+    try:
+        import json
+        from datetime import datetime
+
+        data = request.json or {}
+        variant = data.get('variant', 'original')
+        if variant not in ('original', 'rewrite'):
+            variant = 'original'
+
+        book_path = data.get('book_path')
+        if not book_path:
+            folder = data.get('folder') or data.get('book')
+            if not folder:
+                return jsonify({'error': 'book_path or folder is required'}), 400
+            if not config.REWRITER_BOOKS_DIR:
+                return jsonify({'error': 'REWRITER_BOOKS_DIR is not configured'}), 400
+            book_path = os.path.join(config.REWRITER_BOOKS_DIR, folder)
+
+        book_path = os.path.abspath(book_path)
+        book_json = os.path.join(book_path, 'book.json')
+        if not os.path.isfile(book_json):
+            return jsonify({'error': f'book.json not found in {book_path}'}), 404
+
+        with open(book_json, 'r', encoding='utf-8') as f:
+            book = json.load(f)
+
+        blocks = book.get('blocks', [])
+        if not blocks:
+            return jsonify({'error': 'book.json contains no blocks'}), 400
+
+        title = book.get('title') or os.path.basename(book_path)
+        chapters = build_chapters_from_rewriter_blocks(blocks, variant)
+        if not chapters:
+            return jsonify({'error': 'No chapters could be built from book.json'}), 400
+
+        project_path = book_path
+        audio_dir = os.path.join(project_path, 'audio')
+        texts_dir = os.path.join(project_path, 'texts')
+        os.makedirs(audio_dir, exist_ok=True)
+        os.makedirs(texts_dir, exist_ok=True)
+
+        # Preserve an existing project.json (audio settings, prior takes) where present.
+        project_file = os.path.join(project_path, 'project.json')
+        if os.path.isfile(project_file):
+            with open(project_file, 'r', encoding='utf-8') as f:
+                metadata = json.load(f)
+        else:
+            metadata = {
+                'name': title,
+                'created_at': datetime.now().isoformat(),
+                'default_audio_settings': {
+                    'exaggeration': 0.6, 'cfg_weight': 0.4, 'voice_sample': 'none',
+                    'seed': 0, 'temperature': 0.8, 'ref_vad_trimming': False
+                },
+            }
+
+        metadata['name'] = metadata.get('name') or title
+        metadata['last_modified'] = datetime.now().isoformat()
+        metadata['version'] = '3.0'
+        metadata['source'] = 'rewriter_json'
+        metadata['rewriter_book_path'] = project_path
+        metadata['rewriter_variant'] = variant
+        metadata['original_filename'] = f"{title}.json"
+        metadata['chapters'] = chapters
+        metadata['chapters_locked'] = True
+        # Stage 3 = fully chunked & locked. The chapters are already chunked here, so
+        # the editor must not present the stage-2 "chunking in progress" state.
+        metadata['book_file_stage'] = 3
+
+        with open(project_file, 'w', encoding='utf-8') as f:
+            json.dump(metadata, f, indent=2, ensure_ascii=False)
+
+        # Locked-text snapshot for parity with the Gutenberg lock workflow.
+        try:
+            parts = []
+            for ch in chapters:
+                parts.append(f"## {ch['title']}")
+                for c in ch['chunks'][1:]:
+                    if c.get('type') == 'text':
+                        parts.append(c['text'])
+            with open(os.path.join(project_path, 'chapters_original.txt'), 'w', encoding='utf-8') as f:
+                f.write('\n\n'.join(parts))
+        except Exception as e:
+            print(f"[REWRITER] Could not write chapters_original.txt: {e}")
+
+        # Activate as the current project.
+        converter.current_project_path = project_path
+        converter.current_project_metadata = metadata
+        converter.audio_dir = audio_dir
+
+        total_chunks = sum(
+            len([c for c in ch['chunks'] if c.get('type') == 'text']) for ch in chapters
+        )
+        print(f"[REWRITER] Imported '{title}' ({variant}): "
+              f"{len(chapters)} chapters, {total_chunks} chunks → {project_path}")
+
+        return jsonify({
+            'success': True,
+            'project_path': project_path,
+            'title': title,
+            'variant': variant,
+            'chapter_count': len(chapters),
+            'chunk_count': total_chunks,
+        })
+    except Exception as e:
+        import traceback
+        print(traceback.format_exc())
+        return jsonify({'error': str(e)}), 500
+
+
+def _safe_filename_part(s, maxlen=30):
+    """Sanitize a string for safe use inside a filename on Windows/macOS/Linux.
+
+    Critically removes ':' and other characters that, on Windows, would otherwise
+    be interpreted as an NTFS alternate-data-stream separator and silently write
+    a zero-byte file (the cause of blank Chapter_I / Chapter_II files).
+    """
+    s = re.sub(r'[<>:"/\\|?*\x00-\x1f]', '_', s or '')
+    s = s.replace(' ', '_')
+    return s[:maxlen].strip('_') or 'chunk'
+
+
+def resolve_voice_sample_path(name):
+    """Resolve a voice sample name (with or without extension) to a real file path.
+
+    Returns an existing absolute path, or None. Used to enforce the hard rule that
+    the Chatterbox built-in default voice must never be used: callers treat a None
+    return as a fatal condition rather than generating without a voice prompt.
+    """
+    if not name or name == 'none':
+        return None
+    vs_dir = converter.voice_samples_dir
+    direct = os.path.join(vs_dir, name)
+    if os.path.isfile(direct):
+        return os.path.abspath(direct)
+    for ext in ('.wav', '.mp3', '.ogg', '.flac', '.m4a'):
+        cand = os.path.join(vs_dir, name + ext)
+        if os.path.isfile(cand):
+            return os.path.abspath(cand)
+    # Case-insensitive stem match against the directory contents.
+    stem = os.path.splitext(name)[0].lower()
+    try:
+        for f in os.listdir(vs_dir):
+            if os.path.splitext(f)[0].lower() == stem:
+                return os.path.abspath(os.path.join(vs_dir, f))
+    except FileNotFoundError:
+        pass
+    return None
+
+
+@app.route('/api/project/generate-entire-book', methods=['POST'])
+@auth_manager.require_api_key
+def generate_entire_book():
+    """Generate audio for every text chunk across all chapters using default settings.
+
+    Skips chunks that already have a take (unless they are dirty, or force=true).
+    The first take generated for a chunk becomes its best take.
+    """
+    try:
+        import json
+        import time
+        from datetime import datetime
+
+        if converter.current_project_path is None:
+            return jsonify({'error': 'No project loaded'}), 400
+
+        data = request.json or {}
+        force = bool(data.get('force', False))
+        defaults = converter.current_project_metadata.get('default_audio_settings', {})
+        language_id = data.get('language_id') or defaults.get('language_id', 'en')
+        exaggeration = data.get('exaggeration') or defaults.get('exaggeration', 0.6)
+        cfg_weight = data.get('cfg_weight') or defaults.get('cfg_weight', 0.4)
+        # --- Resolve the voice sample. NEVER fall back to the Chatterbox default voice. ---
+        requested_voice = data.get('voice_sample') or defaults.get('voice_sample')
+        audio_prompt_path = resolve_voice_sample_path(requested_voice)
+        resolved_from = requested_voice
+        if audio_prompt_path is None:
+            # Try the server-configured default voice (still a real sample file on disk).
+            cfg_default = getattr(config, 'DEFAULT_VOICE', None)
+            audio_prompt_path = resolve_voice_sample_path(cfg_default)
+            resolved_from = cfg_default
+        if audio_prompt_path is None:
+            return jsonify({
+                'error': 'No usable voice sample found. Refusing to generate with the '
+                         'Chatterbox default voice. Set a project voice or configure '
+                         'DEFAULT_VOICE to a file in the voice_samples directory.',
+                'requested_voice': requested_voice,
+                'config_default_voice': getattr(config, 'DEFAULT_VOICE', None),
+            }), 400
+        voice_sample = os.path.basename(audio_prompt_path)
+        print(f"[GEN-BOOK] Voice: {voice_sample} (requested '{resolved_from}') → {audio_prompt_path}",
+              flush=True)
+
+        audio_dir = os.path.join(converter.current_project_path, 'audio')
+        os.makedirs(audio_dir, exist_ok=True)
+
+        chapters = converter.current_project_metadata.get('chapters', [])
+        generated = 0
+        skipped = 0
+        errors = 0
+        error_detail = []
+
+        print(f"\n=== Generating entire book ({len(chapters)} chapters) ===")
+
+        for chapter in chapters:
+            if chapter.get('non_voiced'):
+                continue
+            for chunk in chapter.get('chunks', []):
+                if chunk.get('type', 'text') != 'text':
+                    continue
+
+                has_audio = len(chunk.get('generated_audios', [])) > 0
+                if has_audio and not force and not chunk.get('dirty'):
+                    skipped += 1
+                    continue
+
+                try:
+                    clean_text = converter.process_pronunciation_markup(chunk['text'])
+                    clean_text = converter.strip_xml_tags(clean_text)
+                    if not clean_text.strip():
+                        skipped += 1
+                        continue
+
+                    timestamp = int(time.time() * 1000)
+                    safe = _safe_filename_part(chapter['title'])
+                    audio_filename = f"{safe}_chunk{chunk['id']}_{timestamp}.wav"
+                    audio_path = os.path.join(audio_dir, audio_filename)
+
+                    preview = clean_text[:40].replace('\n', ' ')
+                    print(f"[GEN] {chapter['title'][:25]} c{chunk['id']}: "
+                          f"\"{preview}…\" ({len(clean_text)}c)", flush=True)
+
+                    converter.generate_audio(
+                        clean_text,
+                        audio_path,
+                        audio_prompt_path=audio_prompt_path,
+                        language_id=language_id,
+                        exaggeration=exaggeration,
+                        cfg_weight=cfg_weight
+                    )
+
+                    audio_metadata = {
+                        'audio_file': audio_filename,
+                        'audio_url': f"/api/audio/{audio_filename}",
+                        'timestamp': timestamp,
+                        'language_id': language_id,
+                        'exaggeration': exaggeration,
+                        'cfg_weight': cfg_weight,
+                        'voice_sample': voice_sample,
+                        'text_preview': chunk['text'][:200],
+                        'input_text': chunk['text'],
+                        'is_best_take': True
+                    }
+                    if 'generated_audios' not in chunk:
+                        chunk['generated_audios'] = []
+                    # New take becomes best; demote any earlier takes.
+                    for t in chunk['generated_audios']:
+                        t['is_best_take'] = False
+                    chunk['generated_audios'].append(audio_metadata)
+                    chunk['dirty'] = False
+                    generated += 1
+                    print(f"      ✓ done c{chunk['id']}", flush=True)
+
+                except Exception as ce:
+                    errors += 1
+                    error_detail.append({
+                        'chapter': chapter.get('title'),
+                        'chunk_id': chunk.get('id'),
+                        'error': str(ce)
+                    })
+                    print(f"✗ Error chunk {chunk.get('id')}: {ce}")
+
+        project_file = os.path.join(converter.current_project_path, 'project.json')
+        converter.current_project_metadata['last_modified'] = datetime.now().isoformat()
+        with open(project_file, 'w', encoding='utf-8') as f:
+            json.dump(converter.current_project_metadata, f, indent=2, ensure_ascii=False)
+
+        print(f"=== Book generation done: {generated} generated, "
+              f"{skipped} skipped, {errors} errors ===")
+
+        return jsonify({
+            'success': True,
+            'generated': generated,
+            'skipped': skipped,
+            'errors': errors,
+            'error_detail': error_detail[:20],
+        })
+    except Exception as e:
+        import traceback
         print(traceback.format_exc())
         return jsonify({'error': str(e)}), 500
 
@@ -5106,13 +5547,18 @@ def generate_all_chapter_chunks():
         print(f"Total chunks to generate: {len(chunks)}")
         print(f"Parameters - Language: {language_id}, Exaggeration: {exaggeration}, CFG Weight: {cfg_weight}")
 
-        # Voice sample path
-        audio_prompt_path = None
-        if voice_sample and voice_sample != 'none':
-            audio_prompt_path = os.path.join(converter.voice_samples_dir, voice_sample)
-            if not os.path.exists(audio_prompt_path):
-                print(f"Warning: Voice sample not found: {audio_prompt_path}")
-                audio_prompt_path = None
+        # Resolve voice sample — never fall back to the Chatterbox default voice.
+        audio_prompt_path = resolve_voice_sample_path(voice_sample)
+        if audio_prompt_path is None:
+            audio_prompt_path = resolve_voice_sample_path(getattr(config, 'DEFAULT_VOICE', None))
+        if audio_prompt_path is None:
+            return jsonify({
+                'error': 'No usable voice sample found. Refusing to generate with the '
+                         'Chatterbox default voice. Set a project voice or configure DEFAULT_VOICE.',
+                'requested_voice': voice_sample,
+            }), 400
+        voice_sample = os.path.basename(audio_prompt_path)
+        print(f"Voice: {voice_sample} → {audio_prompt_path}")
 
         audio_dir = os.path.join(converter.current_project_path, 'audio')
         os.makedirs(audio_dir, exist_ok=True)
@@ -5136,7 +5582,7 @@ def generate_all_chapter_chunks():
 
                 # Generate filename
                 timestamp = int(time.time() * 1000)
-                chapter_title_safe = chapter['title'].replace(' ', '_').replace('/', '_')[:30]
+                chapter_title_safe = _safe_filename_part(chapter['title'])
                 audio_filename = f"{chapter_title_safe}_chunk{chunk['id']}_{timestamp}.wav"
                 audio_path = os.path.join(audio_dir, audio_filename)
 
@@ -5163,12 +5609,14 @@ def generate_all_chapter_chunks():
                 # Create metadata
                 audio_metadata = {
                     'audio_file': audio_filename,
+                    'audio_url': f"/api/audio/{audio_filename}",
                     'timestamp': timestamp,
                     'language_id': language_id,
                     'exaggeration': exaggeration,
                     'cfg_weight': cfg_weight,
                     'voice_sample': voice_sample,
                     'text_preview': chunk['text'][:200],
+                    'input_text': chunk['text'],
                     'is_best_take': len(chunk.get('generated_audios', [])) == 0  # First generation is best take
                 }
 
@@ -5228,52 +5676,49 @@ def get_recent_projects():
         import os
         from datetime import datetime
 
-        # Get all project directories from the default projects folder
-        projects_dir = config.DEFAULT_PROJECT_DIR
-        if not os.path.exists(projects_dir):
-            return jsonify([])
-
         recent_projects = []
+        seen_paths = set()
 
-        # Scan for all subdirectories
-        for item in os.listdir(projects_dir):
-            project_path = os.path.join(projects_dir, item)
-
-            # Only include directories
-            if not os.path.isdir(project_path):
-                continue
-
+        def add_project(project_path, include_without_json):
+            """Append a project entry for project_path if it qualifies."""
+            abs_path = os.path.abspath(project_path)
+            if abs_path in seen_paths or not os.path.isdir(project_path):
+                return
+            item = os.path.basename(project_path.rstrip('/\\'))
             project_file = os.path.join(project_path, 'project.json')
-
-            # Try to read project.json if it exists
             if os.path.exists(project_file):
+                seen_paths.add(abs_path)
                 try:
                     with open(project_file, 'r', encoding='utf-8', errors='replace') as f:
                         project_data = json.load(f)
-
                     recent_projects.append({
                         'name': project_data.get('name', item),
-                        'path': os.path.abspath(project_path),  # Return absolute path
+                        'path': abs_path,
                         'last_modified': project_data.get('last_modified', ''),
                         'created_at': project_data.get('created_at', '')
                     })
                 except Exception as e:
                     print(f"Error reading project {project_path}: {e}")
-                    # Still include the directory even if project.json is invalid
                     recent_projects.append({
-                        'name': item,
-                        'path': os.path.abspath(project_path),
-                        'last_modified': '',
-                        'created_at': ''
+                        'name': item, 'path': abs_path, 'last_modified': '', 'created_at': ''
                     })
-            else:
-                # Include directory even without project.json
+            elif include_without_json:
+                seen_paths.add(abs_path)
                 recent_projects.append({
-                    'name': item,
-                    'path': os.path.abspath(project_path),
-                    'last_modified': '',
-                    'created_at': ''
+                    'name': item, 'path': abs_path, 'last_modified': '', 'created_at': ''
                 })
+
+        # Default projects folder: list every subdirectory.
+        projects_dir = config.DEFAULT_PROJECT_DIR
+        if os.path.exists(projects_dir):
+            for item in os.listdir(projects_dir):
+                add_project(os.path.join(projects_dir, item), include_without_json=True)
+
+        # Rewriter books folder: only include folders already imported (have project.json).
+        rewriter_dir = getattr(config, 'REWRITER_BOOKS_DIR', None)
+        if rewriter_dir and os.path.isdir(rewriter_dir):
+            for item in os.listdir(rewriter_dir):
+                add_project(os.path.join(rewriter_dir, item), include_without_json=False)
 
         # Sort by last_modified (most recent first), then by name
         recent_projects.sort(key=lambda x: (x.get('last_modified', ''), x.get('name', '')), reverse=True)

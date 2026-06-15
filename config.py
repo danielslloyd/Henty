@@ -36,6 +36,14 @@ class ServerConfig:
         self.COMMON_FILES_DIR = os.getenv('COMMON_FILES_DIR', 'common_files')
         self.DEFAULT_PROJECT_DIR = os.getenv('DEFAULT_PROJECT_DIR', 'projects')
 
+        # Rewriter integration: folder whose subfolders each contain a book.json
+        # produced by the Rewriter project. Importing a book makes that subfolder
+        # the Henty project directory (audio/project.json saved alongside book.json).
+        self.REWRITER_BOOKS_DIR = os.getenv(
+            'REWRITER_BOOKS_DIR',
+            r'C:\Users\danie\OneDrive\Documents\Claude\Projects\Rewriter\books'
+        )
+
         # Default Gutenberg URL
         self.DEFAULT_GUTENBERG_URL = os.getenv('DEFAULT_GUTENBERG_URL', 'https://www.gutenberg.org/cache/epub/4932/pg4932.txt')
 
@@ -78,7 +86,8 @@ class ServerConfig:
             'common_files_dir': self.COMMON_FILES_DIR,
             'default_gutenberg_url': self.DEFAULT_GUTENBERG_URL,
             'default_voice': self.DEFAULT_VOICE,
-            'default_tts_model': self.DEFAULT_TTS_MODEL
+            'default_tts_model': self.DEFAULT_TTS_MODEL,
+            'rewriter_books_dir': self.REWRITER_BOOKS_DIR
         }
 
     @staticmethod

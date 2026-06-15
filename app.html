@@ -1818,6 +1818,7 @@
                         Play All
                     </button>
                     <button class="pane-btn" onclick="ttsTab.generateAllChunks()">Generate All</button>
+                    <button class="pane-btn" onclick="ttsTab.generateEntireBook()" title="Generate audio for every chunk in every chapter using default settings (skips chunks that already have a take)">Generate Entire Book</button>
                     <button class="pane-btn" onclick="ttsTab.stitchBestTakes()">Stitch Best Takes</button>
                     <button class="pane-btn" onclick="ttsTab.refreshChapters()">Refresh</button>
                 </div>
@@ -1875,9 +1876,13 @@
                             <input type="radio" name="textSourceType" value="url" checked onchange="toggleTextSourceInput()" style="margin-right: 8px; width: auto;">
                             Gutenberg URL
                         </label>
-                        <label style="display: inline-flex; align-items: center; font-weight: normal; cursor: pointer;">
+                        <label style="display: inline-flex; align-items: center; margin-right: 20px; font-weight: normal; cursor: pointer;">
                             <input type="radio" name="textSourceType" value="file" onchange="toggleTextSourceInput()" style="margin-right: 8px; width: auto;">
                             Upload Text File
+                        </label>
+                        <label style="display: inline-flex; align-items: center; font-weight: normal; cursor: pointer;">
+                            <input type="radio" name="textSourceType" value="rewriter" onchange="toggleTextSourceInput()" style="margin-right: 8px; width: auto;">
+                            Rewriter Book
                         </label>
                     </div>
                     <div id="urlSourceInput">
@@ -1885,6 +1890,23 @@
                     </div>
                     <div id="fileSourceInput" style="display: none;">
                         <input type="file" id="textFile" accept=".txt,.html,.htm" style="padding: 8px;">
+                    </div>
+                    <div id="rewriterSourceInput" style="display: none;">
+                        <select id="rewriterBookSelect" style="width: 100%; padding: 8px; margin-bottom: 10px;">
+                            <option value="">Loading books…</option>
+                        </select>
+                        <div style="margin-bottom: 6px; font-size: 13px; color: #555;">Text to speak:</div>
+                        <div>
+                            <label style="display: inline-flex; align-items: center; margin-right: 20px; font-weight: normal; cursor: pointer;">
+                                <input type="radio" name="rewriterVariant" value="original" checked style="margin-right: 8px; width: auto;">
+                                Original
+                            </label>
+                            <label style="display: inline-flex; align-items: center; font-weight: normal; cursor: pointer;">
+                                <input type="radio" name="rewriterVariant" value="rewrite" style="margin-right: 8px; width: auto;">
+                                Rewritten
+                            </label>
+                        </div>
+                        <div id="rewriterBooksDir" style="font-size: 11px; color: #94a3b8; margin-top: 8px;"></div>
                     </div>
                 </div>
                 <div class="error-message" id="newProjectError"></div>
@@ -2233,13 +2255,56 @@
             const sourceType = document.querySelector('input[name="textSourceType"]:checked').value;
             const urlInput = document.getElementById('urlSourceInput');
             const fileInput = document.getElementById('fileSourceInput');
+            const rewriterInput = document.getElementById('rewriterSourceInput');
+            const nameInput = document.getElementById('newProjectName');
 
-            if (sourceType === 'url') {
-                urlInput.style.display = 'block';
-                fileInput.style.display = 'none';
-            } else {
-                urlInput.style.display = 'none';
-                fileInput.style.display = 'block';
+            urlInput.style.display = sourceType === 'url' ? 'block' : 'none';
+            fileInput.style.display = sourceType === 'file' ? 'block' : 'none';
+            rewriterInput.style.display = sourceType === 'rewriter' ? 'block' : 'none';
+
+            // Project name is derived from the chosen book for Rewriter imports.
+            if (nameInput) nameInput.required = (sourceType !== 'rewriter');
+
+            if (sourceType === 'rewriter') {
+                loadRewriterBooks();
+            }
+        }
+
+        let rewriterBooksCache = [];
+        async function loadRewriterBooks() {
+            const select = document.getElementById('rewriterBookSelect');
+            const dirLabel = document.getElementById('rewriterBooksDir');
+            try {
+                const response = await fetch(`${SERVER_URL}/api/rewriter/books`, {
+                    headers: { 'X-API-Key': API_KEY }
+                });
+                if (!response.ok) throw new Error(`Server error ${response.status}`);
+                const data = await response.json();
+                rewriterBooksCache = data.books || [];
+                if (dirLabel) dirLabel.textContent = data.books_dir ? `From: ${data.books_dir}` : '';
+
+                if (rewriterBooksCache.length === 0) {
+                    select.innerHTML = '<option value="">No books found</option>';
+                    return;
+                }
+                select.innerHTML = rewriterBooksCache.map(b =>
+                    `<option value="${b.folder}">${b.title} (${b.block_count} blocks)${b.has_project ? ' — has project' : ''}</option>`
+                ).join('');
+                syncRewriterName();
+                select.onchange = syncRewriterName;
+            } catch (err) {
+                console.error('[REWRITER] Failed to load books:', err);
+                select.innerHTML = '<option value="">Error loading books</option>';
+                if (dirLabel) dirLabel.textContent = err.message;
+            }
+        }
+
+        function syncRewriterName() {
+            const select = document.getElementById('rewriterBookSelect');
+            const nameInput = document.getElementById('newProjectName');
+            const book = rewriterBooksCache.find(b => b.folder === select.value);
+            if (book && nameInput && !nameInput.value.trim()) {
+                nameInput.value = book.title;
             }
         }
 
@@ -2281,6 +2346,13 @@
             console.log('[CREATE PROJECT] Source Type:', sourceType);
 
             errorDiv.textContent = '';
+
+            // Rewriter Book import: separate flow — the book's folder becomes the
+            // project directory, chapters are built server-side from book.json.
+            if (sourceType === 'rewriter') {
+                await importRewriterBook(errorDiv);
+                return;
+            }
 
             if (!name) {
                 errorDiv.textContent = 'Please enter a project name';
@@ -2392,6 +2464,46 @@
                 console.error('[CREATE PROJECT] ✗ Exception:', error);
                 console.log('━━━ [CREATE PROJECT] END (EXCEPTION) ━━━');
                 errorDiv.textContent = 'Error creating project: ' + error.message;
+            }
+        }
+
+        async function importRewriterBook(errorDiv) {
+            const select = document.getElementById('rewriterBookSelect');
+            const folder = select.value;
+            if (!folder) {
+                errorDiv.textContent = 'Please select a Rewriter book';
+                return;
+            }
+            const variant = document.querySelector('input[name="rewriterVariant"]:checked').value;
+            console.log('[REWRITER IMPORT] folder:', folder, 'variant:', variant);
+
+            try {
+                showLoading('Importing Rewriter book...', 'Building chapters from book.json...');
+                const response = await fetch(`${SERVER_URL}/api/project/import-rewriter`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json', 'X-API-Key': API_KEY },
+                    body: JSON.stringify({ folder, variant })
+                });
+
+                if (!response.ok) {
+                    hideLoading();
+                    const err = await response.json().catch(() => ({}));
+                    errorDiv.textContent = err.error || `Failed to import (status ${response.status})`;
+                    return;
+                }
+
+                const result = await response.json();
+                console.log('[REWRITER IMPORT] ✓', result);
+                closeNewProjectModal();
+                updateLoadingDetail('Loading project...');
+                await loadProjectsDropdown();
+                await switchToProject(result.project_path);
+                hideLoading();
+                showToast(`Imported "${result.title}" — ${result.chapter_count} chapters, ${result.chunk_count} chunks`, 'success');
+            } catch (error) {
+                hideLoading();
+                console.error('[REWRITER IMPORT] Exception:', error);
+                errorDiv.textContent = 'Error importing book: ' + error.message;
             }
         }
 
