@@ -36,11 +36,11 @@ class ServerConfig:
         self.COMMON_FILES_DIR = os.getenv('COMMON_FILES_DIR', 'common_files')
         self.DEFAULT_PROJECT_DIR = os.getenv('DEFAULT_PROJECT_DIR', 'projects')
 
-        # Rewriter integration: folder whose subfolders each contain a book.json
-        # produced by the Rewriter project. Importing a book makes that subfolder
+        # Books source: a folder whose subfolders each contain a book.json produced
+        # upstream (by Claude Cowork / Rewriter). Importing a book makes that subfolder
         # the Henty project directory (audio/project.json saved alongside book.json).
-        self.REWRITER_BOOKS_DIR = os.getenv(
-            'REWRITER_BOOKS_DIR',
+        self.BOOKS_DIR = os.getenv(
+            'BOOKS_DIR',
             r'C:\Users\danie\OneDrive\Documents\Claude\Projects\Rewriter\books'
         )
 
@@ -55,7 +55,7 @@ class ServerConfig:
 
         # Generation settings
         self.MAX_PARALLEL_GENERATIONS = int(os.getenv('MAX_PARALLEL_GENERATIONS', '3'))
-        self.DEVICE_PREFERENCE = os.getenv('DEVICE_PREFERENCE', 'auto')  # auto, cuda, cpu
+        # GPU-only: the server requires CUDA and will refuse to start without it.
         self.DEFAULT_TTS_MODEL = os.getenv('DEFAULT_TTS_MODEL', 'chatterbox')  # chatterbox or chatterbox_turbo
 
         # Initialize API key if needed
@@ -87,7 +87,7 @@ class ServerConfig:
             'default_gutenberg_url': self.DEFAULT_GUTENBERG_URL,
             'default_voice': self.DEFAULT_VOICE,
             'default_tts_model': self.DEFAULT_TTS_MODEL,
-            'rewriter_books_dir': self.REWRITER_BOOKS_DIR
+            'books_dir': self.BOOKS_DIR
         }
 
     @staticmethod

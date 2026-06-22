@@ -3,2604 +3,665 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Henty - Audiobook Creator</title>
+    <title>Henty — Audiobook Creator</title>
     <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🎤</text></svg>">
     <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght@300;400;500" rel="stylesheet">
     <style>
-        .material-symbols-outlined {
-            font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 20;
-            font-size: 18px;
-            vertical-align: middle;
-        }
-
-    <style>
-        * {
-            margin: 0;
-            padding: 0;
-            box-sizing: border-box;
-        }
-
+        .material-symbols-outlined { font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 20; font-size: 18px; vertical-align: middle; }
+        * { margin: 0; padding: 0; box-sizing: border-box; }
         body {
             font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
-            background: #f5f7fa;
-            height: 100vh;
-            display: flex;
-            flex-direction: column;
-            overflow: hidden;
+            background: #f5f7fa; height: 100vh; display: flex; flex-direction: column; overflow: hidden; color: #1e293b;
         }
 
         /* Header */
-        .app-header {
-            background: white;
-            padding: 10px 20px;
-            box-shadow: 0 1px 3px rgba(0,0,0,0.06);
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            flex-shrink: 0;
-        }
-
-        .app-header h1 {
-            font-size: 1.2em;
-            color: #1e293b;
-            display: flex;
-            align-items: center;
-            gap: 8px;
-        }
-
-        .header-btn {
-            padding: 8px 16px;
-            background: #475569;
-            border: none;
-            border-radius: 6px;
-            color: white;
-            font-size: 13px;
-            cursor: pointer;
-            transition: background 0.2s;
-        }
-
-        .header-btn:hover {
-            background: #334155;
-        }
-
-        /* Header Layout */
-        .header-left {
-            display: flex;
-            align-items: center;
-            gap: 16px;
-        }
-
-        .header-right {
-            display: flex;
-            align-items: center;
-            gap: 12px;
-        }
-
-        /* Project Dropdown */
-        .project-dropdown {
-            padding: 8px 16px;
-            background: white;
-            border: 1px solid #cbd5e1;
-            border-radius: 6px;
-            color: #1e293b;
-            font-size: 14px;
-            font-weight: 500;
-            cursor: pointer;
-            transition: all 0.2s;
-            min-width: 250px;
-        }
-
-        .project-dropdown:hover {
-            border-color: #94a3b8;
-        }
-
-        .project-dropdown:focus {
-            outline: none;
-            border-color: #3b82f6;
-            box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
-        }
-
-        /* Main Content Wrapper */
-        .main-content {
-            display: flex;
-            flex-direction: column;
-            flex: 1;
-            overflow: hidden;
-        }
-
-        .main-content.hidden {
-            display: none;
-        }
-
-        /* Project Selection Prompt */
-        .project-prompt {
-            flex: 1;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            flex-direction: column;
-            gap: 16px;
-            color: #64748b;
-        }
-
-        .project-prompt .icon {
-            font-size: 64px;
-            opacity: 0.5;
-        }
-
-        .project-prompt h2 {
-            font-size: 1.5em;
-            color: #475569;
-        }
-
-        .project-prompt p {
-            font-size: 1em;
-            max-width: 400px;
-            text-align: center;
-            line-height: 1.6;
-        }
-
-        /* Modal styles */
-        .modal {
-            display: none;
-            position: fixed;
-            top: 0;
-            left: 0;
-            width: 100%;
-            height: 100%;
-            background: rgba(0,0,0,0.6);
-            align-items: center;
-            justify-content: center;
-            z-index: 1000;
-        }
-
-        .modal.active {
-            display: flex;
-        }
-
-        .modal-content {
-            background: white;
-            border-radius: 20px;
-            padding: 40px;
-            max-width: 500px;
-            width: 90%;
-            box-shadow: 0 20px 60px rgba(0,0,0,0.5);
-        }
-
-        .modal-content h2 {
-            margin-bottom: 20px;
-            color: #333;
-        }
-
-        .form-group {
-            margin-bottom: 20px;
-        }
-
-        .form-group label {
-            display: block;
-            margin-bottom: 8px;
-            color: #333;
-            font-weight: 600;
-        }
-
-        .form-group input,
-        .form-group select {
-            width: 100%;
-            padding: 12px;
-            border: 2px solid #e0e0e0;
-            border-radius: 8px;
-            font-size: 14px;
-            transition: border-color 0.3s;
-        }
-
-        .form-group input:focus {
-            outline: none;
-            border-color: #667eea;
-        }
-
-        .btn-container {
-            display: flex;
-            gap: 10px;
-            margin-top: 30px;
-        }
-
-        .btn {
-            flex: 1;
-            padding: 12px 24px;
-            border: none;
-            border-radius: 8px;
-            font-size: 16px;
-            font-weight: 600;
-            cursor: pointer;
-            transition: all 0.3s;
-        }
-
-        .btn-primary {
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            color: white;
-        }
-
-        .btn-primary:hover {
-            transform: translateY(-2px);
-            box-shadow: 0 5px 15px rgba(102, 126, 234, 0.4);
-        }
-
-        .btn-secondary {
-            background: #f0f0f0;
-            color: #666;
-        }
-
-        .btn-secondary:hover {
-            background: #e0e0e0;
-        }
-
-        .error-message {
-            color: #e74c3c;
-            margin-top: 10px;
-            font-size: 14px;
-        }
-
-        /* Pane Toggles */
-        .pane-toggles {
-            background: white;
-            padding: 10px 20px;
-            display: flex;
-            gap: 20px;
-            align-items: center;
-            box-shadow: 0 1px 2px rgba(0,0,0,0.04);
-            flex-shrink: 0;
-        }
-
-        .toggle-group {
-            display: flex;
-            gap: 15px;
-            flex-wrap: wrap;
-        }
-
-        .toggle-item {
-            display: flex;
-            align-items: center;
-            gap: 8px;
-            cursor: pointer;
-        }
-
-        .toggle-item input[type="checkbox"] {
-            width: 18px;
-            height: 18px;
-            cursor: pointer;
-        }
-
-        .toggle-item label {
-            cursor: pointer;
-            font-size: 14px;
-            font-weight: 500;
-            color: #333;
-            display: flex;
-            align-items: center;
-            gap: 4px;
-        }
-
-        .sync-toggle {
-            margin-left: auto;
-            padding: 8px 15px;
-            background: #f1f5f9;
-            border-radius: 6px;
-            display: flex;
-            align-items: center;
-            gap: 8px;
-            cursor: pointer;
-        }
-
-        .sync-toggle label {
-            cursor: pointer;
-            display: flex;
-            align-items: center;
-            gap: 4px;
-        }
-
-        .sync-toggle.active {
-            background: #3b82f6;
-            color: white;
-        }
-
-        /* Panes Container */
-        .panes-container {
-            flex: 1;
-            display: grid;
-            gap: 10px;
-            padding: 10px;
-            overflow: hidden;
-            min-height: 0;
-        }
-
-        /* Dynamic grid based on visible panes */
-        .panes-container.panes-1 { grid-template-columns: 1fr; }
-        .panes-container.panes-2 { grid-template-columns: 1fr 1fr; }
-        .panes-container.panes-3 { grid-template-columns: 1fr 1fr 1fr; }
-        .panes-container.panes-4 { grid-template-columns: 1fr 1fr; grid-template-rows: 1fr 1fr; }
-        .panes-container.panes-5 { grid-template-columns: 1fr 1fr 1fr; grid-template-rows: 1fr 1fr; }
-
-        /* Pane */
-        .pane {
-            background: white;
-            border-radius: 10px;
-            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
-            display: flex;
-            flex-direction: column;
-            overflow: hidden;
-        }
-
-        .pane.hidden {
-            display: none;
-        }
-
-        .pane-header {
-            padding: 15px 20px;
-            border-bottom: 2px solid #f0f0f0;
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            background: #f8f9fa;
-        }
-
-        .pane-header h2 {
-            font-size: 1.1em;
-            color: #333;
-        }
-
-        .pane-actions {
-            display: flex;
-            gap: 8px;
-            flex-wrap: wrap;
-        }
-
-        .pane-btn {
-            padding: 6px 12px;
-            background: #3b82f6;
-            border: none;
-            border-radius: 4px;
-            color: white;
-            font-size: 12px;
-            cursor: pointer;
-            transition: background 0.2s;
-        }
-
-        .pane-btn:hover {
-            background: #2563eb;
-        }
-
-        .xml-btn {
-            padding: 4px 10px;
-            background: #64748b;
-            border: none;
-            border-radius: 4px;
-            color: white;
-            font-size: 11px;
-            cursor: pointer;
-            margin-left: 6px;
-            transition: background 0.2s;
-        }
-
-        .xml-btn:hover {
-            background: #475569;
-        }
-
-        .pane-content {
-            flex: 1;
-            overflow: auto;
-            padding: 20px;
-        }
-
-        /* Text Display */
-        .text-display {
-            font-family: Georgia, serif;
-            font-size: 15px;
-            line-height: 1.8;
-            color: #333;
-            white-space: pre-wrap;
-            height: 100%;
-        }
-
-        .text-display.selectable {
-            cursor: text;
-            user-select: text;
-        }
-
-        /* XML Editor - Plain text display */
-        .xml-editor {
-            width: 100%;
-            height: 100%;
-            border: none;
-            font-family: 'SF Mono', 'Monaco', 'Menlo', 'Consolas', monospace;
-            font-size: 13px;
-            line-height: 1.5;
-            resize: none;
-            background: #fafafa;
-            color: #333;
-            padding: 15px;
-            overflow-y: auto;
-            white-space: pre-wrap;
-            word-wrap: break-word;
-        }
-
-        .xml-editor .xml-empty-state {
-            color: #94a3b8;
-            text-align: center;
-            padding: 40px;
-            font-style: italic;
-        }
-
-        /* Placeholder for contenteditable */
-        .xml-editor:empty:before {
-            content: attr(data-placeholder);
-            color: #999;
-            font-style: italic;
-        }
-
-        .xml-tips {
-            margin-bottom: 10px;
-            padding: 8px;
-            background: #f8f9fa;
-            border-radius: 4px;
-            font-size: 12px;
-            color: #666;
-        }
-
-        /* ─── Structure Editor (stage-1) ─────────────────────────────── */
-
-        /* Boilerplate delete block */
-        .se-delete-block {
-            background: #fee2e2;
-            border: 1px solid #fca5a5;
-            border-radius: 6px;
-            margin: 8px 0;
-            overflow: hidden;
-        }
-        .se-delete-block.se-delete-kept {
-            background: #f1f5f9;
-            border-color: #cbd5e1;
-            opacity: 0.7;
-        }
-        .se-delete-header {
-            display: flex;
-            align-items: center;
-            gap: 8px;
-            padding: 5px 10px;
-            background: rgba(0,0,0,0.04);
-        }
-        .se-delete-badge {
-            font-size: 10px;
-            font-weight: 700;
-            letter-spacing: .05em;
-            background: #dc2626;
-            color: white;
-            padding: 1px 6px;
-            border-radius: 4px;
-        }
-        .se-delete-kept .se-delete-badge {
-            background: #94a3b8;
-        }
-        .se-delete-toggle {
-            font-size: 11px;
-            padding: 2px 8px;
-            border: 1px solid #dc2626;
-            border-radius: 4px;
-            background: white;
-            color: #dc2626;
-            cursor: pointer;
-        }
-        .se-delete-kept .se-delete-toggle {
-            border-color: #64748b;
-            color: #64748b;
-        }
-        .se-delete-content {
-            font-family: monospace;
-            font-size: 11px;
-            color: #7f1d1d;
-            padding: 6px 12px;
-            margin: 0;
-            max-height: 120px;
-            overflow: hidden;
-            white-space: pre-wrap;
-            word-break: break-word;
-        }
-        .se-delete-kept .se-delete-content {
-            color: #64748b;
-        }
-
-        /* Chapter marker bar */
-        .se-chapter-marker {
-            display: flex;
-            align-items: center;
-            gap: 6px;
-            background: #dbeafe;
-            border: 1px solid #93c5fd;
-            border-radius: 6px;
-            padding: 5px 10px;
-            margin: 4px 0;
-            cursor: default;
-            user-select: none;
-        }
-        .se-drag-handle {
-            cursor: grab;
-            font-size: 16px;
-            color: #3b82f6;
-            flex-shrink: 0;
-            padding: 0 4px;
-        }
-        .se-drag-handle:active { cursor: grabbing; }
-        .se-chapter-title-input {
-            flex: 1;
-            border: 1px solid #93c5fd;
-            border-radius: 4px;
-            padding: 3px 8px;
-            font-size: 13px;
-            font-weight: 600;
-            color: #1e40af;
-            background: white;
-            min-width: 0;
-        }
-        .se-chapter-remove {
-            flex-shrink: 0;
-            background: none;
-            border: none;
-            color: #93c5fd;
-            font-size: 18px;
-            line-height: 1;
-            cursor: pointer;
-            padding: 0 4px;
-        }
-        .se-chapter-remove:hover { color: #dc2626; }
-
-        /* Text paragraphs */
-        .se-text-block { margin: 0; }
-        .se-short-block {
-            background: #fffbeb;
-            border-left: 3px solid #f59e0b;
-            padding-left: 8px;
-            border-radius: 0 4px 4px 0;
-            margin: 2px 0;
-        }
-        .se-short-badge {
-            display: inline-block;
-            font-size: 9px;
-            font-weight: 700;
-            text-transform: uppercase;
-            letter-spacing: .05em;
-            color: #92400e;
-            background: #fde68a;
-            border-radius: 4px;
-            padding: 1px 5px;
-            margin-bottom: 3px;
-            cursor: help;
-        }
-        .se-paragraph {
-            margin: 0;
-            padding: 3px 0;
-            line-height: 1.7;
-            color: #1e293b;
-        }
-
-        /* Drop zones */
-        .se-drop-zone {
-            height: 6px;
-            margin: 1px 0;
-            border-radius: 3px;
-            transition: height 0.1s, background 0.1s;
-        }
-        .se-dragging .se-drop-zone { height: 12px; cursor: copy; }
-        .se-drop-zone-active {
-            background: #3b82f6 !important;
-            height: 4px !important;
-            border-radius: 2px;
-        }
-        /* Add chapter affordance on hover between paragraphs */
-        .se-drop-zone:hover::after {
-            content: '+ chapter break';
-            display: block;
-            text-align: center;
-            font-size: 10px;
-            color: #93c5fd;
-            line-height: 12px;
-            cursor: pointer;
-        }
-        .se-drop-zone:hover { height: 16px; cursor: pointer; }
-
-        /* Drag ghost */
-        .se-drag-ghost {
-            position: fixed;
-            pointer-events: none;
-            background: #1e40af;
-            color: white;
-            padding: 4px 10px;
-            border-radius: 6px;
-            font-size: 12px;
-            font-weight: 600;
-            z-index: 9999;
-            white-space: nowrap;
-            box-shadow: 0 4px 12px rgba(0,0,0,.3);
-        }
-
-        /* TTS Pane */
-        .chapter-selector {
-            margin-bottom: 15px;
-        }
-
-        .chapter-selector select {
-            width: 100%;
-            padding: 10px;
-            border: 1px solid #ddd;
-            border-radius: 6px;
-            font-size: 14px;
-        }
-
-        .chunk-list {
-            display: flex;
-            flex-direction: column;
-            gap: 10px;
-        }
-
-        .chunk-item {
-            background: #f8f9fa;
-            border: 1px solid #e0e0e0;
-            border-radius: 6px;
-            padding: 12px;
-        }
-
-        .chunk-item.highlighted {
-            background: #fff3cd;
-            border-color: #ffc107;
-        }
-
-        .chunk-text {
-            font-size: 13px;
-            color: #555;
-            margin-bottom: 10px;
-            line-height: 1.4;
-        }
-
-        .chunk-actions {
-            display: flex;
-            gap: 8px;
-        }
-
-        .chunk-btn {
-            padding: 6px 12px;
-            background: #3b82f6;
-            border: none;
-            border-radius: 4px;
-            color: white;
-            font-size: 12px;
-            cursor: pointer;
-        }
-
-        .chunk-btn:hover {
-            background: #2563eb;
-        }
-
-        /* Reader Pane */
-        .reader-controls {
-            margin-bottom: 15px;
-            padding: 15px;
-            background: #f8f9fa;
-            border-radius: 6px;
-        }
-
-        .play-btn {
-            padding: 12px 24px;
-            background: #3b82f6;
-            border: none;
-            border-radius: 6px;
-            color: white;
-            font-size: 14px;
-            cursor: pointer;
-            font-weight: 500;
-            display: flex;
-            align-items: center;
-            gap: 6px;
-        }
-
-        .play-btn:hover {
-            background: #2563eb;
-        }
-
-        .reader-content {
-            font-family: Georgia, serif;
-            font-size: 16px;
-            line-height: 1.8;
-            color: #333;
-        }
-
-        .reader-chapter {
-            margin-bottom: 30px;
-        }
-
-        .reader-chapter-title {
-            font-size: 1.3em;
-            font-weight: bold;
-            margin-bottom: 15px;
-            color: #1e293b;
-        }
-
-        .reader-chunk {
-            margin-bottom: 15px;
-            padding: 10px;
-            border-radius: 4px;
-            transition: background 0.3s;
-        }
-
-        .reader-chunk.playing {
-            background: #fff3cd;
-            border-left: 3px solid #ffc107;
-            padding-left: 15px;
-        }
-
-        /* Highlight Sync */
-        .highlighted {
-            background: rgba(251, 191, 36, 0.08) !important;
-            border-left-color: #fbbf24 !important;
-        }
-
-        /* Playing state for audio playback */
-        .chunk-text.playing {
-            background: #fff3cd !important;
-            box-shadow: 0 0 0 2px #ffc107;
-        }
-
-        /* TTS UI - Inline Chunk Text Display */
-        .chunk-text {
-            display: inline;
-            padding: 2px 6px;
-            margin: 0 1px;
-            border-radius: 4px;
-            background: transparent;
-            transition: all 0.15s ease;
-            cursor: pointer;
-            position: relative;
-        }
-
-        .chunk-text:hover {
-            background: rgba(59, 130, 246, 0.08);
-        }
-
-        .chunk-text.selected {
-            background: rgba(59, 130, 246, 0.12);
-        }
-
-        .chunk-text.has-audio {
-            background: rgba(16, 185, 129, 0.08);
-        }
-
-        .chunk-text.has-audio:hover {
-            background: rgba(16, 185, 129, 0.15);
-        }
-
-        .chunk-text.selected.has-audio {
-            background: rgba(59, 130, 246, 0.15);
-        }
-
-        .insert-chapter-break-btn {
-            display: inline-flex;
-            align-items: center;
-            background: none;
-            border: none;
-            color: #cbd5e1;
-            cursor: pointer;
-            padding: 0;
-            margin: 0 2px;
-            transition: color 0.15s;
-        }
-
-        .insert-chapter-break-btn:hover {
-            color: #3b82f6;
-        }
-
-        /* TTS UI - Chunk Take Rows */
-        .chunk-take-row {
-            border-bottom: 1px solid #f0f0f0;
-            border-left: 3px solid transparent;
-            transition: all 0.15s ease;
-        }
-
-        .chunk-take-row:hover {
-            background: #fafbfc;
-        }
-
-        .chunk-take-row.best-take {
-            background: rgba(59, 130, 246, 0.03);
-            border-left-color: #3b82f6;
-        }
-
-        .chunk-take-row.non-best-take {
-            background: rgba(100, 116, 139, 0.02);
-            border-left-color: #cbd5e1;
-        }
-
-        .chunk-take-row.no-takes {
-            background: rgba(241, 245, 249, 0.5);
-        }
-
-        .chunk-take-row.additional-take .chunk-left {
-            visibility: hidden;
-        }
-
-        .chunk-take-row.generating {
-            background: rgba(139, 92, 246, 0.03);
-            border-left-color: #8b5cf6;
-            animation: pulse 2s ease-in-out infinite;
-        }
-
-        .chunk-take-row.highlighted {
-            background: rgba(251, 191, 36, 0.08) !important;
-            border-left-color: #fbbf24 !important;
-        }
-
-        @keyframes pulse {
-            0%, 100% { opacity: 1; }
-            50% { opacity: 0.7; }
-        }
-
-        .chunk-take-row.generating-placeholder {
-            background: rgba(139, 92, 246, 0.05);
-            border-left-color: #8b5cf6;
-            opacity: 0.8;
-        }
-
-        .generating-text {
-            font-size: 12px;
-            color: #8b5cf6;
-            font-style: italic;
-            font-weight: 500;
-        }
-
-        .generating-model-badge {
-            display: inline-block;
-            font-style: normal;
-            font-size: 10px;
-            font-weight: 600;
-            padding: 1px 5px;
-            border-radius: 3px;
-            background: rgba(139, 92, 246, 0.15);
-            color: #7c3aed;
-            letter-spacing: 0.3px;
-            vertical-align: middle;
-        }
-
-        .take-model-value {
-            font-weight: 600;
-        }
-
-        .model-forced-badge {
-            font-size: 10px;
-            color: #9ca3af;
-            font-weight: 400;
-        }
-
-        /* Transcript/diff icon color only for mid/low similarity scores */
-        .take-icon.diff.diff-warn .material-symbols-outlined { color: #d97706; }
-        .take-icon.diff.diff-error .material-symbols-outlined { color: #dc2626; }
-
-        /* Progress bar for chunk generation */
-        .chunk-progress-bar {
-            position: absolute;
-            bottom: 0;
-            left: 0;
-            right: 0;
-            height: 3px;
-            background: rgba(59, 130, 246, 0.1);
-            overflow: hidden;
-        }
-
-        .chunk-progress-fill {
-            height: 100%;
-            background: linear-gradient(90deg, #3b82f6, #06b6d4);
-            transition: width 0.3s ease;
-            width: 0%;
-            position: relative;
-            overflow: hidden;
-        }
-
-        .chunk-progress-fill::after {
-            content: '';
-            position: absolute;
-            top: 0;
-            left: 0;
-            bottom: 0;
-            right: 0;
-            background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.3), transparent);
-            animation: shimmer 1.5s infinite;
-        }
-
-        @keyframes shimmer {
-            0% { transform: translateX(-100%); }
-            100% { transform: translateX(100%); }
-        }
-
-        @keyframes spin {
-            from { transform: rotate(0deg); }
-            to { transform: rotate(360deg); }
-        }
-
-        /* Error placeholder for failed chunk generation */
-        .chunk-error-placeholder {
-            position: absolute;
-            top: 50%;
-            left: 50%;
-            transform: translate(-50%, -50%);
-            display: flex;
-            align-items: center;
-            gap: 8px;
-            padding: 8px 16px;
-            background: rgba(239, 68, 68, 0.1);
-            border: 1px solid rgba(239, 68, 68, 0.3);
-            border-radius: 6px;
-            z-index: 10;
-        }
-
-        .chunk-error-placeholder .error-icon {
-            color: #ef4444;
-            font-size: 20px;
-            font-weight: bold;
-        }
-
-        .chunk-error-placeholder .error-text {
-            color: #dc2626;
-            font-size: 13px;
-            font-weight: 500;
-        }
-
-        .chunk-take-row {
-            position: relative;
-        }
-
-        .chunk-take-header {
-            display: flex;
-            align-items: center;
-            justify-content: space-between;
-            padding: 10px 16px;
-            cursor: pointer;
-        }
-
-        .chunk-left {
-            display: flex;
-            align-items: center;
-            gap: 8px;
-            flex: 1;
-            min-width: 0; /* Allow flex item to shrink below content size */
-            overflow: hidden; /* Prevent content from overflowing */
-        }
-
-        .chunk-preview-text {
-            font-size: 13px;
-            font-weight: normal;
-            color: #334155;
-            white-space: nowrap;
-            overflow: hidden;
-            text-overflow: ellipsis;
-            flex: 1; /* Allow text to take remaining space */
-            min-width: 0; /* Allow text to shrink */
-        }
-
-        /* Bold only for chunks with takes */
-        .chunk-take-row:not(.no-takes) .chunk-preview-text {
-            font-weight: 500;
-        }
-
-        .take-score-badge {
-            font-size: 11px;
-            font-weight: 600;
-            padding: 2px 6px;
-            border-radius: 10px;
-            flex-shrink: 0;
-            letter-spacing: 0.2px;
-        }
-
-        .take-score-badge.score-high {
-            background: rgba(16, 185, 129, 0.12);
-            color: #059669;
-        }
-
-        .take-score-badge.score-mid {
-            background: rgba(245, 158, 11, 0.12);
-            color: #d97706;
-        }
-
-        .take-score-badge.score-low {
-            background: rgba(239, 68, 68, 0.12);
-            color: #dc2626;
-        }
-
-        /* Flag badge on chunk preview row */
-        .chunk-flag-badge {
-            font-size: 11px;
-            font-weight: 700;
-            padding: 2px 7px;
-            border-radius: 10px;
-            background: rgba(239, 68, 68, 0.15);
-            color: #ef4444;
-            border: none;
-            cursor: pointer;
-            flex-shrink: 0;
-            white-space: nowrap;
-        }
-        .chunk-flag-badge:hover { background: rgba(239, 68, 68, 0.28); }
-
-        /* Flag panel (inline, below the take row) */
-        .chunk-flag-panel {
-            display: none;
-            background: rgba(239, 68, 68, 0.07);
-            border-top: 1px solid rgba(239, 68, 68, 0.18);
-            padding: 10px 16px;
-        }
-        .chunk-flag-panel.open { display: block; }
-        .flag-panel-row {
-            display: flex;
-            align-items: center;
-            gap: 10px;
-            padding: 5px 0;
-            border-bottom: 1px solid rgba(255,255,255,0.05);
-            font-size: 12px;
-        }
-        .flag-panel-row:last-child { border-bottom: none; }
-        .flag-panel-time {
-            color: #ef4444;
-            font-weight: 700;
-            min-width: 36px;
-            flex-shrink: 0;
-        }
-        .flag-panel-nick {
-            flex: 1;
-            color: #94a3b8;
-            overflow: hidden;
-            text-overflow: ellipsis;
-            white-space: nowrap;
-        }
-        .flag-panel-resolve {
-            font-size: 11px;
-            padding: 3px 10px;
-            background: none;
-            border: 1px solid rgba(148,163,184,0.3);
-            color: #94a3b8;
-            border-radius: 6px;
-            cursor: pointer;
-            flex-shrink: 0;
-        }
-        .flag-panel-resolve:hover { background: rgba(255,255,255,0.05); color: #e2e8f0; }
-
-        .chunk-icon {
-            background: none;
-            border: none;
-            color: #64748b;
-            cursor: pointer;
-            padding: 4px;
-            border-radius: 4px;
-            transition: all 0.15s;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-        }
-
-        .chunk-icon:hover {
-            background: rgba(100, 116, 139, 0.1);
-            color: #3b82f6;
-        }
-
-        .chunk-icon .material-symbols-outlined {
-            font-size: 18px;
-        }
-
-        .take-icons {
-            display: flex;
-            gap: 4px;
-            margin-left: auto;
-            opacity: 1;
-            transition: opacity 0.15s;
-            flex-shrink: 0; /* Prevent icons from being compressed */
-        }
-
-        .take-icon {
-            background: none;
-            border: none;
-            cursor: pointer;
-            padding: 6px;
-            color: #94a3b8;
-            transition: all 0.15s;
-            border-radius: 4px;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-        }
-
-        .take-icon:hover {
-            background: rgba(59, 130, 246, 0.08);
-            color: #3b82f6;
-        }
-
-        .take-icon.play:hover {
-            background: rgba(16, 185, 129, 0.08);
-            color: #10b981;
-        }
-
-        .take-icon.delete:hover {
-            background: rgba(239, 68, 68, 0.08);
-            color: #ef4444;
-        }
-
-        .take-icon.settings.expanded {
-            background: rgba(59, 130, 246, 0.08);
-            color: #3b82f6;
-        }
-
-        .take-icon.check-circle {
-            padding: 0;
-            margin-right: 4px;
-        }
-
-        .take-icon.check-circle.best {
-            color: #3b82f6;
-        }
-
-        .take-icon.check-circle:not(.best) {
-            color: #cbd5e1;
-        }
-
-        .take-icon.check-circle:not(.best):hover {
-            color: #94a3b8;
-        }
-
-        .take-icon.check-circle .material-symbols-outlined {
-            font-size: 20px;
-        }
-
-        /* Expandable Settings */
-        .take-settings {
-            display: none;
-            padding: 16px 16px 16px 32px;
-            background: #fafbfc;
-            border-top: 1px solid #f0f0f0;
-        }
-
-        .take-settings.expanded {
-            display: block;
-        }
-
-        .setting-row {
-            display: flex;
-            align-items: center;
-            gap: 12px;
-            margin-bottom: 12px;
-        }
-
-        .setting-row:last-child {
-            margin-bottom: 0;
-        }
-
-        .warning-row {
-            display: flex;
-            align-items: center;
-            gap: 8px;
-            padding: 8px;
-            background: #fef3c7;
-            border-radius: 4px;
-            border: 1px solid #fbbf24;
-            margin-top: 8px;
-        }
-
-        .warning-icon {
-            color: #f59e0b;
-            font-size: 16px;
-        }
-
-        .warning-text {
-            font-size: 11px;
-            color: #92400e;
-            font-weight: 500;
-        }
-
-        /* Outdated take indicators */
-        .chunk-take-row.outdated-take {
-            background: rgba(239, 68, 68, 0.05) !important;
-            border-left-color: #f87171 !important;
-        }
-
-        .outdated-icon {
-            color: #f87171;
-            font-size: 16px;
-            margin-right: 4px;
-        }
-
-        .outdated-warning {
-            background: #fee2e2 !important;
-            border-color: #fca5a5 !important;
-        }
-
-        .outdated-warning .warning-icon {
-            color: #ef4444;
-        }
-
-        .outdated-warning .warning-text {
-            color: #991b1b;
-        }
-
-        /* Transcription scoring */
-
-        /* Diff panel */
-        .take-diff {
-            display: none;
-            padding: 10px 16px 12px;
-            background: #f8fafc;
-            border-top: 1px solid #edf2f7;
-        }
-
-        .take-diff.expanded {
-            display: block;
-        }
-
-        .diff-panel-header {
-            display: flex;
-            align-items: center;
-            gap: 8px;
-            margin-bottom: 8px;
-        }
-
-        .diff-col-label {
-            font-size: 10px;
-            font-weight: 600;
-            text-transform: uppercase;
-            letter-spacing: 0.4px;
-            color: #94a3b8;
-            display: flex;
-            align-items: center;
-            gap: 5px;
-            white-space: nowrap;
-        }
-
-        .diff-divider {
-            flex: 1;
-            height: 1px;
-            background: #e2e8f0;
-        }
-
-        .diff-cols {
-            display: grid;
-            grid-template-columns: 1fr 1fr;
-            gap: 10px;
-        }
-
-        .diff-col {
-            font-size: 13px;
-            line-height: 1.65;
-            padding: 8px 10px;
-            background: white;
-            border-radius: 5px;
-            border: 1px solid #e2e8f0;
-            white-space: pre-wrap;
-            word-break: break-word;
-            max-height: 220px;
-            overflow-y: auto;
-        }
-
-        .diff-original {
-            color: #475569;
-        }
-
-        .diff-transcription {
-            color: #334155;
-        }
-
-        .diff-match {
-            color: #334155;
-        }
-
-        .diff-diff {
-            background: rgba(239, 68, 68, 0.13);
-            color: #b91c1c;
-            border-radius: 2px;
-            padding: 1px 2px;
-        }
-
-        .take-icon.diff.expanded {
-            background: rgba(99, 102, 241, 0.08);
-            color: #6366f1;
-        }
-
-        .take-icon.diff:disabled {
-            opacity: 0.3;
-            cursor: default;
-        }
-
-        .setting-label {
-            font-size: 11px;
-            color: #64748b;
-            min-width: 80px;
-            text-transform: uppercase;
-            letter-spacing: 0.3px;
-            font-weight: 500;
-        }
-
-        .setting-value {
-            font-size: 12px;
-            color: #475569;
-            font-weight: 500;
-        }
-
-        .setting-control {
-            flex: 1;
-            display: flex;
-            align-items: center;
-            gap: 8px;
-        }
-
-        .setting-control select,
-        .setting-control input[type="range"] {
-            flex: 1;
-            font-size: 12px;
-            padding: 6px 8px;
-            border: 1px solid #e0e0e0;
-            border-radius: 4px;
-        }
-
-        /* TTS Sections */
-        .tts-section {
-            margin-bottom: 30px;
-        }
-
-        .tts-section h3 {
-            font-size: 16px;
-            font-weight: 600;
-            color: #1e293b;
-            margin-bottom: 15px;
-            padding-bottom: 10px;
-            border-bottom: 2px solid #e2e8f0;
-        }
-
-        .chunks-text-container {
-            background: white;
-            border: 1px solid #e2e8f0;
-            border-radius: 8px;
-            padding: 20px;
-            font-family: Georgia, serif;
-            font-size: 15px;
-            line-height: 1.8;
-            color: #333;
-            max-height: 400px;
-            overflow-y: auto;
-        }
-
-        .all-takes-container {
-            background: white;
-            border: 1px solid #e2e8f0;
-            border-radius: 8px;
-            overflow: hidden;
-        }
-
-        /* Project Settings Box */
-        .project-settings-box {
-            margin-bottom: 20px;
-            border: 1px solid #e2e8f0;
-            border-radius: 8px;
-            background: white;
-            overflow: hidden;
-        }
-
-        .project-settings-header {
-            display: flex;
-            align-items: center;
-            padding: 12px 16px;
-            cursor: pointer;
-            background: #f8f9fa;
-            transition: background 0.15s;
-        }
-
-        .project-settings-header:hover {
-            background: #f0f1f3;
-        }
-
-        .project-settings-header .material-symbols-outlined {
-            font-size: 20px;
-            color: #64748b;
-            margin-right: 8px;
-        }
-
-        .project-settings-header span {
-            font-size: 13px;
-            font-weight: 500;
-            color: #475569;
-        }
-
-        .project-settings-content {
-            display: none;
-            padding: 16px;
-            background: white;
-            border-top: 1px solid #e2e8f0;
-        }
-
-        .project-settings-content.expanded {
-            display: block;
-        }
-
-        .project-settings-grid {
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-            gap: 16px;
-        }
-
-        .project-setting-item {
-            display: flex;
-            flex-direction: column;
-            gap: 6px;
-        }
-
-        .project-setting-label {
-            font-size: 12px;
-            font-weight: 500;
-            color: #64748b;
-            text-transform: uppercase;
-            letter-spacing: 0.3px;
-        }
-
-        .project-setting-control {
-            display: flex;
-            align-items: center;
-            gap: 8px;
-        }
-
-        .project-setting-control select,
-        .project-setting-control input[type="range"] {
-            flex: 1;
-            font-size: 13px;
-            padding: 8px;
-            border: 1px solid #e0e0e0;
-            border-radius: 4px;
-            background: white;
-        }
-
-        .project-setting-value {
-            font-size: 12px;
-            font-weight: 600;
-            color: #475569;
-            min-width: 30px;
-            text-align: center;
-        }
-
-        /* Toast Notifications */
-        #toastContainer {
-            position: fixed;
-            top: 20px;
-            right: 20px;
-            z-index: 9999;
-            display: flex;
-            flex-direction: column;
-            gap: 10px;
-            pointer-events: none;
-        }
-
-        .toast {
-            background: white;
-            border-radius: 8px;
-            padding: 16px 20px;
-            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
-            display: flex;
-            align-items: center;
-            gap: 12px;
-            min-width: 300px;
-            max-width: 400px;
-            pointer-events: auto;
-            animation: slideIn 0.3s ease-out;
-            border-left: 4px solid #3b82f6;
-        }
-
-        .toast.success {
-            border-left-color: #10b981;
-        }
-
-        .toast.error {
-            border-left-color: #ef4444;
-        }
-
-        .toast.warning {
-            border-left-color: #f59e0b;
-        }
-
-        .toast.info {
-            border-left-color: #3b82f6;
-        }
-
-        .toast-icon {
-            font-size: 24px;
-            flex-shrink: 0;
-        }
-
-        .toast.success .toast-icon {
-            color: #10b981;
-        }
-
-        .toast.error .toast-icon {
-            color: #ef4444;
-        }
-
-        .toast.warning .toast-icon {
-            color: #f59e0b;
-        }
-
-        .toast.info .toast-icon {
-            color: #3b82f6;
-        }
-
-        .toast-content {
-            flex: 1;
-        }
-
-        .toast-title {
-            font-weight: 600;
-            font-size: 14px;
-            color: #1e293b;
-            margin-bottom: 2px;
-        }
-
-        .toast-message {
-            font-size: 13px;
-            color: #64748b;
-            line-height: 1.4;
-        }
-
-        .toast-close {
-            background: none;
-            border: none;
-            color: #94a3b8;
-            cursor: pointer;
-            padding: 4px;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            border-radius: 4px;
-            transition: all 0.15s;
-        }
-
-        .toast-close:hover {
-            background: #f1f5f9;
-            color: #475569;
-        }
-
-        @keyframes slideIn {
-            from {
-                transform: translateX(400px);
-                opacity: 0;
-            }
-            to {
-                transform: translateX(0);
-                opacity: 1;
-            }
-        }
-
-        @keyframes fadeOut {
-            from {
-                opacity: 1;
-            }
-            to {
-                opacity: 0;
-                transform: translateX(400px);
-            }
-        }
-
-        .toast.fade-out {
-            animation: fadeOut 0.3s ease-out forwards;
-        }
-
-        /* Parse Wizard */
-        .parse-wizard { display: flex; flex-direction: column; gap: 8px; min-height: 0; flex: 1; }
-        .parse-wizard-tabs { display: flex; border-bottom: 2px solid #e2e8f0; gap: 0; flex-shrink: 0; }
-        .parse-wizard-tab { padding: 7px 14px; border: none; background: none; cursor: pointer; font-size: 13px; color: #64748b; border-bottom: 3px solid transparent; margin-bottom: -2px; transition: color 0.15s; }
-        .parse-wizard-tab:hover { color: #4338ca; }
-        .parse-wizard-tab.active { color: #4f46e5; border-bottom-color: #4f46e5; font-weight: 600; }
-        .parse-wizard-panel { display: none; flex-direction: column; gap: 8px; padding-top: 8px; min-height: 0; overflow-y: auto; }
-        .parse-wizard-panel.active { display: flex; }
-        .boilerplate-item { background: #fff7ed; border: 1px solid #fed7aa; border-radius: 6px; padding: 10px 12px; }
-        .boilerplate-item pre { font-size: 11px; max-height: 80px; overflow-y: auto; background: #1e1e2e; color: #cdd6f4; border-radius: 4px; padding: 6px; margin: 4px 0 0 0; font-family: 'Consolas', 'Monaco', monospace; white-space: pre-wrap; }
-        .boilerplate-type-badge { display: inline-block; font-size: 10px; font-weight: 700; padding: 2px 7px; border-radius: 10px; text-transform: uppercase; }
-        .boilerplate-type-badge.header, .boilerplate-type-badge.footer { background: #fed7aa; color: #c2410c; }
-        .boilerplate-type-badge.toc { background: #ddd6fe; color: #6d28d9; }
-        .candidate-item { background: #f0f4ff; border: 1px solid #c7d2fe; border-radius: 6px; padding: 10px 12px; }
-        .candidate-item.unmatched { background: #fef2f2; border-color: #fecaca; }
-        .candidate-context { font-family: 'Consolas', 'Monaco', monospace; font-size: 11px; line-height: 1.5; background: #1e1e2e; color: #6b7280; border-radius: 4px; padding: 6px 8px; margin-top: 6px; white-space: pre; overflow-x: auto; max-height: 90px; overflow-y: auto; }
-        .candidate-context .ctx-match { color: #ffd700; font-weight: bold; }
-        .strategy-badge { display: inline-block; font-size: 10px; font-weight: 700; padding: 2px 7px; border-radius: 10px; background: #c7d2fe; color: #3730a3; }
-        .strategy-badge.unmatched-badge { background: #fecaca; color: #dc2626; }
-        .spine-preview-table { width: 100%; border-collapse: collapse; font-size: 12px; }
-        .spine-preview-table th { background: #e0e7ff; color: #3730a3; font-weight: 600; padding: 5px 8px; text-align: left; }
-        .spine-preview-table td { padding: 4px 8px; border-top: 1px solid #e2e8f0; vertical-align: top; }
-        .spine-preview-table tr:hover td { background: #f8faff; }
+        .app-header { background: white; padding: 10px 20px; box-shadow: 0 1px 3px rgba(0,0,0,0.06); display: flex; justify-content: space-between; align-items: center; flex-shrink: 0; }
+        .app-header h1 { font-size: 1.2em; color: #1e293b; display: flex; align-items: center; gap: 8px; }
+        .header-left, .header-right { display: flex; align-items: center; gap: 12px; }
+        .header-btn { padding: 8px 16px; background: #475569; border: none; border-radius: 6px; color: white; font-size: 13px; cursor: pointer; transition: background 0.2s; display:inline-flex; align-items:center; gap:6px; }
+        .header-btn:hover { background: #334155; }
+        .header-btn.accent { background: #3b82f6; } .header-btn.accent:hover { background: #2563eb; }
+        .header-btn.active { background: #3b82f6; } .header-btn.active:hover { background: #2563eb; }
+        .header-btn:disabled { opacity: .45; cursor: not-allowed; }
+        .project-dropdown { padding: 8px 16px; background: white; border: 1px solid #cbd5e1; border-radius: 6px; color: #1e293b; font-size: 14px; font-weight: 500; cursor: pointer; min-width: 260px; }
+        .project-dropdown:hover { border-color: #94a3b8; }
+        .project-dropdown:focus { outline: none; border-color: #3b82f6; box-shadow: 0 0 0 3px rgba(59,130,246,0.1); }
+
+        /* Main */
+        .main-content { display: flex; flex: 1; overflow: hidden; }
+        .main-content.hidden { display: none; }
+        .project-prompt { flex: 1; display: flex; align-items: center; justify-content: center; flex-direction: column; gap: 16px; color: #64748b; }
+        .project-prompt .icon { font-size: 64px; opacity: 0.5; }
+        .project-prompt h2 { font-size: 1.5em; color: #475569; }
+
+        /* Grid area */
+        #gridScroll { flex: 1; min-width: 0; overflow: auto; padding: 20px 0; }
+        body.tts-hidden #gridScroll { display: none; }
+        #bookGrid {
+            /* Locked column widths: text 600px, takes 300px. */
+            --gutter: 30px; --text-col: 600px; --takes-col: 300px; --col-gap: 16px;
+            width: calc(var(--gutter) + var(--text-col) + var(--takes-col) + 2 * var(--col-gap));
+            margin: 0 auto;
+        }
+        /* Draggable divider between the TTS grid and the Reader pane. */
+        #paneSplitter { display: none; flex: 0 0 6px; cursor: col-resize; background: #e2e8f0; }
+        body.reader-open:not(.tts-hidden) #paneSplitter { display: block; }
+        #paneSplitter:hover, #paneSplitter.dragging { background: #94a3b8; }
+        .chapter-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin: 26px 0 6px; padding: 6px 4px; border-bottom: 2px solid #3b82f6; }
+        .chapter-title { font-size: 17px; font-weight: 700; color: #1e293b; }
+        .chapter-actions { display: inline-flex; gap: 8px; }
+        .chapter-gen-btn { background: white; color: #475569; border: 1px solid #cbd5e1; border-radius: 6px; padding: 4px 10px; font-size: 12px; cursor: pointer; white-space: nowrap; }
+        .chapter-gen-btn:hover { border-color: #3b82f6; color: #3b82f6; }
+
+        .chunk-row { position: relative; display: grid; grid-template-columns: var(--gutter) var(--text-col) var(--takes-col); gap: var(--col-gap); align-items: stretch; border-bottom: 1px solid #eef2f7; }
+        .chunk-row.generating { background: rgba(139,92,246,0.03); }
+        .chunk-row.busy { opacity: 0.45; pointer-events: none; transition: opacity .1s; }
+        .chunk-row.busy::after { content: ''; position: absolute; top: 0; left: 0; right: 0; height: 2px;
+            background: linear-gradient(90deg, transparent, #3b82f6, transparent); animation: busybar 1s linear infinite; }
+        @keyframes busybar { 0% { transform: translateX(-30%); opacity: .4; } 50% { opacity: 1; } 100% { transform: translateX(30%); opacity: .4; } }
+
+        /* Insert-pause affordance on the line between chunks */
+        .pause-adder { position: absolute; bottom: -11px; left: calc(var(--gutter) + (var(--text-col) + var(--takes-col)) / 2); transform: translateX(-50%);
+            z-index: 6; opacity: 0; transition: opacity .12s; display: inline-flex; align-items: center; gap: 4px;
+            font-size: 11px; padding: 2px 8px; border: 1px solid #cbd5e1; background: white; border-radius: 12px; color: #64748b; cursor: pointer; }
+        .pause-adder .material-symbols-outlined { font-size: 14px; }
+        .chunk-row:hover .pause-adder { opacity: 1; } .pause-adder:hover { border-color: #3b82f6; color: #3b82f6; }
+
+        /* Pause chunk row */
+        .pause-chunk { background: rgba(148,163,184,0.05); }
+        .pause-cell { grid-column: 2 / -1; display: flex; align-items: center; justify-content: center; padding: 6px 0; }
+        .pause-pill { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; color: #64748b; background: white; border: 1px dashed #cbd5e1; border-radius: 14px; padding: 4px 12px; }
+        .pause-ms { width: 64px; padding: 2px 6px; border: 1px solid #cbd5e1; border-radius: 5px; font-size: 12px; text-align: right; }
+        .pause-del { background: none; border: none; color: #94a3b8; cursor: pointer; display: inline-flex; padding: 0; }
+        .pause-del:hover { color: #ef4444; }
+
+        /* Split marker */
+        .chunk-edit.splitting { cursor: col-resize; background: #fffbeb; border-color: #fbbf24; }
+        .split-marker { position: absolute; z-index: 20; width: 2px; background: #ef4444; pointer-events: none; transform: translateX(-1px); }
+        .split-marker .material-symbols-outlined { position: absolute; top: -20px; left: -9px; font-size: 18px; color: #ef4444; background: white; border-radius: 50%; }
+        .split-confirm { position: absolute; z-index: 21; display: flex; gap: 6px; }
+        .split-confirm button { font-size: 11px; padding: 3px 10px; border-radius: 6px; border: 1px solid #cbd5e1; cursor: pointer; }
+        .split-confirm .ok { background: #3b82f6; color: white; border-color: #3b82f6; }
+        .split-confirm .cancel { background: white; color: #64748b; }
+
+        /* Gutter (merge/split) */
+        .row-gutter { display: flex; flex-direction: column; gap: 2px; align-items: center; justify-content: center; opacity: 0; transition: opacity .12s; }
+        .chunk-row:hover .row-gutter { opacity: 1; }
+        .gutter-btn { background: white; border: 1px solid #e2e8f0; color: #94a3b8; border-radius: 4px; font-size: 12px; line-height: 1; padding: 3px 5px; cursor: pointer; }
+        .gutter-btn:hover { color: #3b82f6; border-color: #3b82f6; }
+        .gutter-btn.gutter-del:hover { color: #ef4444; border-color: #ef4444; }
+
+        /* Left text column */
+        .text-cell { position: relative; padding: 8px 4px; }
+        .chunk-edit {
+            font-family: Georgia, 'Times New Roman', serif; font-size: 15px; line-height: 1.7; color: #1e293b;
+            padding: 6px 10px; border-radius: 6px; border: 1px solid transparent; white-space: pre-wrap; outline: none; min-height: 1.7em;
+        }
+        .chunk-edit:hover { border-color: #e2e8f0; }
+        .chunk-edit:focus { border-color: #3b82f6; background: #fff; box-shadow: 0 0 0 3px rgba(59,130,246,0.08); }
+        .chunk-edit.dirty { border-left: 3px solid #fbbf24; }
+        .chunk-edit .pron { background: rgba(139,92,246,0.14); border-radius: 3px; padding: 0 2px; }
+        .text-cell.non-text .chunk-edit { color: #94a3b8; font-style: italic; font-family: inherit; }
+        .insert-toolbar { display: none; gap: 6px; margin-top: 4px; }
+        .text-cell:focus-within .insert-toolbar { display: flex; flex-wrap: wrap; align-items: center; }
+        .insert-btn { font-size: 11px; padding: 3px 8px; border: 1px solid #cbd5e1; background: white; border-radius: 5px; cursor: pointer; color: #475569; }
+        .insert-btn:hover { border-color: #3b82f6; color: #3b82f6; }
+        .insert-toolbar select { font-size: 11px; padding: 3px 6px; border: 1px solid #cbd5e1; border-radius: 5px; }
+
+        /* Takes column — old look */
+        .takes-cell { padding: 4px 0; }
+        .takes-inner { display: flex; align-items: flex-start; gap: 6px; }
+        .takes-actions { display: flex; flex-direction: column; gap: 2px; flex: 0 0 auto; padding: 4px 0; border-right: 1px solid #eef2f7; padding-right: 6px; }
+        .takes-list { flex: 1; min-width: 0; }
+        .takes-empty-label { font-size: 12px; color: #94a3b8; }
+        .chunk-icon { background: none; border: none; color: #64748b; cursor: pointer; padding: 4px; border-radius: 4px; transition: all 0.15s; display: inline-flex; align-items: center; justify-content: center; }
+        .chunk-icon:hover { background: rgba(100,116,139,0.1); color: #3b82f6; }
+        .chunk-icon .material-symbols-outlined { font-size: 18px; }
+
+        .chunk-take-row { position: relative; border-bottom: 1px solid #f0f0f0; border-left: 3px solid transparent; transition: all 0.15s ease; }
+        .chunk-take-row:hover { background: #fafbfc; }
+        .chunk-take-row.best-take { background: rgba(59,130,246,0.03); border-left-color: #3b82f6; }
+        .chunk-take-row.non-best-take { background: rgba(100,116,139,0.02); border-left-color: #cbd5e1; }
+        .chunk-take-row.generating { background: rgba(139,92,246,0.05); border-left-color: #8b5cf6; animation: pulse 2s ease-in-out infinite; }
+        .chunk-take-row.outdated-take { background: rgba(239,68,68,0.05) !important; border-left-color: #f87171 !important; }
+        @keyframes pulse { 0%,100%{opacity:1;} 50%{opacity:.7;} }
+        /* Full-size placeholder take card shown while a take is generating. */
+        .take-placeholder { animation: none; }
+        .take-placeholder .chunk-take-header { padding-bottom: 8px; }
+        .take-progress { height: 6px; margin: 0 8px 10px; border-radius: 3px; background: rgba(139,92,246,0.12); overflow: hidden; }
+        .take-progress-bar { height: 100%; width: 40%; border-radius: 3px; background: linear-gradient(90deg, #a78bfa, #8b5cf6); animation: take-progress-slide 1.2s ease-in-out infinite; }
+        @keyframes take-progress-slide { 0%{ margin-left: -40%; } 100%{ margin-left: 100%; } }
+        .chunk-take-header { display: flex; align-items: center; justify-content: space-between; padding: 6px 8px; }
+        .take-label { font-size: 12px; color: #94a3b8; }
+        .generating-text { font-size: 12px; color: #8b5cf6; font-style: italic; font-weight: 500; }
+        .generating-model-badge { display:inline-block; font-style:normal; font-size:10px; font-weight:600; padding:1px 5px; border-radius:3px; background: rgba(139,92,246,0.15); color:#7c3aed; }
+        .outdated-icon { color: #f87171; font-size: 16px; margin-right: 4px; }
+
+        .take-icons { display: flex; gap: 2px; align-items: center; flex-shrink: 0; }
+        .take-icon { background: none; border: none; cursor: pointer; padding: 5px; color: #94a3b8; transition: all 0.15s; border-radius: 4px; display: inline-flex; align-items: center; justify-content: center; }
+        .take-icon:hover { background: rgba(59,130,246,0.08); color: #3b82f6; }
+        .take-icon.play:hover { background: rgba(16,185,129,0.08); color: #10b981; }
+        .take-icon.delete:hover { background: rgba(239,68,68,0.08); color: #ef4444; }
+        .take-icon.check-circle.best { color: #3b82f6; } .take-icon.check-circle:not(.best) { color: #cbd5e1; }
+        .take-icon.check-circle:not(.best):hover { color: #94a3b8; }
+        .take-icon .material-symbols-outlined { font-size: 19px; }
+
+        .take-settings { display: none; padding: 12px 12px 12px 24px; background: #fafbfc; border-top: 1px solid #f0f0f0; }
+        .take-settings.expanded { display: block; }
+        .setting-row { display: flex; align-items: center; gap: 12px; margin-bottom: 10px; }
+        .setting-row:last-child { margin-bottom: 0; }
+        .setting-label { font-size: 12px; color: #64748b; min-width: 96px; }
+        .setting-value { font-size: 12px; color: #334155; font-weight: 500; }
+        .setting-control { display: flex; align-items: center; gap: 8px; flex: 1; }
+        .setting-control select, .setting-control input[type=range] { flex: 1; }
+        .warning-row { background: #fef3c7; border: 1px solid #fbbf24; border-radius: 4px; padding: 8px; }
+        .warning-text { font-size: 11px; color: #92400e; font-weight: 500; }
+        .model-forced-badge { font-size: 10px; color: #9ca3af; }
+
+        /* Reader pane — a calm, Claude-preview-style reading surface.
+           Typography follows Butterick: a constrained measure, generous leading,
+           a serif body, curly punctuation (via marked smartypants), and paragraph
+           rhythm by first-line indent (not extra space). */
+        #readerPane { width: var(--reader-w, min(680px, 48vw)); flex: 0 0 auto; border-left: 1px solid #e2e8f0; background: #fbfbf9; display: none; flex-direction: column; min-height: 0; }
+        body.reader-open #readerPane { display: flex; }
+        body.tts-hidden #readerPane { flex: 1; width: auto; }
+        .reader-head { display: flex; align-items: center; gap: 8px; padding: 10px 14px; border-bottom: 1px solid #e2e8f0; flex: 0 0 auto; background: #fff; }
+        .reader-head .title { font-weight: 600; flex: 1; }
+        .reader-head .seg { display: inline-flex; border: 1px solid #cbd5e1; border-radius: 7px; overflow: hidden; }
+        .reader-head .seg button { border: none; background: #fff; color: #475569; font-size: 12px; padding: 5px 10px; cursor: pointer; }
+        .reader-head .seg button.active { background: #3b82f6; color: #fff; }
+        .reader-head .seg button + button { border-left: 1px solid #cbd5e1; }
+
+        #readerContent { overflow-y: auto; padding: 28px 0 64px; }
+        /* The reading column: the "measure". ~33rem ≈ 60–75 chars at this size. */
+        .reader-doc {
+            --reader-fs: 19px;
+            max-width: 33rem; margin: 0 auto; padding: 0 28px;
+            font-family: "Iowan Old Style", "Palatino Linotype", Palatino, "Book Antiqua", Georgia, serif;
+            font-size: var(--reader-fs); line-height: 1.5; color: #1f2328;
+            font-feature-settings: "kern" 1, "liga" 1; -webkit-font-smoothing: antialiased;
+            hyphens: auto;
+        }
+        /* When the pane is wide enough, open a right-hand gutter for sidenotes. */
+        @media (min-width: 1px) { }
+        .reader-doc.has-gutter { max-width: 46rem; padding-right: 13rem; }
+        .reader-doc h1, .reader-doc h2, .reader-doc h3 { font-family: inherit; color: #111418; line-height: 1.25; font-weight: 600; }
+        .reader-doc .chapter-title { font-size: 1.5em; margin: 1.6em 0 0.8em; padding-bottom: .3em; border-bottom: 1px solid #e2e8f0; }
+        .reader-doc p { margin: 0; text-align: left; }
+        .reader-doc p + p { text-indent: 1.4em; }
+        .reader-doc blockquote { margin: 1em 0; padding-left: 1em; border-left: 3px solid #d6d3cb; color: #57534e; font-style: italic; }
+        .reader-doc ul, .reader-doc ol { margin: .8em 0; padding-left: 1.5em; }
+        .reader-doc li { margin: .25em 0; }
+        .reader-doc a { color: #2563eb; text-decoration: none; }
+        .reader-doc a:hover { text-decoration: underline; }
+        .reader-doc em { font-style: italic; } .reader-doc strong { font-weight: 600; }
+        .reader-doc .verse p { white-space: pre-wrap; font-style: italic; }
+
+        /* A chunk is the sync/seek unit. Subtle audio affordances. */
+        .reader-doc .chunk { border-radius: 3px; transition: background .25s; cursor: pointer; }
+        .reader-doc .chunk.has-audio { box-shadow: inset 2px 0 0 rgba(16,185,129,.35); }
+        .reader-doc .chunk.playing { background: #fff7e0; box-shadow: inset 2px 0 0 #f59e0b; }
+
+        /* Note anchors + notes. Sidenotes float into the gutter when one exists,
+           otherwise (and on narrow widths) they render inline as footnote blocks. */
+        .reader-doc .noteref { font-size: .72em; vertical-align: super; line-height: 0; color: #2563eb; text-decoration: none; padding: 0 1px; font-family: system-ui, sans-serif; }
+        .reader-doc .note { font-size: .82em; line-height: 1.4; color: #57534e; background: #f3f2ee; border-left: 2px solid #cbd5e1; border-radius: 0 4px 4px 0; padding: 6px 10px; margin: .6em 0; }
+        .reader-doc .note .note-term { font-weight: 600; color: #1f2328; }
+        .reader-doc .note p { margin: 0; text-indent: 0; }
+        .reader-doc.has-gutter .note.sidenote, .reader-doc.has-gutter .note.gloss {
+            float: right; clear: right; width: 11.5rem; margin-right: -12.5rem; background: none;
+            border-left: none; border-top: 1px solid #d6d3cb; padding: 4px 0 0; font-size: .78em;
+        }
+        .reader-endnotes { max-width: 33rem; margin: 2em auto 0; padding: 1em 28px 0; border-top: 1px solid #e2e8f0; }
+        .reader-endnotes h3 { font-size: .9em; text-transform: uppercase; letter-spacing: .06em; color: #94a3b8; }
+        .reader-endnotes .note { background: none; border-left: none; padding: 4px 0; }
+
+        /* Columns popover */
+        .popover { position: fixed; background: white; border: 1px solid #cbd5e1; border-radius: 10px; box-shadow: 0 12px 40px rgba(0,0,0,.18); padding: 16px; z-index: 1500; display: none; width: 280px; }
+        .popover.open { display: block; }
+        .popover h3 { font-size: 13px; margin-bottom: 12px; color: #475569; }
+        .popover .slider-row { margin-bottom: 14px; }
+        .popover .slider-row label { display: flex; justify-content: space-between; font-size: 12px; color: #64748b; margin-bottom: 4px; }
+        .popover .slider-row input { width: 100%; }
+        .popover .hint { font-size: 11px; color: #94a3b8; }
+
+        /* Modal */
+        .modal { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.5); align-items: center; justify-content: center; z-index: 1000; }
+        .modal.active { display: flex; }
+        .modal-content { background: white; border-radius: 16px; padding: 32px; max-width: 480px; width: 90%; box-shadow: 0 20px 60px rgba(0,0,0,0.4); }
+        .modal-content h2 { margin-bottom: 18px; }
+        .form-group { margin-bottom: 18px; }
+        .form-group label { display: block; margin-bottom: 8px; font-weight: 600; font-size: 13px; color: #475569; }
+        .form-group select { width: 100%; padding: 10px; border: 2px solid #e2e8f0; border-radius: 8px; font-size: 14px; }
+        .radio-row { display: flex; gap: 18px; }
+        .radio-row label { display: inline-flex; align-items: center; gap: 6px; font-weight: 500; cursor: pointer; }
+        .btn-container { display: flex; gap: 10px; margin-top: 24px; }
+        .btn { flex: 1; padding: 11px 20px; border: none; border-radius: 8px; font-size: 15px; font-weight: 600; cursor: pointer; }
+        .btn-primary { background: #3b82f6; color: white; } .btn-primary:hover { background: #2563eb; }
+        .btn-secondary { background: #f1f5f9; color: #475569; } .btn-secondary:hover { background: #e2e8f0; }
+
+        /* Original-text popup */
+        .orig-overlay { position: fixed; inset: 0; background: rgba(15,23,42,.45); z-index: 2000; display: flex; align-items: center; justify-content: center; }
+        .orig-box { background: white; border-radius: 12px; box-shadow: 0 20px 60px rgba(0,0,0,.35); width: 560px; max-width: 92%; max-height: 80vh; display: flex; flex-direction: column; padding: 18px 20px; }
+        .orig-head { display: flex; align-items: center; justify-content: space-between; font-weight: 600; margin-bottom: 10px; color: #1e293b; }
+        .orig-close { background: none; border: none; font-size: 16px; color: #94a3b8; cursor: pointer; }
+        .orig-note { font-size: 12px; color: #92400e; background: #fef3c7; border: 1px solid #fbbf24; border-radius: 6px; padding: 6px 10px; margin-bottom: 10px; }
+        .orig-text { overflow-y: auto; font-family: Georgia, serif; font-size: 15px; line-height: 1.7; color: #334155; white-space: pre-wrap; background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; padding: 12px; }
+        .orig-actions { display: flex; gap: 8px; justify-content: flex-end; margin-top: 14px; }
+        .orig-actions button { padding: 8px 16px; border-radius: 8px; border: 1px solid #cbd5e1; cursor: pointer; font-size: 14px; }
+        .orig-copy { background: #3b82f6; color: white; border-color: #3b82f6; }
+        .orig-dismiss { background: white; color: #475569; }
+
+        /* Toast + loading */
+        #toast { position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%); z-index: 3000; display: flex; flex-direction: column; gap: 8px; }
+        .toast { padding: 10px 16px; border-radius: 8px; color: #fff; font-size: 14px; box-shadow: 0 8px 24px rgba(0,0,0,.25); }
+        .toast.info { background: #3b82f6; } .toast.success { background: #10b981; }
+        .toast.warning { background: #f59e0b; } .toast.error { background: #ef4444; }
+        #loading { position: fixed; inset: 0; background: rgba(248,250,252,.85); z-index: 4000; display: none; align-items: center; justify-content: center; flex-direction: column; gap: 14px; color: #475569; }
+        #loading.show { display: flex; }
+        .spinner { width: 42px; height: 42px; border: 4px solid #e2e8f0; border-top-color: #3b82f6; border-radius: 50%; animation: spin 1s linear infinite; }
+        @keyframes spin { to { transform: rotate(360deg); } }
     </style>
 </head>
 <body>
-    <!-- Header -->
     <div class="app-header">
         <div class="header-left">
-            <h1 id="appTitle"><span class="material-symbols-outlined">mic</span> Henty</h1>
-            <select class="project-dropdown" id="projectDropdown" onchange="handleProjectChange()">
-                <option value="">Select a project...</option>
-                <option value="__new__">+ New Project</option>
+            <h1>🎤 Henty</h1>
+            <select class="project-dropdown" id="bookDropdown" onchange="onBookDropdownChange()">
+                <option value="">— Select a book —</option>
             </select>
+            <button class="header-btn" onclick="openImportModal()" title="Import / re-import with a chosen variant"><span class="material-symbols-outlined">library_add</span></button>
+            <button class="header-btn" onclick="openQueueModal()" title="Edit the priority queue"><span class="material-symbols-outlined">playlist_add_check</span></button>
+            <button class="header-btn" id="undoBtn" onclick="bookTab.undo()" disabled title="Undo last edit (Ctrl+Z)"><span class="material-symbols-outlined">undo</span></button>
         </div>
         <div class="header-right">
+            <button class="header-btn active" id="ttsToggle" onclick="toggleTtsPane()" title="Show / hide the TTS pane"><span class="material-symbols-outlined">graphic_eq</span> TTS</button>
+            <button class="header-btn accent" id="runQueueBtn" onclick="runPriorityQueue()" title="Load, import/chunk if needed, and generate every book in the priority queue"><span class="material-symbols-outlined">playlist_play</span> Run Queue</button>
+            <button class="header-btn accent" id="genBookBtn" onclick="bookTab.generateEntireBook()" disabled><span class="material-symbols-outlined">graphic_eq</span> Generate Entire Book</button>
+            <button class="header-btn" id="cleanTakesBtn" onclick="bookTab.deleteNonBestTakes()" disabled title="Delete every take except the best take of each chunk (frees disk space)"><span class="material-symbols-outlined">delete_sweep</span> Delete Non-Best Takes</button>
+            <button class="header-btn" id="readerToggle" onclick="toggleReader()" disabled><span class="material-symbols-outlined">menu_book</span> Reader</button>
         </div>
     </div>
 
-    <!-- Project Selection Prompt (shown when no project is selected) -->
-    <div class="project-prompt" id="projectPrompt">
-        <div class="icon">📁</div>
-        <h2>Welcome to Henty</h2>
-        <p>Select a project from the dropdown above to start working, or create a new project to begin.</p>
-    </div>
-
-    <!-- Loading Overlay (shown during project load/creation) -->
-    <div id="loadingOverlay" style="display:none; position:fixed; inset:0; background:rgba(255,255,255,0.92); z-index:9999; display:none; flex-direction:column; align-items:center; justify-content:center; gap:16px;">
-        <div style="width:48px; height:48px; border:4px solid #e2e8f0; border-top-color:#4f46e5; border-radius:50%; animation:spin 0.8s linear infinite;"></div>
-        <div id="loadingMessage" style="font-size:16px; color:#334155; font-weight:500;">Loading project...</div>
-        <div id="loadingDetail" style="font-size:13px; color:#94a3b8;"></div>
-    </div>
-    <style>
-        @keyframes spin { to { transform: rotate(360deg); } }
-    </style>
-
-    <!-- Main Content (hidden until project is selected) -->
-    <div class="main-content hidden" id="mainContent">
-        <!-- Pane Toggles -->
-        <div class="pane-toggles">
-        <div class="toggle-group">
-            <div class="toggle-item">
-                <input type="checkbox" id="toggle-xml" checked onchange="updatePaneVisibility()">
-                <label for="toggle-xml"><span class="material-symbols-outlined">edit_note</span> Markdown</label>
-            </div>
-            <div class="toggle-item">
-                <input type="checkbox" id="toggle-tts" checked onchange="updatePaneVisibility()">
-                <label for="toggle-tts"><span class="material-symbols-outlined">graphic_eq</span> TTS Generation</label>
-            </div>
-            <div class="toggle-item">
-                <input type="checkbox" id="toggle-reader" onchange="updatePaneVisibility()">
-                <label for="toggle-reader"><span class="material-symbols-outlined">menu_book</span> Reader</label>
-            </div>
+    <div class="main-content" id="main">
+        <div class="project-prompt" id="prompt">
+            <div class="icon">📚</div>
+            <h2>Choose a book</h2>
+            <p style="max-width:420px;text-align:center;line-height:1.6;">Pick a book from the dropdown above. Books live in your books folder — there are no separate projects to create or save.</p>
         </div>
-        <div class="toggle-group">
-            <div class="sync-toggle" id="syncToggle" onclick="toggleSyncScroll()">
-                <input type="checkbox" id="sync-scroll-checkbox">
-                <label><span class="material-symbols-outlined">link</span> Sync Scroll</label>
+        <div id="gridScroll" style="display:none;"><div id="bookGrid"></div></div>
+        <div id="paneSplitter" onmousedown="startPaneDrag(event)" title="Drag to resize"></div>
+        <div id="readerPane">
+            <div class="reader-head">
+                <span class="title">Reader</span>
+                <span class="seg" id="readerModeToggle" title="Switch between the original text and the enriched edition">
+                    <button data-mode="original" class="active" onclick="setReaderMode('original')">Original</button>
+                    <button data-mode="enriched" onclick="setReaderMode('enriched')">Enriched</button>
+                </span>
+                <button class="chunk-icon" onclick="adjustReaderFontSize(-1)" title="Smaller"><span class="material-symbols-outlined">text_decrease</span></button>
+                <span id="readerFontSize" style="min-width:24px;text-align:center;font-size:13px;">19</span>
+                <button class="chunk-icon" onclick="adjustReaderFontSize(1)" title="Larger"><span class="material-symbols-outlined">text_increase</span></button>
+                <button class="chunk-icon play-btn" onclick="playAllBestTakes()" title="Play all best takes"><span class="material-symbols-outlined">play_arrow</span></button>
             </div>
-            <div class="sync-toggle" id="deviceToggle" onclick="toggleDevice()">
-                <input type="checkbox" id="device-toggle-checkbox">
-                <label id="device-toggle-label"><span class="material-symbols-outlined">bolt</span> GPU</label>
-            </div>
+            <div id="readerContent"></div>
         </div>
     </div>
 
-    <!-- Panes Container -->
-    <div class="panes-container panes-2" id="panesContainer">
-        <!-- Pane 1: Markdown / Structure Editor -->
-        <div class="pane" id="pane-xml">
-            <div class="pane-header">
-                <h2>Markdown <span id="markdownPaneSubtitle" style="font-size:12px;font-weight:400;color:#64748b;margin-left:6px;"></span></h2>
-                <div class="pane-actions">
-                    <!-- Stage 0: Load book -->
-                    <button class="pane-btn" id="loadBookBtn"
-                            onclick="gutenbergTab.loadGutenbergUrl()"
-                            style="display:none; background:#4f46e5; font-weight:600;"
-                            title="Load a book from Project Gutenberg">
-                        Load Book
-                    </button>
-                    <!-- Stage 1: Confirm structure (auto-runs chunking) -->
-                    <button class="pane-btn" id="confirmStructureBtn"
-                            onclick="gutenbergTab.confirmStructure()"
-                            style="display:none; background:#059669; font-weight:600;"
-                            title="Confirm chapter structure — chunking runs automatically">
-                        ✓ Lock &amp; Chunk
-                    </button>
-                    <!-- Stage 2: transient spinner shown by subtitle; button hidden -->
-                    <button class="pane-btn" id="runChunkingBtn"
-                            style="display:none;"
-                            disabled>
-                        Chunking…
-                    </button>
-                    <!-- editTextBtn/saveBtn/undoBtn are now in stage3Toolbar -->
-                </div>
-            </div>
-            <div class="pane-content" style="padding: 0; display: flex; flex-direction: column; overflow: hidden;">
-
-                <!-- ─── Stage-0 toolbar (no book loaded) ─── -->
-                <div id="stage0Toolbar" style="display:none; padding: 20px; text-align:center; color:#64748b; flex-shrink:0;">
-                    <div style="font-size:32px; margin-bottom:8px;">📖</div>
-                    <div style="font-size:14px; font-weight:500; margin-bottom:4px;">No book loaded</div>
-                    <div style="font-size:12px;">Click <strong>Load Book</strong> to load a Project Gutenberg text.</div>
-                </div>
-
-                <!-- ─── Stage-1 toolbar (structure editing) ─── -->
-                <div id="stage1Toolbar" style="display:none; padding: 10px 15px; background:#eff6ff; border-bottom:1px solid #bfdbfe; flex-shrink:0;">
-                    <div style="display:flex; align-items:center; gap:10px; flex-wrap:wrap;">
-                        <div style="flex:1; min-width:200px;">
-                            <div style="font-size:13px; color:#1e40af; font-weight:600; margin-bottom:4px;">Structure Editing Mode</div>
-                            <div style="font-size:12px; color:#3730a3; line-height:1.5;">
-                                <strong>Red</strong> — boilerplate (toggle keep/delete).&nbsp;
-                                <strong>Blue bars</strong> — chapter breaks (drag ⠿, click × to remove).&nbsp;
-                                <span style="color:#92400e;"><strong>Yellow</strong> — short blocks (likely headings, not real chapters).</span>
-                            </div>
-                        </div>
-                        <button class="pane-btn" onclick="gutenbergTab.autoCollapseHeadings()"
-                                style="background:#f59e0b; flex-shrink:0;"
-                                title="Remove breaks around short heading blocks and merge them into adjacent chapters">
-                            ⚡ Collapse Headings
-                        </button>
-                    </div>
-                </div>
-
-                <!-- ─── Stage-2 toolbar (pre-chunking) ─── -->
-                <div id="stage2Toolbar" style="display:none; padding: 10px 15px; background:#f0fdf4; border-bottom:1px solid #bbf7d0; flex-shrink:0;">
-                    <div style="font-size:13px; color:#166534; font-weight:600; margin-bottom:4px;">
-                        Chapters confirmed — ready to chunk
-                    </div>
-                    <div style="font-size:12px; color:#15803d; line-height:1.5;">
-                        Chunking in progress…
-                    </div>
-                </div>
-
-                <!-- ─── Stage-3 toolbar (pronunciation & annotation) ─── -->
-                <div id="stage3Toolbar" style="display:none; padding: 6px 12px; background:#fafafa; border-bottom:1px solid #e2e8f0; flex-shrink:0; display:flex; align-items:center; gap:6px; flex-wrap:wrap;">
-                    <!-- Lock toggle -->
-                    <button class="xml-btn" id="editTextBtn"
-                            onclick="gutenbergTab.toggleTextLock()"
-                            style="background:#e2e8f0; color:#475569; font-weight:600;"
-                            title="Unlock the editor to edit underlying text">
-                        🔒 Locked
-                    </button>
-                    <div style="width:1px; height:20px; background:#e2e8f0; margin:0 2px;"></div>
-                    <!-- Editing buttons (hidden when locked) -->
-                    <button class="xml-btn" id="insertPronunciationBtn"
-                            onclick="gutenbergTab.insertPronunciation()"
-                            style="background:#7c3aed;color:white;"
-                            title="Select a word first, then click to add pronunciation annotation">
-                        + Pronunciation
-                    </button>
-                    <select id="paralinguisticSelect"
-                            onchange="if(this.value) { gutenbergTab.insertParalinguisticTag(this.value); this.value=''; }"
-                            style="padding: 4px 8px; border-radius: 4px; border: 1px solid #a78bfa; font-size: 12px; background: #ede9fe; cursor: pointer;">
-                        <option value="">+ Paralinguistic Tag</option>
-                        <option value="laugh">[laugh]</option>
-                        <option value="chuckle">[chuckle]</option>
-                        <option value="cough">[cough]</option>
-                        <option value="sigh">[sigh]</option>
-                        <option value="gasp">[gasp]</option>
-                        <option value="groan">[groan]</option>
-                        <option value="sniff">[sniff]</option>
-                        <option value="clear throat">[clear throat]</option>
-                        <option value="shush">[shush]</option>
-                    </select>
-                    <button class="xml-btn" id="splitChunkBtn"
-                            onclick="gutenbergTab.splitChunkAtCursor()"
-                            title="Split the chunk at cursor position">
-                        ✂ Split
-                    </button>
-                    <div style="width:1px; height:20px; background:#e2e8f0; margin:0 2px;"></div>
-                    <!-- Save / Undo (always visible at stage 3) -->
-                    <button class="xml-btn" id="saveBtn"
-                            onclick="gutenbergTab.saveCode()"
-                            title="Save">
-                        Save
-                    </button>
-                    <button class="xml-btn" id="undoBtn"
-                            onclick="gutenbergTab.undo()"
-                            disabled
-                            title="Nothing to undo">
-                        Undo
-                    </button>
-                    <span style="margin-left: auto;">
-                        <button class="xml-btn" id="cleanViewToggle" onclick="gutenbergTab.toggleCleanView()" title="Toggle between clean text and markup view">Clean View</button>
-                    </span>
-                </div>
-
-
-                <!-- ─── Stage-1 structure editor ─── -->
-                <div id="structureEditorContainer" style="display:none; flex:1; overflow-y:auto; padding:15px; font-family: Georgia, serif; font-size: 14px; line-height:1.7;"></div>
-
-                <!-- ─── Stage-2+ markdown editor ─── -->
-                <div id="markdownEditorContainer" style="flex:1; display:flex; flex-direction:column; min-height:0; padding: 0 15px 15px;">
-                    <div class="xml-editor" id="pseudoXmlEditor" contenteditable="true" spellcheck="false"
-                         data-placeholder="Load or process text to see markdown structure..."
-                         style="flex:1;"></div>
-                </div>
-            </div>
-        </div>
-
-        <!-- Pane 3: TTS Generation -->
-        <div class="pane" id="pane-tts">
-            <div class="pane-header">
-                <h2>TTS Generation</h2>
-                <div class="pane-actions">
-                    <button class="pane-btn" id="playAllBestTakesBtn" onclick="ttsTab.togglePlayAllBestTakes()">
-                        <span class="material-symbols-outlined" style="font-size: 16px; vertical-align: middle;">play_arrow</span>
-                        Play All
-                    </button>
-                    <button class="pane-btn" onclick="ttsTab.generateAllChunks()">Generate All</button>
-                    <button class="pane-btn" onclick="ttsTab.generateEntireBook()" title="Generate audio for every chunk in every chapter using default settings (skips chunks that already have a take)">Generate Entire Book</button>
-                    <button class="pane-btn" onclick="ttsTab.stitchBestTakes()">Stitch Best Takes</button>
-                    <button class="pane-btn" onclick="ttsTab.refreshChapters()">Refresh</button>
-                </div>
-            </div>
-            <div class="pane-content">
-                <div class="chapter-selector">
-                    <label style="font-size: 14px; font-weight: 500; margin-bottom: 8px; display: block;">Select Chapter:</label>
-                    <select id="ttsChapterSelect" onchange="loadTTSChapter()">
-                        <option value="">-- Select a chapter --</option>
-                    </select>
-                </div>
-                <div id="ttsContent">
-                    <div style="color: #999; text-align: center; padding: 40px;">
-                        Select a chapter to generate audio
-                    </div>
-                </div>
-            </div>
-        </div>
-
-        <!-- Pane 4: Reader -->
-        <div class="pane hidden" id="pane-reader">
-            <div class="pane-header">
-                <h2>Reader</h2>
-                <div class="pane-actions">
-                    <button class="pane-btn" onclick="readerTab.refresh()">Refresh</button>
-                </div>
-            </div>
-            <div class="pane-content">
-                <div class="reader-controls">
-                    <button class="play-btn" onclick="readerTab.playAllBestTakes()"><span class="material-symbols-outlined">play_arrow</span> Play All Best Takes</button>
-                </div>
-                <div id="readerContent" class="reader-content">
-                    <div style="color: #999; text-align: center; padding: 40px;">
-                        Load a project to see content
-                    </div>
-                </div>
-            </div>
-        </div>
-    </div>
-    </div> <!-- End of main-content -->
-
-    <!-- New Project Modal -->
-    <div class="modal" id="newProjectModal">
+    <!-- Import modal -->
+    <div class="modal" id="importModal">
         <div class="modal-content">
-            <h2>Create New Project</h2>
-            <form id="newProjectForm" onsubmit="createNewProject(event)">
-                <div class="form-group">
-                    <label for="newProjectName">Project Name</label>
-                    <input type="text" id="newProjectName" required placeholder="Enter project name">
+            <h2>Import book</h2>
+            <div class="form-group">
+                <label for="importBookSelect">Book</label>
+                <select id="importBookSelect"></select>
+            </div>
+            <div class="form-group">
+                <label>Text to speak</label>
+                <div class="radio-row">
+                    <label><input type="radio" name="variant" value="original" checked> Original</label>
+                    <label><input type="radio" name="variant" value="rewrite"> Rewritten</label>
                 </div>
-                <div class="form-group">
-                    <label>Text Source</label>
-                    <div style="margin-bottom: 15px;">
-                        <label style="display: inline-flex; align-items: center; margin-right: 20px; font-weight: normal; cursor: pointer;">
-                            <input type="radio" name="textSourceType" value="url" checked onchange="toggleTextSourceInput()" style="margin-right: 8px; width: auto;">
-                            Gutenberg URL
-                        </label>
-                        <label style="display: inline-flex; align-items: center; margin-right: 20px; font-weight: normal; cursor: pointer;">
-                            <input type="radio" name="textSourceType" value="file" onchange="toggleTextSourceInput()" style="margin-right: 8px; width: auto;">
-                            Upload Text File
-                        </label>
-                        <label style="display: inline-flex; align-items: center; font-weight: normal; cursor: pointer;">
-                            <input type="radio" name="textSourceType" value="rewriter" onchange="toggleTextSourceInput()" style="margin-right: 8px; width: auto;">
-                            Rewriter Book
-                        </label>
-                    </div>
-                    <div id="urlSourceInput">
-                        <input type="text" id="gutenbergUrl" placeholder="Enter Gutenberg URL or book ID (e.g. 120)" value="">
-                    </div>
-                    <div id="fileSourceInput" style="display: none;">
-                        <input type="file" id="textFile" accept=".txt,.html,.htm" style="padding: 8px;">
-                    </div>
-                    <div id="rewriterSourceInput" style="display: none;">
-                        <select id="rewriterBookSelect" style="width: 100%; padding: 8px; margin-bottom: 10px;">
-                            <option value="">Loading books…</option>
-                        </select>
-                        <div style="margin-bottom: 6px; font-size: 13px; color: #555;">Text to speak:</div>
-                        <div>
-                            <label style="display: inline-flex; align-items: center; margin-right: 20px; font-weight: normal; cursor: pointer;">
-                                <input type="radio" name="rewriterVariant" value="original" checked style="margin-right: 8px; width: auto;">
-                                Original
-                            </label>
-                            <label style="display: inline-flex; align-items: center; font-weight: normal; cursor: pointer;">
-                                <input type="radio" name="rewriterVariant" value="rewrite" style="margin-right: 8px; width: auto;">
-                                Rewritten
-                            </label>
-                        </div>
-                        <div id="rewriterBooksDir" style="font-size: 11px; color: #94a3b8; margin-top: 8px;"></div>
-                    </div>
-                </div>
-                <div class="error-message" id="newProjectError"></div>
-                <div class="btn-container">
-                    <button type="button" class="btn btn-secondary" onclick="closeNewProjectModal()">Cancel</button>
-                    <button type="submit" class="btn btn-primary">Create Project</button>
-                </div>
-            </form>
+            </div>
+            <p style="font-size:12px;color:#94a3b8;">Re-importing rebuilds the chapter/chunk structure from book.json. Existing takes for this book will be cleared.</p>
+            <div class="btn-container">
+                <button class="btn btn-secondary" onclick="closeImportModal()">Cancel</button>
+                <button class="btn btn-primary" onclick="doImport()">Import &amp; open</button>
+            </div>
         </div>
     </div>
 
-    <!-- Load client config and tab scripts -->
+    <!-- Priority queue editor -->
+    <div class="modal" id="queueModal">
+        <div class="modal-content" style="max-width:560px;">
+            <h2>Priority queue</h2>
+            <p style="font-size:12px;color:#94a3b8;margin-top:-6px;">Checked books are in the queue and appear at the top of the dropdown. Use ▲ ▼ to set priority order — the Run Queue button processes them top to bottom.</p>
+            <div style="display:flex;gap:8px;margin:8px 0;">
+                <button class="btn btn-secondary" onclick="queueSelectAll(true)">Select all</button>
+                <button class="btn btn-secondary" onclick="queueSelectAll(false)">Deselect all</button>
+            </div>
+            <div id="queueEditList" style="max-height:48vh;overflow:auto;border:1px solid #e2e8f0;border-radius:8px;padding:6px;"></div>
+            <div class="btn-container">
+                <button class="btn btn-secondary" onclick="closeQueueModal()">Cancel</button>
+                <button class="btn btn-primary" onclick="saveQueue()">Save</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Run-queue progress -->
+    <div class="modal" id="queueRunModal">
+        <div class="modal-content" style="max-width:560px;">
+            <h2>Running priority queue</h2>
+            <p style="font-size:12px;color:#94a3b8;margin-top:-6px;">Books are processed one at a time (single GPU). You can stop after the current book finishes.</p>
+            <div id="queueRunList" style="max-height:50vh;overflow:auto;margin:8px 0;"></div>
+            <div class="btn-container">
+                <button class="btn btn-secondary" id="queueStopBtn" onclick="stopPriorityQueue()">Stop after current</button>
+                <button class="btn btn-primary" id="queueCloseBtn" onclick="closeQueueRunModal()" style="display:none;">Close</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="toast"></div>
+    <div id="loading"><div class="spinner"></div><div id="loadingText">Loading…</div></div>
+
     <script src="client_config.js"></script>
-    <script src="gutenberg_tab.js"></script>
-    <script src="tts_tab.js"></script>
+    <script src="vendor/marked.min.js"></script>
+    <script src="book_tab.js"></script>
     <script src="reader_tab.js"></script>
-
     <script>
-        let syncScrollEnabled = false;
+        let books = [];
+        let currentBookFolder = null;
+        let priorityQueue = [];        // ordered list of folder names
+        let queueEdit = [];            // working copy while the editor modal is open
+        let queueRunStop = false;      // set when the user asks to stop the run
 
-        function toggleSyncScroll() {
-            syncScrollEnabled = !syncScrollEnabled;
-            const toggle = document.getElementById('syncToggle');
-            const checkbox = document.getElementById('sync-scroll-checkbox');
+        function showToast(msg, type = 'info') {
+            const el = document.createElement('div'); el.className = `toast ${type}`; el.textContent = msg;
+            document.getElementById('toast').appendChild(el); setTimeout(() => el.remove(), 4000);
+        }
+        function showLoading(t) { document.getElementById('loadingText').textContent = t || 'Loading…'; document.getElementById('loading').classList.add('show'); }
+        function hideLoading() { document.getElementById('loading').classList.remove('show'); }
 
-            if (syncScrollEnabled) {
-                toggle.classList.add('active');
-                checkbox.checked = true;
-            } else {
-                toggle.classList.remove('active');
-                checkbox.checked = false;
-            }
+        function toggleReader() {
+            document.body.classList.toggle('reader-open');
+            if (document.body.classList.contains('reader-open') && typeof readerTab !== 'undefined') readerTab.init();
         }
 
-        async function toggleDevice() {
-            const toggle = document.getElementById('deviceToggle');
-            const checkbox = document.getElementById('device-toggle-checkbox');
-            const label = document.getElementById('device-toggle-label');
+        // ---- TTS pane show/hide ----
+        function toggleTtsPane() {
+            // Hiding the TTS grid only makes sense alongside the reader — open it if needed.
+            const hidden = document.body.classList.toggle('tts-hidden');
+            document.getElementById('ttsToggle').classList.toggle('active', !hidden);
+            if (hidden && !document.body.classList.contains('reader-open')) toggleReader();
+            if (typeof readerTab !== 'undefined') readerTab.updateGutter();
+        }
 
-            // The checkbox is already toggled by the time this runs, so invert the logic
-            // If checkbox is now checked, user wants GPU (cuda)
-            // If checkbox is now unchecked, user wants CPU
-            const newDevice = checkbox.checked ? 'cuda' : 'cpu';
+        // ---- Draggable divider between the TTS grid and Reader pane ----
+        function startPaneDrag(e) {
+            e.preventDefault();
+            const main = document.getElementById('main');
+            const splitter = document.getElementById('paneSplitter');
+            splitter.classList.add('dragging');
+            const onMove = (ev) => {
+                const rect = main.getBoundingClientRect();
+                // Reader pane occupies the space to the right of the cursor.
+                let w = rect.right - ev.clientX;
+                w = Math.max(320, Math.min(rect.width - 200, w));
+                document.body.style.setProperty('--reader-w', w + 'px');
+            };
+            const onUp = () => {
+                splitter.classList.remove('dragging');
+                document.removeEventListener('mousemove', onMove);
+                document.removeEventListener('mouseup', onUp);
+                localStorage.setItem('henty.readerW', parseInt(getComputedStyle(document.getElementById('readerPane')).width));
+                if (typeof readerTab !== 'undefined') readerTab.updateGutter();
+            };
+            document.addEventListener('mousemove', onMove);
+            document.addEventListener('mouseup', onUp);
+        }
 
+        // ---- Books ----
+        async function loadQueue() {
             try {
-                const response = await fetch(`${SERVER_URL}/api/device`, {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                        'X-API-Key': API_KEY
-                    },
-                    body: JSON.stringify({ device: newDevice })
+                const r = await fetch(`${SERVER_URL}/api/queue`, { headers: { 'X-API-Key': API_KEY } });
+                if (r.ok) priorityQueue = (await r.json()).queue || [];
+            } catch (e) { console.error('queue:', e); }
+        }
+
+        function bookLabel(b) { return `${b.title}${b.has_project ? '' : '  (not imported)'}`; }
+
+        async function loadBooks() {
+            try {
+                const r = await fetch(`${SERVER_URL}/api/books`, { headers: { 'X-API-Key': API_KEY } });
+                const data = await r.json();
+                books = data.books || [];
+                const byFolder = new Map(books.map(b => [b.folder, b]));
+                // Priority-queue books float to the top, in queue order, then everything else.
+                const queued = priorityQueue.map(f => byFolder.get(f)).filter(Boolean);
+                const queuedSet = new Set(queued.map(b => b.folder));
+                const rest = books.filter(b => !queuedSet.has(b.folder));
+                const opt = b => `<option value="${b.folder}">${bookLabel(b)}</option>`;
+                const dd = document.getElementById('bookDropdown');
+                dd.innerHTML = '<option value="">— Select a book —</option>'
+                    + (queued.length ? `<optgroup label="★ Priority queue">${queued.map((b, i) => `<option value="${b.folder}">${i + 1}. ${bookLabel(b)}</option>`).join('')}</optgroup>` : '')
+                    + `<optgroup label="All books">${rest.map(opt).join('')}</optgroup>`;
+                if (currentBookFolder) dd.value = currentBookFolder;
+                const isel = document.getElementById('importBookSelect');
+                isel.innerHTML = books.map(b => `<option value="${b.folder}">${b.title} (${b.block_count} blocks)</option>`).join('');
+            } catch (e) { console.error(e); showToast('Could not load books', 'error'); }
+        }
+
+        // ---- Priority queue editor ----
+        function openQueueModal() {
+            queueEdit = priorityQueue.filter(f => books.some(b => b.folder === f));
+            renderQueueEdit();
+            document.getElementById('queueModal').classList.add('active');
+        }
+        function closeQueueModal() { document.getElementById('queueModal').classList.remove('active'); }
+
+        function renderQueueEdit() {
+            const byFolder = new Map(books.map(b => [b.folder, b]));
+            // Queued books first (in priority order), then the unchecked remainder alphabetically.
+            const queued = queueEdit.filter(f => byFolder.has(f));
+            const queuedSet = new Set(queued);
+            const rest = books.filter(b => !queuedSet.has(b.folder))
+                .sort((a, b) => a.title.localeCompare(b.title)).map(b => b.folder);
+            const rowFor = (folder, inQueue, pos) => {
+                const b = byFolder.get(folder);
+                const arrows = inQueue ? `
+                    <button class="header-btn" onclick="moveQueue(${pos},-1)" ${pos === 0 ? 'disabled' : ''} title="Up">▲</button>
+                    <button class="header-btn" onclick="moveQueue(${pos},1)" ${pos === queued.length - 1 ? 'disabled' : ''} title="Down">▼</button>` : '';
+                return `<label style="display:flex;align-items:center;gap:8px;padding:4px 6px;border-radius:6px;${inQueue ? 'background:#f0f7ff;' : ''}">
+                    <input type="checkbox" ${inQueue ? 'checked' : ''} onchange="toggleQueue('${folder}', this.checked)">
+                    <span style="flex:1;">${inQueue ? `<b>${pos + 1}.</b> ` : ''}${bookLabel(b)}</span>
+                    ${arrows}
+                </label>`;
+            };
+            document.getElementById('queueEditList').innerHTML =
+                queued.map((f, i) => rowFor(f, true, i)).join('') +
+                (queued.length && rest.length ? '<div style="border-top:1px solid #e2e8f0;margin:6px 0;"></div>' : '') +
+                rest.map(f => rowFor(f, false)).join('');
+        }
+        function toggleQueue(folder, on) {
+            if (on) { if (!queueEdit.includes(folder)) queueEdit.push(folder); }
+            else queueEdit = queueEdit.filter(f => f !== folder);
+            renderQueueEdit();
+        }
+        function queueSelectAll(on) {
+            queueEdit = on ? books.map(b => b.folder) : [];
+            renderQueueEdit();
+        }
+        function moveQueue(pos, dir) {
+            const j = pos + dir;
+            if (j < 0 || j >= queueEdit.length) return;
+            [queueEdit[pos], queueEdit[j]] = [queueEdit[j], queueEdit[pos]];
+            renderQueueEdit();
+        }
+        async function saveQueue() {
+            try {
+                const r = await fetch(`${SERVER_URL}/api/queue`, {
+                    method: 'PUT', headers: { 'Content-Type': 'application/json', 'X-API-Key': API_KEY },
+                    body: JSON.stringify({ queue: queueEdit })
                 });
-
-                if (response.ok) {
-                    const result = await response.json();
-                    updateDeviceUI(result.device);
-                    showToast(`Switched to ${result.device.toUpperCase()}`, 'success');
-                } else {
-                    const error = await response.json();
-                    showToast(`Failed to switch device: ${error.error}`, 'error');
-                    // Revert checkbox
-                    checkbox.checked = !checkbox.checked;
-                }
-            } catch (error) {
-                console.error('Error switching device:', error);
-                showToast('Error switching device', 'error');
-                // Revert checkbox
-                checkbox.checked = !checkbox.checked;
-            }
+                if (!r.ok) throw new Error((await r.json()).error || `Server error ${r.status}`);
+                priorityQueue = (await r.json()).queue || [];
+                closeQueueModal();
+                await loadBooks();
+                showToast(`Priority queue saved (${priorityQueue.length} books)`, 'success');
+            } catch (e) { showToast('Could not save queue: ' + e.message, 'error'); }
         }
 
-        function updateDeviceUI(device) {
-            const toggle = document.getElementById('deviceToggle');
-            const checkbox = document.getElementById('device-toggle-checkbox');
-            const label = document.getElementById('device-toggle-label');
-
-            if (device === 'cuda') {
-                toggle.classList.add('active');
-                checkbox.checked = true;
-                label.innerHTML = '<span class="material-symbols-outlined">bolt</span> GPU';
-            } else {
-                toggle.classList.remove('active');
-                checkbox.checked = false;
-                label.innerHTML = '<span class="material-symbols-outlined">computer</span> CPU';
-            }
+        async function onBookDropdownChange() {
+            const folder = document.getElementById('bookDropdown').value;
+            if (!folder) return;
+            const book = books.find(b => b.folder === folder);
+            if (book && book.has_project) await openBook(book.path);
+            else openImportModal(folder);   // needs import + variant choice
         }
 
-        async function loadDeviceStatus() {
+        function openImportModal(folder) {
+            const isel = document.getElementById('importBookSelect');
+            if (typeof folder === 'string') isel.value = folder;
+            document.getElementById('importModal').classList.add('active');
+        }
+        function closeImportModal() { document.getElementById('importModal').classList.remove('active'); }
+
+        async function doImport() {
+            const folder = document.getElementById('importBookSelect').value;
+            const variant = document.querySelector('input[name="variant"]:checked').value;
+            closeImportModal();
+            showLoading('Importing book…');
             try {
-                const response = await fetch(`${SERVER_URL}/api/device-status`, {
-                    headers: {
-                        'X-API-Key': API_KEY
-                    }
-                });
-
-                if (response.ok) {
-                    const status = await response.json();
-                    updateDeviceUI(status.current_device);
-                }
-            } catch (error) {
-                console.error('Error loading device status:', error);
-            }
-        }
-
-        function updatePaneVisibility() {
-            const xmlVisible = document.getElementById('toggle-xml').checked;
-            const ttsVisible = document.getElementById('toggle-tts').checked;
-            const readerVisible = document.getElementById('toggle-reader').checked;
-
-            document.getElementById('pane-xml').classList.toggle('hidden', !xmlVisible);
-            document.getElementById('pane-tts').classList.toggle('hidden', !ttsVisible);
-            document.getElementById('pane-reader').classList.toggle('hidden', !readerVisible);
-
-            // Update grid layout
-            const visibleCount = [xmlVisible, ttsVisible, readerVisible].filter(v => v).length;
-            const container = document.getElementById('panesContainer');
-            container.className = `panes-container panes-${Math.max(1, visibleCount)}`;
-        }
-
-        // Project loading logic
-        async function loadProjectData(projectPath) {
-            console.log('━━━ [APP LOAD PROJECT] START ━━━');
-            console.log('[APP LOAD PROJECT] Project path:', projectPath);
-            console.log('[APP LOAD PROJECT] Calling loadProjectData...');
-
-            try {
-                const response = await fetch(`${SERVER_URL}/api/project/load`, {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                        'X-API-Key': API_KEY
-                    },
-                    body: JSON.stringify({ project_path: projectPath })
-                });
-
-                if (response.ok) {
-                    const result = await response.json();
-                    console.log('[APP LOAD PROJECT] Project loaded successfully');
-                    console.log('[APP LOAD PROJECT] Project metadata:', result.metadata);
-
-                    // Initialize all tabs
-                    console.log('[APP LOAD PROJECT] Initializing Gutenberg tab...');
-                    await gutenbergTab.init();
-
-                    console.log('[APP LOAD PROJECT] Initializing TTS tab...');
-                    await ttsTab.init();
-
-                    console.log('[APP LOAD PROJECT] Initializing Reader tab...');
-                    await readerTab.init();
-
-                    console.log('[APP LOAD PROJECT] All tabs initialized');
-                } else {
-                    const error = await response.json();
-                    throw new Error(error.error || 'Failed to load project');
-                }
-            } catch (error) {
-                console.error('[APP LOAD PROJECT] Error:', error);
-                alert('Failed to load project: ' + error.message);
-            }
-
-            console.log('━━━ [APP LOAD PROJECT] END ━━━');
-        }
-
-        // Global state
-        let currentProjectPath = null;
-        let allProjects = [];
-
-        // Load all projects into dropdown
-        async function loadProjectsDropdown() {
-            try {
-                const response = await fetch(`${SERVER_URL}/api/project/recent`, {
-                    headers: {
-                        'X-API-Key': API_KEY
-                    }
-                });
-
-                if (response.ok) {
-                    allProjects = await response.json();
-                    const dropdown = document.getElementById('projectDropdown');
-
-                    // Remember current selection
-                    const currentValue = dropdown.value;
-
-                    // Clear all options
-                    dropdown.innerHTML = '';
-
-                    // Only add "Select a project..." option if no project is currently selected
-                    if (!currentProjectPath) {
-                        const selectOption = document.createElement('option');
-                        selectOption.value = '';
-                        selectOption.textContent = 'Select a project...';
-                        dropdown.appendChild(selectOption);
-                    }
-
-                    // Add "+ New Project" option
-                    const newOption = document.createElement('option');
-                    newOption.value = '__new__';
-                    newOption.textContent = '+ New Project';
-                    dropdown.appendChild(newOption);
-
-                    // Add all projects
-                    allProjects.forEach(project => {
-                        const option = document.createElement('option');
-                        option.value = project.path;
-                        option.textContent = project.name;
-                        dropdown.appendChild(option);
-                    });
-
-                    // Restore previous selection if it still exists
-                    if (currentValue && currentValue !== '__new__') {
-                        dropdown.value = currentValue;
-                    }
-                }
-            } catch (error) {
-                console.error('Error loading projects:', error);
-            }
-        }
-
-        // Handle project selection change
-        async function handleProjectChange() {
-            const dropdown = document.getElementById('projectDropdown');
-            const selectedValue = dropdown.value;
-
-            if (selectedValue === '__new__') {
-                // Show new project modal
-                showNewProjectModal();
-                // Reset dropdown to previous selection or empty
-                dropdown.value = currentProjectPath || '';
-            } else if (selectedValue) {
-                // Load the selected project
-                await switchToProject(selectedValue);
-            } else {
-                // No project selected, hide main content
-                hideMainContent();
-            }
-        }
-
-        // Update page title and header to reflect current project
-        function updatePageTitleForProject(projectName) {
-            const titleElement = document.getElementById('appTitle');
-            if (projectName) {
-                document.title = `Henty - ${projectName}`;
-                titleElement.innerHTML = `<span class="material-symbols-outlined">mic</span> Henty - ${projectName}`;
-            } else {
-                document.title = 'Henty - Audiobook Creator';
-                titleElement.innerHTML = '<span class="material-symbols-outlined">mic</span> Henty';
-            }
-        }
-
-        function showLoading(message, detail) {
-            const overlay = document.getElementById('loadingOverlay');
-            document.getElementById('loadingMessage').textContent = message || 'Loading project...';
-            document.getElementById('loadingDetail').textContent = detail || '';
-            overlay.style.display = 'flex';
-        }
-
-        function hideLoading() {
-            document.getElementById('loadingOverlay').style.display = 'none';
-        }
-
-        function updateLoadingDetail(detail) {
-            document.getElementById('loadingDetail').textContent = detail;
-        }
-
-        // Switch to a different project
-        async function switchToProject(projectPath) {
-            try {
-                showLoading('Loading project...', 'Fetching project data...');
-                // Load the project
-                updateLoadingDetail('Initializing tabs...');
-                await loadProjectData(projectPath);
-
-                // Update current project
-                currentProjectPath = projectPath;
-                window.currentProjectPath = projectPath;
-
-                // Reload dropdown (this removes "Select a project" option when a project is selected)
-                await loadProjectsDropdown();
-
-                // Update dropdown to show selected project
-                const dropdown = document.getElementById('projectDropdown');
-                dropdown.value = projectPath;
-
-                // Update page title and header
-                const projectName = dropdown.options[dropdown.selectedIndex]?.textContent || projectPath.split('/').pop();
-                updatePageTitleForProject(projectName);
-
-                // Show main content
-                showMainContent();
-
-                // Update URL without reloading page
-                const url = new URL(window.location);
-                url.searchParams.set('project', projectPath);
-                window.history.pushState({}, '', url);
-
-                hideLoading();
-
-            } catch (error) {
-                console.error('Error switching project:', error);
-                hideLoading();
-                showToast('Failed to load project: ' + error.message, 'error');
-                hideMainContent();
-                currentProjectPath = null;
-                window.currentProjectPath = null;
-                // Reload dropdown to show "Select a project" option again
-                await loadProjectsDropdown();
-                // Reset title
-                updatePageTitleForProject(null);
-            }
-        }
-
-        // Show/hide main content
-        function showMainContent() {
-            document.getElementById('projectPrompt').style.display = 'none';
-            document.getElementById('mainContent').classList.remove('hidden');
-        }
-
-        async function hideMainContent() {
-            document.getElementById('projectPrompt').style.display = 'flex';
-            document.getElementById('mainContent').classList.add('hidden');
-            currentProjectPath = null;
-            window.currentProjectPath = null;
-            // Reload dropdown to show "Select a project" option again
-            await loadProjectsDropdown();
-            // Reset page title
-            updatePageTitleForProject(null);
-        }
-
-        // Modal functions
-        function showNewProjectModal() {
-            const modal = document.getElementById('newProjectModal');
-            modal.classList.add('active');
-            // Load default Gutenberg URL
-            loadDefaultGutenbergUrl();
-        }
-
-        function closeNewProjectModal() {
-            const modal = document.getElementById('newProjectModal');
-            modal.classList.remove('active');
-            document.getElementById('newProjectForm').reset();
-            document.getElementById('newProjectError').textContent = '';
-        }
-
-        function toggleTextSourceInput() {
-            const sourceType = document.querySelector('input[name="textSourceType"]:checked').value;
-            const urlInput = document.getElementById('urlSourceInput');
-            const fileInput = document.getElementById('fileSourceInput');
-            const rewriterInput = document.getElementById('rewriterSourceInput');
-            const nameInput = document.getElementById('newProjectName');
-
-            urlInput.style.display = sourceType === 'url' ? 'block' : 'none';
-            fileInput.style.display = sourceType === 'file' ? 'block' : 'none';
-            rewriterInput.style.display = sourceType === 'rewriter' ? 'block' : 'none';
-
-            // Project name is derived from the chosen book for Rewriter imports.
-            if (nameInput) nameInput.required = (sourceType !== 'rewriter');
-
-            if (sourceType === 'rewriter') {
-                loadRewriterBooks();
-            }
-        }
-
-        let rewriterBooksCache = [];
-        async function loadRewriterBooks() {
-            const select = document.getElementById('rewriterBookSelect');
-            const dirLabel = document.getElementById('rewriterBooksDir');
-            try {
-                const response = await fetch(`${SERVER_URL}/api/rewriter/books`, {
-                    headers: { 'X-API-Key': API_KEY }
-                });
-                if (!response.ok) throw new Error(`Server error ${response.status}`);
-                const data = await response.json();
-                rewriterBooksCache = data.books || [];
-                if (dirLabel) dirLabel.textContent = data.books_dir ? `From: ${data.books_dir}` : '';
-
-                if (rewriterBooksCache.length === 0) {
-                    select.innerHTML = '<option value="">No books found</option>';
-                    return;
-                }
-                select.innerHTML = rewriterBooksCache.map(b =>
-                    `<option value="${b.folder}">${b.title} (${b.block_count} blocks)${b.has_project ? ' — has project' : ''}</option>`
-                ).join('');
-                syncRewriterName();
-                select.onchange = syncRewriterName;
-            } catch (err) {
-                console.error('[REWRITER] Failed to load books:', err);
-                select.innerHTML = '<option value="">Error loading books</option>';
-                if (dirLabel) dirLabel.textContent = err.message;
-            }
-        }
-
-        function syncRewriterName() {
-            const select = document.getElementById('rewriterBookSelect');
-            const nameInput = document.getElementById('newProjectName');
-            const book = rewriterBooksCache.find(b => b.folder === select.value);
-            if (book && nameInput && !nameInput.value.trim()) {
-                nameInput.value = book.title;
-            }
-        }
-
-        async function loadDefaultGutenbergUrl() {
-            try {
-                console.log('[LOAD DEFAULT URL] Fetching config from:', `${SERVER_URL}/api/config`);
-                const response = await fetch(`${SERVER_URL}/api/config`);
-                console.log('[LOAD DEFAULT URL] Response status:', response.status);
-
-                if (response.ok) {
-                    const config = await response.json();
-                    console.log('[LOAD DEFAULT URL] Config received:', config);
-                    console.log('[LOAD DEFAULT URL] Default Gutenberg URL:', config.default_gutenberg_url);
-
-                    const urlInput = document.getElementById('gutenbergUrl');
-                    if (urlInput) {
-                        urlInput.value = config.default_gutenberg_url || '';
-                        console.log('[LOAD DEFAULT URL] Set input value to:', urlInput.value);
-                    } else {
-                        console.error('[LOAD DEFAULT URL] Input element not found!');
-                    }
-                } else {
-                    console.error('[LOAD DEFAULT URL] Response not OK:', response.status);
-                }
-            } catch (error) {
-                console.error('[LOAD DEFAULT URL] Error:', error);
-            }
-        }
-
-        async function createNewProject(event) {
-            event.preventDefault();
-
-            const name = document.getElementById('newProjectName').value.trim();
-            const sourceType = document.querySelector('input[name="textSourceType"]:checked').value;
-            const errorDiv = document.getElementById('newProjectError');
-
-            console.log('━━━ [CREATE PROJECT] START ━━━');
-            console.log('[CREATE PROJECT] Name:', name);
-            console.log('[CREATE PROJECT] Source Type:', sourceType);
-
-            errorDiv.textContent = '';
-
-            // Rewriter Book import: separate flow — the book's folder becomes the
-            // project directory, chapters are built server-side from book.json.
-            if (sourceType === 'rewriter') {
-                await importRewriterBook(errorDiv);
-                return;
-            }
-
-            if (!name) {
-                errorDiv.textContent = 'Please enter a project name';
-                return;
-            }
-
-            // Build request body
-            const requestBody = { name };
-
-            // Capture URL now (before modal closes)
-            let gutenbergUrlForAutoLoad = null;
-
-            // Handle text source
-            if (sourceType === 'url') {
-                const url = document.getElementById('gutenbergUrl').value.trim();
-                if (!url) {
-                    errorDiv.textContent = 'Please enter a Gutenberg URL';
-                    return;
-                }
-                // For URL source: just record the URL; after project creation we'll
-                // auto-trigger the full Gutenberg load flow (scan + rules dialog).
-                gutenbergUrlForAutoLoad = url;
-                console.log('[CREATE PROJECT] Text Source URL (will auto-load):', url);
-            } else {
-                const fileInput = document.getElementById('textFile');
-                if (!fileInput.files || fileInput.files.length === 0) {
-                    errorDiv.textContent = 'Please select a text file';
-                    return;
-                }
-                const file = fileInput.files[0];
-                console.log('[CREATE PROJECT] Reading file:', file.name, 'Size:', file.size);
-
-                try {
-                    const fileContent = await file.text();
-                    requestBody.text_source = {
-                        type: 'file',
-                        content: fileContent,
-                        filename: file.name
-                    };
-                    console.log('[CREATE PROJECT] File content length:', fileContent.length);
-                } catch (err) {
-                    console.error('[CREATE PROJECT] File read error:', err);
-                    errorDiv.textContent = 'Failed to read file: ' + err.message;
-                    return;
-                }
-            }
-
-            console.log('[CREATE PROJECT] Request body keys:', Object.keys(requestBody));
-
-            try {
-                const url = `${SERVER_URL}/api/project/create`;
-                console.log('[CREATE PROJECT] Sending POST to:', url);
-
-                showLoading('Creating project...', sourceType === 'url' ? 'Downloading and processing Gutenberg text...' : 'Processing uploaded file...');
-
-                const response = await fetch(url, {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                        'X-API-Key': API_KEY
-                    },
-                    body: JSON.stringify(requestBody)
-                });
-
-                console.log('[CREATE PROJECT] Response status:', response.status);
-                console.log('[CREATE PROJECT] Response ok:', response.ok);
-
-                if (response.ok) {
-                    const result = await response.json();
-                    console.log('[CREATE PROJECT] ✓ Success! Result:', result);
-                    console.log('[CREATE PROJECT] Project path:', result.project_path);
-                    console.log('━━━ [CREATE PROJECT] END ━━━');
-
-                    closeNewProjectModal();
-
-                    updateLoadingDetail('Loading project...');
-
-                    // Reload projects dropdown
-                    await loadProjectsDropdown();
-
-                    // Switch to the new project (this will set the dropdown value)
-                    await switchToProject(result.project_path);
-
-                    hideLoading();
-
-                    // For URL source: trigger the full Gutenberg load flow
-                    // (scan → newline-rules dialog → process) automatically.
-                    if (gutenbergUrlForAutoLoad) {
-                        await gutenbergTab.loadGutenbergUrl(gutenbergUrlForAutoLoad);
-                    } else {
-                        showToast('Project created successfully!', 'success');
-                    }
-                } else {
-                    hideLoading();
-                    const errorText = await response.text();
-                    console.error('[CREATE PROJECT] ✗ Error response text:', errorText);
-                    let error;
-                    try {
-                        error = JSON.parse(errorText);
-                    } catch (e) {
-                        error = { error: errorText };
-                    }
-                    console.error('[CREATE PROJECT] ✗ Error:', error);
-                    console.log('━━━ [CREATE PROJECT] END (ERROR) ━━━');
-                    errorDiv.textContent = error.error || 'Failed to create project';
-                }
-            } catch (error) {
-                hideLoading();
-                console.error('[CREATE PROJECT] ✗ Exception:', error);
-                console.log('━━━ [CREATE PROJECT] END (EXCEPTION) ━━━');
-                errorDiv.textContent = 'Error creating project: ' + error.message;
-            }
-        }
-
-        async function importRewriterBook(errorDiv) {
-            const select = document.getElementById('rewriterBookSelect');
-            const folder = select.value;
-            if (!folder) {
-                errorDiv.textContent = 'Please select a Rewriter book';
-                return;
-            }
-            const variant = document.querySelector('input[name="rewriterVariant"]:checked').value;
-            console.log('[REWRITER IMPORT] folder:', folder, 'variant:', variant);
-
-            try {
-                showLoading('Importing Rewriter book...', 'Building chapters from book.json...');
-                const response = await fetch(`${SERVER_URL}/api/project/import-rewriter`, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json', 'X-API-Key': API_KEY },
+                const r = await fetch(`${SERVER_URL}/api/project/import-book`, {
+                    method: 'POST', headers: { 'Content-Type': 'application/json', 'X-API-Key': API_KEY },
                     body: JSON.stringify({ folder, variant })
                 });
+                const data = await r.json();
+                if (!r.ok) throw new Error(data.error || `Server error ${r.status}`);
+                currentBookFolder = folder;
+                await openBook(data.project_path);
+                showToast(`Imported "${data.title}" — ${data.chapter_count} chapters, ${data.chunk_count} chunks`, 'success');
+            } catch (e) { hideLoading(); showToast('Import failed: ' + e.message, 'error'); }
+        }
 
-                if (!response.ok) {
-                    hideLoading();
-                    const err = await response.json().catch(() => ({}));
-                    errorDiv.textContent = err.error || `Failed to import (status ${response.status})`;
-                    return;
+        async function openBook(path) {
+            showLoading('Loading book…');
+            try {
+                const r = await fetch(`${SERVER_URL}/api/project/load`, {
+                    method: 'POST', headers: { 'Content-Type': 'application/json', 'X-API-Key': API_KEY },
+                    body: JSON.stringify({ project_path: path })
+                });
+                const data = await r.json();
+                if (!r.ok) throw new Error(data.error || `Server error ${r.status}`);
+                document.getElementById('prompt').style.display = 'none';
+                document.getElementById('gridScroll').style.display = 'block';
+                document.getElementById('genBookBtn').disabled = false;
+                document.getElementById('cleanTakesBtn').disabled = false;
+                document.getElementById('readerToggle').disabled = false;
+                document.getElementById('undoBtn').disabled = false;
+                await loadBooks();
+                const book = books.find(b => b.path === path);
+                if (book) { currentBookFolder = book.folder; document.getElementById('bookDropdown').value = book.folder; }
+                await bookTab.init();
+                hideLoading();
+            } catch (e) { hideLoading(); showToast('Failed to load book: ' + e.message, 'error'); }
+        }
+
+        // Ctrl/Cmd+Z → undo last committed move. While editing text, let the browser
+        // handle native typing-undo instead (don't hijack the editor).
+        document.addEventListener('keydown', (e) => {
+            if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'z' && !e.shiftKey) {
+                const ae = document.activeElement;
+                const editing = ae && (ae.isContentEditable || ae.tagName === 'INPUT' || ae.tagName === 'TEXTAREA');
+                if (editing) return;
+                if (document.getElementById('undoBtn').disabled) return;
+                e.preventDefault();
+                bookTab.undo();
+            }
+        });
+
+        // ---- Run the whole priority queue ----
+        function renderQueueRun(states) {
+            const icon = { queued: '⏳', importing: '📥', generating: '🎤', done: '✅', error: '❌', skipped: '⏭️' };
+            document.getElementById('queueRunList').innerHTML = states.map(s => `
+                <div style="display:flex;align-items:center;gap:10px;padding:6px 8px;border-bottom:1px solid #f1f5f9;">
+                    <span style="font-size:18px;">${icon[s.status] || '•'}</span>
+                    <span style="flex:1;">${s.title}</span>
+                    <span style="font-size:12px;color:#64748b;">${s.detail || s.status}</span>
+                </div>`).join('');
+        }
+        function closeQueueRunModal() { document.getElementById('queueRunModal').classList.remove('active'); }
+        function stopPriorityQueue() {
+            queueRunStop = true;
+            document.getElementById('queueStopBtn').disabled = true;
+            document.getElementById('queueStopBtn').textContent = 'Stopping…';
+        }
+
+        async function runPriorityQueue() {
+            const folders = priorityQueue.filter(f => books.some(b => b.folder === f));
+            if (!folders.length) { showToast('Priority queue is empty. Edit it first.', 'warning'); return; }
+            if (!confirm(`Run the priority queue?\n\nFor each of the ${folders.length} books this will import/chunk if needed and generate every chunk (existing takes are skipped). This can take a long time.`)) return;
+
+            queueRunStop = false;
+            const stopBtn = document.getElementById('queueStopBtn');
+            stopBtn.disabled = false; stopBtn.textContent = 'Stop after current'; stopBtn.style.display = '';
+            document.getElementById('queueCloseBtn').style.display = 'none';
+            document.getElementById('runQueueBtn').disabled = true;
+
+            const states = folders.map(f => ({ folder: f, title: (books.find(b => b.folder === f) || {}).title || f, status: 'queued', detail: '' }));
+            renderQueueRun(states);
+            document.getElementById('queueRunModal').classList.add('active');
+
+            for (const st of states) {
+                if (queueRunStop) { st.status = 'skipped'; st.detail = 'stopped'; renderQueueRun(states); continue; }
+                const book = books.find(b => b.folder === st.folder);
+                try {
+                    // 1) Ensure the project exists (import builds chapters/chunks), then it's loaded.
+                    if (!book.has_project) {
+                        st.status = 'importing'; st.detail = 'building chapters…'; renderQueueRun(states);
+                        const ri = await fetch(`${SERVER_URL}/api/project/import-book`, {
+                            method: 'POST', headers: { 'Content-Type': 'application/json', 'X-API-Key': API_KEY },
+                            body: JSON.stringify({ folder: st.folder, variant: 'original' })
+                        });
+                        const di = await ri.json();
+                        if (!ri.ok) throw new Error(di.error || `import ${ri.status}`);
+                    } else {
+                        st.status = 'importing'; st.detail = 'loading…'; renderQueueRun(states);
+                        const rl = await fetch(`${SERVER_URL}/api/project/load`, {
+                            method: 'POST', headers: { 'Content-Type': 'application/json', 'X-API-Key': API_KEY },
+                            body: JSON.stringify({ project_path: book.path })
+                        });
+                        if (!rl.ok) throw new Error((await rl.json()).error || `load ${rl.status}`);
+                    }
+                    // 2) Generate every chunk (skips chunks that already have a take).
+                    st.status = 'generating'; st.detail = 'generating takes…'; renderQueueRun(states);
+                    const rg = await fetch(`${SERVER_URL}/api/project/generate-entire-book`, {
+                        method: 'POST', headers: { 'Content-Type': 'application/json', 'X-API-Key': API_KEY },
+                        body: JSON.stringify({})
+                    });
+                    const dg = await rg.json();
+                    if (!rg.ok) throw new Error(dg.error || `generate ${rg.status}`);
+                    st.status = 'done';
+                    st.detail = `${dg.generated ?? 0} generated, ${dg.skipped ?? 0} skipped${dg.errors ? `, ${dg.errors} errors` : ''}`;
+                } catch (e) {
+                    st.status = 'error'; st.detail = e.message;
                 }
-
-                const result = await response.json();
-                console.log('[REWRITER IMPORT] ✓', result);
-                closeNewProjectModal();
-                updateLoadingDetail('Loading project...');
-                await loadProjectsDropdown();
-                await switchToProject(result.project_path);
-                hideLoading();
-                showToast(`Imported "${result.title}" — ${result.chapter_count} chapters, ${result.chunk_count} chunks`, 'success');
-            } catch (error) {
-                hideLoading();
-                console.error('[REWRITER IMPORT] Exception:', error);
-                errorDiv.textContent = 'Error importing book: ' + error.message;
-            }
-        }
-
-        // Initialize on page load
-        async function initApp() {
-            console.log('━━━ [APP INIT] START ━━━');
-
-            // Load all projects into dropdown
-            await loadProjectsDropdown();
-
-            // Get project path from URL parameter (if any)
-            const urlParams = new URLSearchParams(window.location.search);
-            const projectPath = urlParams.get('project');
-
-            console.log('[APP INIT] Project path from URL:', projectPath);
-
-            if (projectPath) {
-                // Auto-select the project from URL
-                const dropdown = document.getElementById('projectDropdown');
-                dropdown.value = projectPath;
-                await switchToProject(projectPath);
-            } else {
-                // No project selected, show prompt
-                hideMainContent();
+                renderQueueRun(states);
             }
 
-            // Load device status
-            await loadDeviceStatus();
-
-            console.log('━━━ [APP INIT] END ━━━');
+            stopBtn.style.display = 'none';
+            document.getElementById('queueCloseBtn').style.display = '';
+            document.getElementById('runQueueBtn').disabled = false;
+            await loadBooks();   // refresh has_project flags / mtimes
+            const done = states.filter(s => s.status === 'done').length;
+            showToast(`Priority queue finished — ${done}/${states.length} books generated`, 'success');
         }
 
-        // Initialize when page loads
-        window.addEventListener('DOMContentLoaded', initApp);
-
-        // XML Editor collapse functions
-        function toggleChapterCollapse(headerElement) {
-            const section = headerElement.parentElement;
-            const isCollapsed = section.classList.contains('collapsed');
-
-            if (isCollapsed) {
-                section.classList.remove('collapsed');
-                headerElement.classList.remove('collapsed');
-            } else {
-                section.classList.add('collapsed');
-                headerElement.classList.add('collapsed');
-            }
-        }
-
-        function toggleTagDetails(tagElement) {
-            // For future: could show more details about the tag
-            tagElement.classList.toggle('expanded');
-        }
-
-        // Toast notification system
-        function showToast(message, type = 'info', duration = 4000) {
-            const container = document.getElementById('toastContainer') || createToastContainer();
-
-            const iconMap = {
-                success: 'check_circle',
-                error: 'error',
-                warning: 'warning',
-                info: 'info'
-            };
-
-            const toast = document.createElement('div');
-            toast.className = `toast ${type}`;
-            toast.innerHTML = `
-                <span class="toast-icon material-symbols-outlined">${iconMap[type] || iconMap.info}</span>
-                <div class="toast-content">
-                    <div class="toast-message">${message}</div>
-                </div>
-                <button class="toast-close" onclick="this.parentElement.remove()">
-                    <span class="material-symbols-outlined" style="font-size: 18px;">close</span>
-                </button>
-            `;
-
-            container.appendChild(toast);
-
-            // Auto-remove after duration (but not for errors - they persist until dismissed)
-            if (type !== 'error') {
-                setTimeout(() => {
-                    toast.classList.add('fade-out');
-                    setTimeout(() => toast.remove(), 300);
-                }, duration);
-            }
-        }
-
-        function createToastContainer() {
-            const container = document.createElement('div');
-            container.id = 'toastContainer';
-            document.body.appendChild(container);
-            return container;
-        }
-
-        // Global access
-        window.showToast = showToast;
+        (async function init() {
+            const rw = localStorage.getItem('henty.readerW');
+            if (rw) document.body.style.setProperty('--reader-w', rw + 'px');
+            await loadQueue();
+            await loadBooks();
+        })();
     </script>
 </body>
 </html>

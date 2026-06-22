@@ -8,6 +8,13 @@ echo   Henty Audiobook Creation Suite
 echo ================================================
 echo.
 
+REM Silence the benign "urllib3/chardet doesn't match a supported version"
+REM RequestsDependencyWarning. Set here so it's in the environment before Python
+REM starts (a .env value would be read too late, after `import requests`). Inherited
+REM by both precheck.py and the server process started below. Matches by message
+REM prefix, so it's version-agnostic and mutes only this warning.
+set PYTHONWARNINGS=ignore:urllib3
+
 REM Kill any previously running Henty server instances
 echo [INFO] Stopping any previously running Henty server...
 taskkill /FI "WINDOWTITLE eq Henty Server*" /T /F 2>nul
@@ -102,10 +109,10 @@ echo [INFO] Starting server...
 echo.
 
 REM Start the server in its own window. Output is shown live AND written to
-REM server_log.txt via Tee-Object. -u (unbuffered) ensures logs appear immediately
-REM instead of being buffered. -NoExit keeps the window open after a crash.
+REM server_log.txt via Tee-Object. -u (unbuffered) ensures logs appear immediately.
+REM Window closes automatically when server exits. Check server_log.txt if it crashes.
 if exist server_log.txt del server_log.txt
-start "Henty Server" powershell -NoProfile -NoExit -Command "$env:PYTHONUNBUFFERED='1'; & '%HENTY_PYTHON%' -u server.py 2>&1 | Tee-Object -FilePath server_log.txt"
+start "Henty Server" powershell -NoProfile -Command "$env:PYTHONUNBUFFERED='1'; & '%HENTY_PYTHON%' -u server.py 2>&1 | Tee-Object -FilePath server_log.txt"
 
 REM Wait for server to start
 echo [INFO] Waiting for server to initialize...
@@ -140,5 +147,5 @@ echo.
 echo The server is running in a separate window.
 echo Close that window to stop the server.
 echo.
-echo Press any key to close this launcher window...
-pause >nul
+echo This launcher will close automatically in 20 seconds...
+timeout /t 20 /nobreak >nul 2>&1

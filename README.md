@@ -1,349 +1,139 @@
-# Henty Project - Enhanced Project Gutenberg Reader
-
-A comprehensive suite of tools for downloading, annotating, and experiencing Project Gutenberg texts with AI-powered context and audio narration.
-
-## 🌟 Features
-
-### 📚 AI-Powered Text Annotation
-- **Automatic entity detection**: Places, people, historical topics, and archaic terms
-- **Rich annotations**: Coordinates, biographies, definitions, and sources
-- **Local or Cloud LLMs**: Use free Ollama models or Anthropic Claude
-- **Beautiful HTML reader**: Responsive design with interactive annotations
-
-### 🔊 Text-to-Speech
-- **High-quality TTS**: Chatterbox TTS from Resemble AI
-- **Batch processing**: Generate audio for entire books
-- **Web interface**: Side-by-side text and audio display
-
-### 📖 Complete Reading Experience
-- **Download from Gutenberg**: Automatic processing of books
-- **Interactive reader**: Hover annotations, adjustable fonts
-- **Mobile-friendly**: Responsive design for all devices
-- **Offline capable**: Works locally without internet
-
-## 🚀 Quick Start
-
-### One-Line Setup
-
-```bash
-# Install dependencies
-pip install -r requirements.txt
-
-# Start the annotator UI (recommended)
-python annotator_ui.py
-```
-
-Then open http://localhost:7860 in your browser!
-
-### Or Use Convenience Scripts
-
-**Linux/Mac:**
-```bash
-./start_annotator.sh
-```
-
-**Windows:**
-```batch
-start_annotator.bat
-```
-
-## 📦 What's Included
-
-### 1. Text Annotator UI (`annotator_ui.py`)
-**The main interface** - Gradio UI for annotating texts
-
-**Features:**
-- Choose between Ollama (local/free) and Anthropic (cloud/paid) models
-- Download directly from Project Gutenberg URLs
-- Upload your own text files
-- Process full books or test with sample paragraphs
-- Automatic entity detection and enrichment
-- Progress tracking and error handling
-
-**See:** [`ANNOTATOR_UI_GUIDE.md`](ANNOTATOR_UI_GUIDE.md) for full guide
-
-### 2. HTML Reader (`reader.html`)
-Beautiful, responsive reader for annotated texts
-
-**Features:**
-- Main reading column + annotation sidebar
-- Adjustable font size (12-32px)
-- Color-coded annotations (place, person, topic, term)
-- Links to Wikipedia, Britannica, and other sources
-- Embedded images from Wikimedia Commons
-- Keyboard shortcuts (Cmd/Ctrl +/- for font size)
-
-**See:** [`READER_DOCUMENTATION.md`](READER_DOCUMENTATION.md) for details
-
-### 3. Gutenberg Processor (`scripts/gutenberg_processor.py`)
-Download and process Project Gutenberg texts
-
-**Features:**
-- Download from Gutenberg URLs
-- Automatic title extraction
-- Remove metadata headers/footers
-- Split into chapters
-- Batch processing
-
-### 4. Text-to-Speech (`app.py`, `server.py`)
-Convert text to high-quality audio narration
-
-**Features:**
-- Chatterbox TTS model
-- Web interface with audio player
-- Batch audio generation
-- Audio caching
-
-## 🎯 Complete Workflow
-
-### From Gutenberg Book to Interactive Reader (5 minutes)
-
-```bash
-# 1. Start the annotator UI
-python annotator_ui.py
-
-# 2. In the UI:
-#    - Choose your model (Ollama or Anthropic)
-#    - Paste a Gutenberg URL
-#    - Click "Download & Process"
-#    - Select a chapter
-#    - Click "Annotate"
-#
-# 3. Click "Open in Reader" and load the JSON file
-#
-# Done! Hover over highlighted text to see annotations
-```
-
-### Example URLs to Try
-
-- **"With Clive in India" by G.A. Henty:**
-  `https://www.gutenberg.org/cache/epub/4932/pg4932.txt`
-
-- **"The Adventures of Sherlock Holmes":**
-  `https://www.gutenberg.org/cache/epub/1661/pg1661.txt`
-
-- **"Pride and Prejudice":**
-  `https://www.gutenberg.org/cache/epub/1342/pg1342.txt`
-
-## 🤖 Model Options
-
-### Local Models (Ollama) - FREE
-
-**Install Ollama:**
-```bash
-# Visit https://ollama.ai/download
-# Or on Linux:
-curl -fsSL https://ollama.com/install.sh | sh
-
-# Start Ollama
-ollama serve
-
-# Pull models
-ollama pull llama3.2        # 3B - Fast
-ollama pull llama3.1:8b     # 8B - Better quality
-ollama pull qwen2.5:14b     # 14B - Best local quality
-```
-
-**Pros:**
-- ✅ Completely free
-- ✅ Private (runs locally)
-- ✅ No API limits
-- ✅ Works offline
-
-**Cons:**
-- ⚠️ Requires disk space (2-14GB per model)
-- ⚠️ Slower on CPU
-- ⚠️ Lower quality than Claude
-
-### Cloud Models (Anthropic) - PAID
-
-**Setup:**
-```bash
-# Get API key from https://console.anthropic.com/
-export ANTHROPIC_API_KEY="your-key-here"
-```
-
-**Pros:**
-- ✅ Highest quality annotations
-- ✅ Very fast
-- ✅ No local resources needed
-- ✅ Best for historical accuracy
-
-**Cons:**
-- ⚠️ Costs ~$1-2 per chapter
-- ⚠️ Requires internet
-- ⚠️ API rate limits
-
-## 📋 Requirements
-
-- **Python**: 3.8 or higher
-- **RAM**: 8GB minimum (16GB+ recommended for local models)
-- **Disk**: 10GB+ for Ollama models
-- **GPU**: Optional but recommended for TTS and large Ollama models
-
-See [`requirements.txt`](requirements.txt) for Python dependencies.
-
-## 📚 Documentation
-
-- **[ANNOTATOR_UI_GUIDE.md](ANNOTATOR_UI_GUIDE.md)** - Complete UI guide with tips & troubleshooting
-- **[READER_DOCUMENTATION.md](READER_DOCUMENTATION.md)** - Technical details for the HTML reader
-- **[READER_QUICKSTART.md](READER_QUICKSTART.md)** - Quick examples and workflows
-
-## 🎨 What Gets Annotated
-
-The AI automatically identifies and annotates:
-
-### 📍 Places (Green)
-- Geographic locations with coordinates
-- Modern names if changed
-- Historical context
-
-**Example:** "Madras" → Shows coordinates (13.08°N, 80.27°E), notes modern name "Chennai"
-
-### 👤 People (Red)
-- Historical figures
-- Birth/death years
-- Key accomplishments
-- Portrait images
-
-**Example:** "Robert Clive" → Biography, dates (1725-1774), portrait from Wikipedia
-
-### 📖 Topics (Yellow)
-- Historical events
-- Time periods
-- Cultural concepts
-
-**Example:** "British East India Company" → Founding date, purpose, historical significance
-
-### 🔤 Terms (Purple)
-- Archaic words
-- Etymology
-- Modern equivalents
-- Definitions
-
-**Example:** "fortnight" → Etymology ("fourteen nights"), modern equivalent ("two weeks")
-
-## 💡 Use Cases
-
-- **Education**: Enhance historical texts for students
-- **Research**: Quick context for historical documents
-- **Reading Groups**: Shared annotations for book clubs
-- **Personal Enrichment**: Deeper understanding of classic literature
-- **Accessibility**: Audio narration for all texts
-- **Digital Humanities**: Structured annotations for analysis
-
-## 🛠️ Advanced Usage
-
-### Command Line
-
-```bash
-# Annotate with Ollama (default)
-python scripts/text_annotator.py input.txt output.json
-
-# Use specific model
-python scripts/text_annotator.py input.txt output.json --model llama3.1:8b
-
-# Use Anthropic
-python scripts/text_annotator.py input.txt output.json --backend anthropic
-
-# Download from Gutenberg
-python scripts/gutenberg_processor.py https://www.gutenberg.org/cache/epub/4932/pg4932.txt
-```
-
-### Customize Annotations
-
-Edit `scripts/text_annotator.py` to modify:
-- Entity types to detect
-- Annotation detail level
-- Source preferences
-- Output format
-
-### Web Server Integration
-
-The reader can be served via the included Flask server:
-
-```bash
-python server.py
-# Visit http://localhost:5000
-```
-
-## 📊 Performance
-
-### Annotation Speed
-
-| Model | Speed (per paragraph) | Quality | RAM |
-|-------|----------------------|---------|-----|
-| Llama 3.2 (3B) | 5-10 sec | Good | 8GB |
-| Llama 3.1 (8B) | 15-30 sec | Great | 16GB |
-| Qwen 2.5 (14B) | 30-60 sec | Excellent | 32GB |
-| Claude Sonnet 4.5 | 3-5 sec | Best | N/A |
-
-*On CPU. GPU is 3-10x faster.*
-
-### Cost Estimates (Anthropic)
-
-| Content | Typical Cost |
-|---------|--------------|
-| Sample (3 para) | $0.10-0.20 |
-| Full chapter (~50 para) | $1-2 |
-| Full book (20 chapters) | $20-40 |
-
-**Ollama is completely free!**
-
-## 🤝 Contributing
-
-Contributions welcome! Areas for improvement:
-
-- Additional annotation types (quotes, references, etc.)
-- Map integration for place annotations
-- Timeline view for historical events
-- Multi-language support
-- OCR for scanned texts
-- Export to EPUB/PDF
-
-## 📄 License
-
-This project uses several open-source components:
-
-- **Chatterbox TTS**: See [Resemble AI](https://github.com/resemble-ai/chatterbox) for license
-- **Project Gutenberg texts**: Public domain
-- **Ollama**: MIT License
-- **Other dependencies**: See respective packages
-
-The code in this repository is provided as-is for educational purposes.
-
-## 🙏 Acknowledgments
-
-- **Project Gutenberg**: For preserving and providing free access to classic literature
-- **Anthropic**: For Claude AI models
-- **Ollama**: For making local LLMs accessible
-- **Resemble AI**: For Chatterbox TTS
-- **G.A. Henty**: Inspiration for the project name
-
-## 📧 Support
-
-Having issues? Check:
-
-1. **[ANNOTATOR_UI_GUIDE.md](ANNOTATOR_UI_GUIDE.md)** - Troubleshooting section
-2. **Console output** - Look for error messages
-3. **Model status** - Ensure Ollama is running or API key is set
-4. **Dependencies** - Try reinstalling: `pip install -r requirements.txt --upgrade`
-
-## 🚀 Roadmap
-
-- [ ] Map view with all annotated places
-- [ ] Character relationship graphs
-- [ ] Reading statistics and progress tracking
-- [ ] Social features (share annotations)
-- [ ] Mobile app
-- [ ] PDF/EPUB export
-- [ ] OCR for scanned books
-- [ ] Multi-language support
-- [ ] Voice selection for TTS
-- [ ] Collaborative annotation
+# Henty — Audiobook Creator
+
+Henty turns a pre-structured book into a narrated audiobook. Books are produced
+upstream (by Claude Cowork / the Rewriter pipeline) as a `book.json` file; Henty
+imports that, lays the text out in an aligned grid, and generates TTS takes per chunk
+with [Chatterbox](https://github.com/resemble-ai/chatterbox).
+
+Henty no longer does any text acquisition or chaptering — no Gutenberg downloading,
+no EPUB/regex chapter parsing, no Markdown editor. Those steps live in Cowork now.
 
 ---
 
-**Happy Reading!** 📖✨
+## What it does
 
-Transform your reading experience with AI-powered context and understanding.
+1. **Open a book** — pick a folder under `BOOKS_DIR` (each contains a `book.json`).
+   Importing builds a locked chapter/chunk project saved **in that folder**
+   (`project.json` + `audio/` live alongside `book.json`).
+2. **Review in the grid** — one continuous grid: chapter titles as header rows, then
+   one row per chunk with the **text on the left and its takes on the right**, always
+   aligned. Hover the left gutter to **merge** (↑/↓) or **split** (✂) a chunk.
+3. **Generate audio** — per chunk, per chapter, or **Generate Entire Book** (skips
+   chunks that already have a take). The first take becomes the best take; you can
+   change the best take or delete takes.
+4. **Reader pane** — a right-side reading view (hidden by default; toggle "Reader").
+   Plays best takes in order with text highlighting.
+
+### Pronunciation & emotion markup (core TTS feature)
+Chunk text may contain inline annotations; both are sent through the TTS pipeline:
+
+- **Pronunciation:** `{display|spoken}` → the reader sees *display*, TTS speaks *spoken*.
+  e.g. `{Beauchamp|BEE-chum}`, `{St.|Saint}`.
+- **Paralinguistic tags (Chatterbox Turbo):** `{display|[tag]}` or `{|[tag]}` — supported
+  tags: `[laugh] [chuckle] [cough] [sigh] [gasp] [groan] [sniff] [clear throat] [shush]`.
+  A chunk containing an emotion tag auto-selects the Turbo model.
+
+---
+
+## Running
+
+GPU is **required** — the server refuses to start without CUDA.
+
+```
+start_henty_fresh.bat
+```
+
+The launcher kills any old instance, runs `precheck.py`, starts the server (logs stream
+live to the window and to `server_log.txt`), and opens `http://localhost:5000/app.html`.
+
+Set `SKIP_PRECHECK=1` in `.env` to skip the dependency check after the first good run.
+
+### `.env` settings
+```
+SERVER_HOST=0.0.0.0
+SERVER_PORT=5000
+REQUIRE_AUTH=False
+API_KEY=...
+BOOKS_DIR=C:\Users\danie\OneDrive\Documents\Claude\Projects\Rewriter\books
+DEFAULT_VOICE=Haggard          # must match a file in voice_samples/ (extension-agnostic)
+DEFAULT_TTS_MODEL=chatterbox   # chatterbox | chatterbox_turbo
+MAX_PARALLEL_GENERATIONS=3
+MAX_CHUNK_SIZE=500
+SKIP_PRECHECK=0
+```
+
+> **Voice safety:** Henty never uses the Chatterbox built-in default voice. If a voice
+> can't be resolved (project voice → `DEFAULT_VOICE` fallback), generation errors out.
+
+There is also a small standalone **Gradio app** (`app.py`) for quick one-off audio
+previewing, independent of the main server.
+
+---
+
+## Locked Environment (verified working — reproduce exactly)
+
+This stack is fiddly to assemble; pin these versions.
+
+**Platform:** Windows 11 + NVIDIA RTX 5070 Ti, CUDA 13.0
+
+| Component | Version |
+|-----------|---------|
+| Python | **3.11.0** |
+| PyTorch | **2.12.0+cu130** |
+| torchaudio | **2.11.0+cu130** |
+| torchvision | **0.27.0+cu130** |
+| CUDA | **13.0** |
+| chatterbox-tts | **0.1.7** |
+| numpy | **2.2.6** (must be `<2.3` for numba/Chatterbox) |
+| scipy | 1.16.3 |
+| Flask | 3.0.0 |
+| Flask-CORS | 6.0.1 |
+| Flask-SocketIO | 5.5.1 |
+| python-socketio | 5.15.0 |
+| gradio | 6.8.0 (for `app.py` preview) |
+| pydub | 0.25.1 |
+| librosa | 0.11.0 |
+| soundfile | 0.13.1 |
+| requests | 2.31.0 |
+| beautifulsoup4 | 4.14.2 |
+| python-dotenv | 1.0.1 |
+
+**Install the CUDA build of PyTorch explicitly:**
+```
+pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu130
+```
+
+**Critical notes**
+1. **numpy must be `<2.3`** — numba (a Chatterbox dependency) breaks otherwise. 2.2.6 is correct.
+2. **PyTorch must be the cu130 wheel** — the default PyPI wheel is CPU-only and Henty will refuse to start.
+3. **chatterbox-tts 0.1.7 works with torch 2.12.0** despite declaring `torch==2.6.0` (tested/verified).
+4. For the complete transitive dependency tree, see `pip freeze` output committed to version control.
+
+---
+
+## Project layout
+
+| Path | Role |
+|------|------|
+| `server.py` | Flask backend, `TextToAudioConverter`, all `/api/*` endpoints |
+| `app.html` | Single-page UI: book picker → aligned grid + reader pane |
+| `book_tab.js` | The grid: chunk rows, takes, generation queue, merge/split, inline edit |
+| `reader_tab.js` | Reader pane: best-take playback with highlighting |
+| `config.py` | Configuration (reads `.env`) |
+| `auth.py` | API-key auth |
+| `precheck.py` | Pre-flight dependency/GPU check |
+| `app.py` | Standalone Gradio preview app |
+| `voice_samples/` | Reference voices (the spoken voice prompt) |
+| `BOOKS_DIR/<book>/` | A project: `book.json`, `project.json`, `audio/` |
+
+### Key API endpoints
+- `GET /api/books` — list importable book folders under `BOOKS_DIR`
+- `POST /api/project/import-book` — `{folder, variant}` → build & open a project
+- `POST /api/project/load` — load an existing project by path
+- `GET /api/project/info` — current project metadata (chapters/chunks/takes)
+- `POST /api/project/generate-chunk-audio` — generate one take
+- `POST /api/project/chapter/generate-all` — generate a whole chapter
+- `POST /api/project/generate-entire-book` — generate every chunk (skips existing)
+- `POST /api/project/split-chunk` / `merge-chunk` — restructure chunks
+- `POST /api/project/update-chunk-text` — edit chunk text
+- `POST /api/project/set-chunk-best-take` / `delete-audio` — manage takes

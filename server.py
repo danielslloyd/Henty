@@ -19,6 +19,42 @@ except ImportError:
     print("WARNING: chatterbox.tts_turbo not available. Emotion tags will be converted to display text.")
 import torch
 import numpy as np
+
+# Turbo dtype guard: ChatterboxTurboTTS.norm_loudness multiplies the float32 reference
+# wav by a numpy float64 loudness gain, upcasting the whole array to float64. That then
+# crashes downstream ("RNN input dtype torch.float64 ... weight dtype torch.float32" and
+# "expected scalar type Float but found Double"). Force the result back to float32.
+if HAS_TURBO:
+    try:
+        _orig_norm_loudness = ChatterboxTurboTTS.norm_loudness
+        def _norm_loudness_f32(self, wav, sr, target_lufs=-27):
+            out = _orig_norm_loudness(self, wav, sr, target_lufs)
+            if hasattr(out, 'astype'):
+                out = out.astype(np.float32, copy=False)
+            return out
+        ChatterboxTurboTTS.norm_loudness = _norm_loudness_f32
+        print("[PATCH] ChatterboxTurboTTS.norm_loudness float32 guard applied")
+    except Exception as _patch_err:
+        print(f"[PATCH] could not patch norm_loudness: {_patch_err}")
+
+# Chatterbox's S3 tokenizer crashes when the reference (voice prompt) audio is loaded as
+# float64 — "expected scalar type Float but found Double" inside log_mel_spectrogram. This
+# happens for the Turbo voice prompt on some systems. Coerce the audio to float32 there.
+try:
+    from chatterbox.models.s3tokenizer.s3tokenizer import S3Tokenizer as _S3Tok
+    _orig_log_mel = _S3Tok.log_mel_spectrogram
+    def _log_mel_float32(self, audio, padding=0):
+        if torch.is_tensor(audio):
+            if audio.dtype != torch.float32:
+                audio = audio.float()
+        else:
+            audio = torch.from_numpy(np.asarray(audio, dtype=np.float32))
+        return _orig_log_mel(self, audio, padding)
+    _S3Tok.log_mel_spectrogram = _log_mel_float32
+    print("[PATCH] s3tokenizer.log_mel_spectrogram float32 guard applied")
+except Exception as _patch_err:
+    print(f"[PATCH] could not patch s3tokenizer for float32: {_patch_err}")
+
 from scipy.io import wavfile
 import re
 from pydub import AudioSegment
@@ -27,7 +63,6 @@ import time
 import threading
 import uuid
 from datetime import datetime
-from scripts.gutenberg_processor import GutenbergProcessor
 from config import config
 from auth import AuthManager
 
@@ -88,76 +123,10 @@ def preview_json_for_log(value, limit=LOG_PREVIEW_LIMIT):
     return preview_for_log(serialized, limit=limit)
 
 
-def build_gutenberg_url_metadata(book_id, source_url, processor=None):
-    """Build canonical Gutenberg URL metadata for persistence and UI reuse."""
-    if not book_id:
-        return {
-            'gutenberg_book_id': None,
-            'gutenberg_source_url': source_url or None,
-            'gutenberg_txt_url': None,
-            'gutenberg_epub_url': None,
-        }
-
-    processor = processor or GutenbergProcessor(output_dir='.')
-    return {
-        'gutenberg_book_id': book_id,
-        'gutenberg_source_url': source_url,
-        'gutenberg_txt_url': processor.get_plain_text_url(book_id),
-        'gutenberg_epub_url': processor.get_epub_url(book_id),
-    }
 
 
-def enrich_project_metadata_with_gutenberg_urls(metadata, project_path=None):
-    """Backfill canonical Gutenberg URLs into loaded project metadata."""
-    if not metadata:
-        return metadata
-
-    source_url = metadata.get('gutenberg_source_url')
-    book_id = metadata.get('gutenberg_book_id')
-
-    if not source_url:
-        for chapter in metadata.get('chapters', []):
-            chapter_source_url = chapter.get('source_url')
-            if chapter_source_url and 'gutenberg.org' in chapter_source_url.lower():
-                source_url = chapter_source_url
-                break
-
-    if not book_id and source_url and 'gutenberg.org' in source_url.lower():
-        processor = GutenbergProcessor(output_dir=project_path or '.')
-        book_id = processor.get_gutenberg_book_id(source_url)
-
-    if source_url or book_id:
-        metadata.update(build_gutenberg_url_metadata(book_id, source_url, GutenbergProcessor(output_dir=project_path or '.')))
-
-    return metadata
 
 
-def ensure_cached_project_epub(project_path, metadata):
-    """Load cached EPUB bytes or re-download from saved Gutenberg metadata."""
-    epub_cache = os.path.join(project_path, 'source.epub')
-    if os.path.exists(epub_cache):
-        with open(epub_cache, 'rb') as f:
-            return f.read(), None
-
-    if not metadata:
-        return None, 'No project metadata available.'
-
-    processor = GutenbergProcessor(output_dir=project_path)
-    metadata = enrich_project_metadata_with_gutenberg_urls(metadata, project_path)
-    book_id = metadata.get('gutenberg_book_id')
-    epub_url = metadata.get('gutenberg_epub_url')
-
-    if not book_id:
-        return None, 'No saved Gutenberg EPUB URL found. Load a Gutenberg book first.'
-
-    epub_bytes = processor.download_epub(book_id)
-    if not epub_bytes:
-        return None, f'Failed to download EPUB from {epub_url or "Project Gutenberg"}'
-
-    with open(epub_cache, 'wb') as ef:
-        ef.write(epub_bytes)
-    print(f"[EPUB CACHE] Downloaded EPUB from {epub_url or 'Project Gutenberg'} ({len(epub_bytes):,} bytes)")
-    return epub_bytes, None
 
 # Configure CORS for remote access
 # Note: When using wildcard (*), we can't use credentials
@@ -201,34 +170,30 @@ class TextToAudioConverter:
         print(f"PyTorch location: {torch.__file__}")
         print(f"CUDA available: {torch.cuda.is_available()}")
 
-        if torch.cuda.is_available():
-            print(f"CUDA version: {torch.version.cuda}")
-            print(f"Number of GPUs: {torch.cuda.device_count()}")
-            print(f"Current GPU: {torch.cuda.current_device()}")
-            print(f"GPU Name: {torch.cuda.get_device_name(0)}")
-            print(f"GPU Memory: {torch.cuda.get_device_properties(0).total_memory / 1e9:.2f} GB")
-        else:
-            import sys
-            print("WARNING: CUDA is not available!")
-            print("\nThis Python has PyTorch WITHOUT CUDA support.")
-            print("The CPU version of PyTorch is installed at:")
-            print(f"  {torch.__file__}")
-            print("\nTo fix, run these commands:")
-            print(f"\n  {sys.executable} -m pip uninstall torch torchvision torchaudio -y")
-            print(f"  {sys.executable} -m pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu130")
-            print("\nThen restart the server.")
-
-        # Set device based on preference and availability
+        # GPU-only: Henty requires CUDA. Refuse to run on CPU.
         self.cuda_available = torch.cuda.is_available()
-        if config.DEVICE_PREFERENCE == 'cpu':
-            self.device = 'cpu'
-        elif config.DEVICE_PREFERENCE == 'cuda':
-            self.device = 'cuda' if self.cuda_available else 'cpu'
-        else:  # auto
-            self.device = 'cuda' if self.cuda_available else 'cpu'
+        if not self.cuda_available:
+            import sys
+            msg = (
+                "CUDA is not available — Henty requires a CUDA GPU and will not run on CPU.\n"
+                f"This Python has PyTorch WITHOUT CUDA support at: {torch.__file__}\n"
+                "To fix, reinstall the CUDA build of PyTorch:\n"
+                f"  {sys.executable} -m pip uninstall torch torchvision torchaudio -y\n"
+                f"  {sys.executable} -m pip install torch torchvision torchaudio "
+                "--index-url https://download.pytorch.org/whl/cu130\n"
+                "Then restart the server."
+            )
+            print("\n" + msg + "\n")
+            raise RuntimeError(msg)
 
-        print(f"\nDevice preference: {config.DEVICE_PREFERENCE}")
-        print(f"Using device: {self.device}")
+        print(f"CUDA version: {torch.version.cuda}")
+        print(f"Number of GPUs: {torch.cuda.device_count()}")
+        print(f"Current GPU: {torch.cuda.current_device()}")
+        print(f"GPU Name: {torch.cuda.get_device_name(0)}")
+        print(f"GPU Memory: {torch.cuda.get_device_properties(0).total_memory / 1e9:.2f} GB")
+
+        self.device = 'cuda'
+        print(f"\nUsing device: {self.device}")
         print("="*80 + "\n")
 
         self.audio_dir = "generated_audio"
@@ -251,6 +216,7 @@ class TextToAudioConverter:
         # Project management
         self.current_project_path = None
         self.current_project_metadata = None
+        self.undo_stack = []  # snapshots of chapters before each edit (max 20)
 
         # Performance optimization: cached lookup dictionaries
         self._chapter_lookup_cache = None
@@ -358,29 +324,6 @@ class TextToAudioConverter:
             print(f"Chatterbox Turbo model loaded successfully on {self.device}")
             print(f"{'='*80}\n")
         return self.turbo_model
-
-    def switch_device(self, new_device):
-        """Switch between GPU and CPU, reloading the model if necessary"""
-        if new_device not in ['cuda', 'cpu']:
-            raise ValueError(f"Invalid device: {new_device}")
-
-        # Check if CUDA is available when requesting it
-        if new_device == 'cuda' and not self.cuda_available:
-            raise RuntimeError("CUDA is not available on this system")
-
-        # If device is already set and model is loaded, need to reload
-        if self.device != new_device:
-            old_device = self.device
-            self.device = new_device
-
-            # Clear the model to force reload on next use
-            if self.model is not None:
-                print(f"Switching device from {old_device} to {new_device}")
-                print("Model will be reloaded on next generation...")
-                self.model = None
-
-            return True
-        return False
 
     def load_stats(self):
         """Load generation statistics from file"""
@@ -512,6 +455,33 @@ class TextToAudioConverter:
         except Exception as e:
             return f"Error reading file: {str(e)}"
 
+    # Words that end in a period but do NOT end a sentence. Lower-cased, no trailing dot.
+    _ABBREV = {
+        'dr', 'mr', 'mrs', 'ms', 'messrs', 'mmes', 'st', 'prof', 'rev', 'hon',
+        'sr', 'jr', 'capt', 'col', 'gen', 'lt', 'maj', 'sgt', 'cmdr', 'gov',
+        'pres', 'sen', 'rep', 'supt', 'fr', 'pr', 'vs', 'etc', 'al', 'inc',
+        'ltd', 'co', 'corp', 'no', 'vol', 'pp', 'ph', 'mt', 'ft', 'esq',
+    }
+
+    def _split_sentences(self, text):
+        """Split into sentences on . ! ? followed by whitespace, but never break
+        immediately after a known abbreviation (e.g. "Dr." / "Mr.")."""
+        parts = []
+        last = 0
+        for m in re.finditer(r'[.!?]+["\'\)\]]?\s+', text):
+            prefix = text[last:m.start()]
+            wm = re.search(r'([A-Za-z]+)$', prefix)
+            if wm and wm.group(1).lower() in self._ABBREV:
+                continue  # abbreviation — keep the sentence going
+            seg = text[last:m.end()].strip()
+            if seg:
+                parts.append(seg)
+            last = m.end()
+        tail = text[last:].strip()
+        if tail:
+            parts.append(tail)
+        return parts
+
     def smart_chunk_text(self, text, max_chunk_size=None):
         """
         Chunk text with newline-forced boundaries + sentence splitting for long lines.
@@ -557,7 +527,7 @@ class TextToAudioConverter:
                 add_chunk(stripped)
             else:
                 # Split by sentences, accumulate up to max_chunk_size
-                sentences = re.split(r'(?<=[.!?])\s+', stripped)
+                sentences = self._split_sentences(stripped)
                 current = ''
                 for sentence in sentences:
                     if current and len(current) + 1 + len(sentence) > max_chunk_size:
@@ -741,122 +711,6 @@ class TextToAudioConverter:
             print(f"Error listing common files: {str(e)}")
             return []
 
-    def detect_chapters(self, text):
-        """
-        Detect chapters in text using various patterns.
-        Returns list of chapter dicts with: id, title, text, start_pos, end_pos
-        Also preserves pre-chapter text as non-voiced content.
-        """
-        import uuid
-
-        # Chapter detection patterns (in order of priority)
-        chapter_patterns = [
-            # Standard chapter headings with numbers/roman numerals
-            r'^(Chapter\s+(?:[IVXLCDM]+|\d+|One|Two|Three|Four|Five|Six|Seven|Eight|Nine|Ten|Eleven|Twelve)[^\n]*)',
-            # All caps chapter headings
-            r'^(CHAPTER\s+(?:[IVXLCDM]+|\d+|ONE|TWO|THREE|FOUR|FIVE|SIX|SEVEN|EIGHT|NINE|TEN)[^\n]*)',
-            # Book/Part divisions
-            r'^((?:Book|Part|Section)\s+(?:[IVXLCDM]+|\d+)[^\n]*)',
-            # Simple "I.", "II.", etc at start of line
-            r'^([IVXLCDM]+\.)\s*$',
-            # Numbered sections "1.", "2.", etc at start of line (but not in middle of sentence)
-            r'^\s*(\d+\.)\s*$'
-        ]
-
-        chapters = []
-        chapter_positions = []
-
-        # Find all chapter markers
-        for pattern in chapter_patterns:
-            for match in re.finditer(pattern, text, re.MULTILINE | re.IGNORECASE):
-                # Find the end of the title line
-                title_end = text.find('\n', match.start())
-                if title_end == -1:
-                    title_end = len(text)
-
-                chapter_positions.append({
-                    'pos': match.start(),
-                    'title_end': title_end,
-                    'title': match.group(1).strip(),
-                    'pattern': pattern
-                })
-
-        # Also look for section breaks (4+ consecutive newlines) if no chapters found
-        if not chapter_positions:
-            section_breaks = list(re.finditer(r'\n{4,}', text))
-            if section_breaks:
-                # Add implicit chapters based on section breaks
-                for i, match in enumerate(section_breaks):
-                    chapter_positions.append({
-                        'pos': match.end(),
-                        'title_end': match.end(),
-                        'title': f'Section {i+1}',
-                        'pattern': 'section_break'
-                    })
-
-        # Sort by position
-        chapter_positions.sort(key=lambda x: x['pos'])
-
-        # Deduplicate chapters at the same position (multiple patterns matching same chapter)
-        seen_positions = set()
-        deduplicated_positions = []
-        for chapter_info in chapter_positions:
-            if chapter_info['pos'] not in seen_positions:
-                deduplicated_positions.append(chapter_info)
-                seen_positions.add(chapter_info['pos'])
-        chapter_positions = deduplicated_positions
-
-        # If we found chapter markers, create chapters
-        if chapter_positions:
-            # Preserve text before first chapter as non-voiced content
-            first_chapter_pos = chapter_positions[0]['pos']
-            if first_chapter_pos > 0:
-                pre_chapter_text = text[0:first_chapter_pos].strip()
-                if pre_chapter_text:
-                    chapters.append({
-                        'id': str(uuid.uuid4()),
-                        'title': '[Non-voiced Preface]',
-                        'text': pre_chapter_text,
-                        'start_pos': 0,
-                        'end_pos': first_chapter_pos,
-                        'order': -1,
-                        'non_voiced': True
-                    })
-
-            for i, chapter_info in enumerate(chapter_positions):
-                # Start reading text AFTER the title line
-                start_pos = chapter_info['title_end']
-                # Skip any newlines immediately after title
-                while start_pos < len(text) and text[start_pos] in '\n\r':
-                    start_pos += 1
-
-                # Find end position (start of next chapter or end of text)
-                end_pos = chapter_positions[i+1]['pos'] if i+1 < len(chapter_positions) else len(text)
-
-                chapter_text = text[start_pos:end_pos].strip()
-
-                chapters.append({
-                    'id': str(uuid.uuid4()),
-                    'title': chapter_info['title'],
-                    'text': chapter_text,
-                    'start_pos': start_pos,
-                    'end_pos': end_pos,
-                    'order': i,
-                    'non_voiced': False
-                })
-        else:
-            # No chapters detected, treat entire text as single chapter
-            chapters.append({
-                'id': str(uuid.uuid4()),
-                'title': 'Complete Text',
-                'text': text,
-                'start_pos': 0,
-                'end_pos': len(text),
-                'order': 0,
-                'non_voiced': False
-            })
-
-        return chapters
 
     def strip_xml_tags(self, text):
         """Strip all XML-like tags from text for TTS processing"""
@@ -894,44 +748,6 @@ class TextToAudioConverter:
         """
         return re.sub(r'\{([^|}]+)\|[^}]*\}', r'\1', text)
 
-    def text_to_xml_content(self, text, chapters=None):
-        """
-        Convert text (with optional detected chapters) to XML-embedded-in-JSON format.
-        Returns a string of XML content.
-        Wraps non-voiced content in <non-voiced> tags.
-        """
-        if chapters is None:
-            chapters = self.detect_chapters(text)
-
-        xml_lines = ['<?xml version="1.0" encoding="UTF-8"?>']
-        xml_lines.append('<book>')
-
-        for chapter in chapters:
-            chapter_title = chapter['title'].replace('&', '&amp;').replace('<', '&lt;').replace('>', '&gt;')
-            is_non_voiced = chapter.get('non_voiced', False)
-
-            if is_non_voiced:
-                # Wrap non-voiced content
-                xml_lines.append(f'  <non-voiced title="{chapter_title}">')
-            else:
-                xml_lines.append(f'  <chapter id="{chapter["id"]}" title="{chapter_title}" order="{chapter["order"]}">')
-
-            # Split chapter text into paragraphs
-            paragraphs = [p.strip() for p in chapter['text'].split('\n\n') if p.strip()]
-
-            for para in paragraphs:
-                # Escape XML special characters
-                para_escaped = para.replace('&', '&amp;').replace('<', '&lt;').replace('>', '&gt;')
-                xml_lines.append(f'    <p>{para_escaped}</p>')
-
-            if is_non_voiced:
-                xml_lines.append('  </non-voiced>')
-            else:
-                xml_lines.append('  </chapter>')
-
-        xml_lines.append('</book>')
-
-        return '\n'.join(xml_lines)
 
     def generate_audio(self, text, output_path, audio_prompt_path=None, language_id="en", exaggeration=0.6, cfg_weight=0.4, tts_model="chatterbox"):
         """Generate audio from text using Chatterbox TTS or Chatterbox Turbo"""
@@ -1124,201 +940,10 @@ def index():
     """Serve the HTML file"""
     return send_file('index.html')
 
-@app.route('/api/scan', methods=['POST'])
-def scan_directory():
-    """Scan directory for text files"""
-    try:
-        data = request.json
-        directory = data.get('directory', '')
 
-        if not directory:
-            return jsonify({'error': 'Directory path is required'}), 400
 
-        if not os.path.isdir(directory):
-            return jsonify({'error': 'Invalid directory path'}), 400
 
-        files = converter.find_txt_files(directory)
-        return jsonify({'files': files})
-    except Exception as e:
-        return jsonify({'error': str(e)}), 500
 
-@app.route('/api/read', methods=['POST'])
-def read_file():
-    """Read text file content"""
-    try:
-        data = request.json
-        file_path = data.get('file_path', '')
-
-        if not file_path or not os.path.exists(file_path):
-            return jsonify({'error': 'Invalid file path'}), 400
-
-        content = converter.read_text_file(file_path)
-        return jsonify({'content': content})
-    except Exception as e:
-        return jsonify({'error': str(e)}), 500
-
-@app.route('/api/generate', methods=['POST'])
-@auth_manager.require_api_key
-def generate_audio():
-    """Generate audio for a text file"""
-    try:
-        data = request.json
-        file_path = data.get('file_path', '')
-
-        if not file_path or not os.path.exists(file_path):
-            return jsonify({'error': 'Invalid file path'}), 400
-
-        audio_path = converter.get_or_generate_audio(file_path)
-        audio_filename = os.path.basename(audio_path)
-
-        return jsonify({
-            'audio_url': f'/api/audio/{audio_filename}',
-            'audio_path': audio_path
-        })
-    except Exception as e:
-        return jsonify({'error': str(e)}), 500
-
-@app.route('/api/generate-from-upload', methods=['POST'])
-def generate_from_upload():
-    """Generate audio from uploaded text file"""
-    try:
-        print(f"\n=== Received upload request ===")
-        print(f"Files in request: {list(request.files.keys())}")
-        print(f"Form data: {list(request.form.keys())}")
-
-        if 'file' not in request.files:
-            error_msg = 'No file provided'
-            print(f"ERROR: {error_msg}")
-            return jsonify({'error': error_msg}), 400
-
-        file = request.files['file']
-        filename = request.form.get('filename', file.filename)
-        print(f"Processing file: {filename}")
-
-        if not filename.endswith('.txt'):
-            error_msg = 'Only .txt files are supported'
-            print(f"ERROR: {error_msg}")
-            return jsonify({'error': error_msg}), 400
-
-        # Read file content
-        text = file.read().decode('utf-8')
-        print(f"File content length: {len(text)} characters")
-        print(f"File content preview: {preview_for_log(text)}")
-
-        # Get optional parameters from form data
-        language_id = request.form.get('language_id', 'en')
-        exaggeration = float(request.form.get('exaggeration', 0.5))
-        cfg_weight = float(request.form.get('cfg_weight', 0.5))
-        voice_sample_name = request.form.get('voice_sample', None)
-
-        # Construct full path to voice sample if provided
-        audio_prompt_path = None
-        if voice_sample_name and voice_sample_name != 'none':
-            audio_prompt_path = os.path.join(converter.voice_samples_dir, voice_sample_name)
-            if not os.path.exists(audio_prompt_path):
-                print(f"Warning: Voice sample not found: {audio_prompt_path}")
-                audio_prompt_path = None
-
-        print(f"Parameters - Language: {language_id}, Exaggeration: {exaggeration}, CFG Weight: {cfg_weight}, Voice Sample: {voice_sample_name}")
-
-        # Limit text length for demo purposes
-        if len(text) > 1000:
-            print(f"Truncating text from {len(text)} to 1000 characters")
-            text = text[:1000] + "..."
-
-        # Generate audio filename with timestamp for multiple generations
-        import time
-        import json
-        base_name = os.path.splitext(os.path.basename(filename))[0]
-        timestamp = int(time.time() * 1000)
-        audio_filename = f"{base_name}_{timestamp}.wav"
-        audio_path = os.path.join(converter.audio_dir, audio_filename)
-
-        # Save metadata
-        metadata_filename = f"{base_name}_{timestamp}.json"
-        metadata_path = os.path.join(converter.audio_dir, metadata_filename)
-        metadata = {
-            'text_file': filename,
-            'timestamp': timestamp,
-            'language_id': language_id,
-            'exaggeration': exaggeration,
-            'cfg_weight': cfg_weight,
-            'voice_sample': voice_sample_name,
-            'audio_file': audio_filename,
-            'text_preview': text[:LOG_PREVIEW_LIMIT],
-            'is_best_take': False
-        }
-
-        print(f"Audio will be saved to: {audio_path}")
-
-        # Generate audio if it doesn't exist
-        if not os.path.exists(audio_path):
-            print(f"Generating audio for: {filename}...")
-            print(f"Text preview: {preview_for_log(text)}")
-            result = converter.generate_audio(
-                text,
-                audio_path,
-                audio_prompt_path=audio_prompt_path,
-                language_id=language_id,
-                exaggeration=exaggeration,
-                cfg_weight=cfg_weight
-            )
-            print(f"Audio generated successfully! Duration: {result['duration_seconds']:.2f}s")
-
-            # Save metadata
-            with open(metadata_path, 'w') as f:
-                json.dump(metadata, f, indent=2)
-            print(f"Metadata saved to: {metadata_path}")
-        else:
-            print(f"Audio already exists, using cached version")
-
-        response_data = {
-            'audio_url': f'/api/audio/{audio_filename}',
-            'audio_path': audio_path,
-            'metadata': metadata
-        }
-        print(f"Returning success response: {response_data}")
-        return jsonify(response_data)
-
-    except Exception as e:
-        import traceback
-        error_trace = traceback.format_exc()
-        print(f"\n=== ERROR ===")
-        print(f"Exception: {str(e)}")
-        print(f"Traceback:\n{error_trace}")
-        return jsonify({'error': f'{type(e).__name__}: {str(e)}'}), 500
-
-@app.route('/api/generate-all', methods=['POST'])
-def generate_all_audio():
-    """Generate audio for all text files in directory"""
-    try:
-        data = request.json
-        directory = data.get('directory', '')
-
-        if not directory or not os.path.isdir(directory):
-            return jsonify({'error': 'Invalid directory path'}), 400
-
-        files = converter.find_txt_files(directory)
-        results = []
-
-        for file_info in files:
-            try:
-                audio_path = converter.get_or_generate_audio(file_info['path'])
-                results.append({
-                    'file': file_info['name'],
-                    'status': 'success',
-                    'audio_path': audio_path
-                })
-            except Exception as e:
-                results.append({
-                    'file': file_info['name'],
-                    'status': 'failed',
-                    'error': str(e)
-                })
-
-        return jsonify({'results': results})
-    except Exception as e:
-        return jsonify({'error': str(e)}), 500
 
 @app.route('/api/audio/<filename>')
 def serve_audio(filename):
@@ -1342,6 +967,17 @@ def serve_project_audio(filename):
         print(f"Error serving project audio: {str(e)}")
         return jsonify({'error': str(e)}), 404
 
+@app.route('/api/published/<path:filename>')
+def serve_published(filename):
+    """Serve a published (stitched) chapter audio file from the current project."""
+    try:
+        if converter.current_project_path is None:
+            return jsonify({'error': 'No project loaded'}), 400
+        published_dir = os.path.join(converter.current_project_path, 'published')
+        return send_from_directory(published_dir, filename)
+    except Exception as e:
+        return jsonify({'error': str(e)}), 404
+
 @app.route('/api/status')
 def status():
     """Check server status"""
@@ -1359,41 +995,13 @@ def get_config():
 @app.route('/api/device-status', methods=['GET'])
 @auth_manager.require_api_key
 def get_device_status():
-    """Get current device status"""
+    """Report GPU status (GPU-only; no device switching)."""
     return jsonify({
         'current_device': converter.device,
         'cuda_available': converter.cuda_available,
         'model_loaded': converter.model is not None,
         'max_parallel_generations': config.MAX_PARALLEL_GENERATIONS
     })
-
-@app.route('/api/device', methods=['POST'])
-@auth_manager.require_api_key
-def switch_device():
-    """Switch between GPU and CPU"""
-    try:
-        data = request.json
-        new_device = data.get('device')
-
-        if not new_device:
-            return jsonify({'error': 'device parameter is required'}), 400
-
-        # Try to switch device
-        changed = converter.switch_device(new_device)
-
-        return jsonify({
-            'success': True,
-            'device': converter.device,
-            'changed': changed,
-            'message': f"Switched to {new_device}" if changed else f"Already using {new_device}"
-        })
-
-    except ValueError as e:
-        return jsonify({'error': str(e)}), 400
-    except RuntimeError as e:
-        return jsonify({'error': str(e)}), 400
-    except Exception as e:
-        return jsonify({'error': str(e)}), 500
 
 @app.route('/api/voice-samples', methods=['GET'])
 @auth_manager.require_api_key
@@ -1617,380 +1225,6 @@ def list_generated_audio(txt_filename):
 
 # ===== PROJECT MANAGEMENT ENDPOINTS =====
 
-@app.route('/api/project/create', methods=['POST'])
-@auth_manager.require_api_key
-def create_project():
-    """Create a new project in a user-selected folder or default location"""
-    try:
-        import json
-        import shutil
-        import urllib.request
-        from datetime import datetime
-
-        print('\n━━━ [CREATE PROJECT API] START ━━━')
-        data = request.json
-        print(f'[CREATE PROJECT API] Request data keys: {data.keys() if data else None}')
-
-        # Accept both 'name'/'project_name' and 'path'/'project_path' for flexibility
-        project_name = data.get('name') or data.get('project_name', 'Unnamed Project')
-        base_path = data.get('path') or data.get('project_path')
-        text_source = data.get('text_source')
-
-        print(f'[CREATE PROJECT API] Project name: {project_name}')
-        print(f'[CREATE PROJECT API] Base path: {base_path or "(using default)"}')
-        print(f'[CREATE PROJECT API] Text source: {text_source.get("type") if text_source else "None"}')
-
-        if not project_name:
-            print('[CREATE PROJECT API] ✗ ERROR: Project name is required')
-            return jsonify({'error': 'Project name is required'}), 400
-
-        # If no path provided, use default project directory
-        if not base_path:
-            base_path = config.DEFAULT_PROJECT_DIR
-            print(f'[CREATE PROJECT API] Using default path: {base_path}')
-
-        # Construct full project path
-        project_path = os.path.join(base_path, project_name)
-        print(f'[CREATE PROJECT API] Full project path: {project_path}')
-
-        # Create project directory structure
-        print(f'[CREATE PROJECT API] Creating directories...')
-        os.makedirs(project_path, exist_ok=True)
-        texts_dir = os.path.join(project_path, 'texts')
-        audio_dir = os.path.join(project_path, 'audio')
-
-        os.makedirs(texts_dir, exist_ok=True)
-        os.makedirs(audio_dir, exist_ok=True)
-
-        # Create initial project metadata
-        project_metadata = {
-            'name': project_name,
-            'created_at': datetime.now().isoformat(),
-            'last_modified': datetime.now().isoformat(),
-            'version': '1.0',
-            'note': 'All file references use relative paths for portability',
-            'default_audio_settings': {
-                'exaggeration': 0.6,
-                'cfg_weight': 0.4,
-                'voice_sample': 'none',
-                'seed': 0,
-                'temperature': 0.8,
-                'ref_vad_trimming': False
-            },
-            'chapters': []
-        }
-
-        # Update converter paths (must be done before processing text)
-        converter.current_project_path = project_path
-        converter.current_project_metadata = project_metadata
-        converter.audio_dir = audio_dir
-        # Keep voice_samples_dir pointing to main folder (not project-specific)
-
-        # Handle text source if provided
-        if text_source:
-            source_type = text_source.get('type')
-
-            if source_type == 'url':
-                url = text_source.get('url')
-                print(f'[CREATE PROJECT API] Processing URL: {url}')
-
-                # Check if it's a Gutenberg URL
-                if 'gutenberg.org' in url.lower():
-                    print(f'[CREATE PROJECT API] Using Gutenberg processing for: {url}')
-                    try:
-                        # Use GutenbergProcessor for special Gutenberg handling
-                        processor = GutenbergProcessor(output_dir=project_path)
-
-                        book_id = processor.get_gutenberg_book_id(url)
-                        gutenberg_urls = build_gutenberg_url_metadata(book_id, url, processor)
-
-                        # Download content (supports both .txt and .html)
-                        print(f'[CREATE PROJECT API] Downloading content from Gutenberg...')
-                        content = processor.download_text(url)
-
-                        # Check if content is HTML
-                        is_html = processor.is_html(content)
-                        print(f'[CREATE PROJECT API] Content type: {"HTML" if is_html else "Plain text"}')
-
-                        if is_html:
-                            # Process HTML content
-                            print(f'[CREATE PROJECT API] Processing HTML content...')
-
-                            # Extract title from HTML
-                            try:
-                                from bs4 import BeautifulSoup
-                                soup = BeautifulSoup(content, 'html.parser')
-                                title_tag = soup.find('title')
-                                if title_tag:
-                                    # Clean up title
-                                    title = title_tag.get_text(strip=True)
-                                    title = re.sub(r'The Project Gutenberg eBook of\s+', '', title, flags=re.IGNORECASE)
-                                    title = re.sub(r'\s+by\s+.+$', '', title)
-                                    title = re.sub(r'[^\w\s-]', '', title)
-                                    title = re.sub(r'\s+', '_', title)
-                                    title = title[:50]
-                                else:
-                                    title = processor.extract_book_name(url)
-                            except:
-                                title = processor.extract_book_name(url)
-
-                            print(f'[CREATE PROJECT API] Extracted title: {title}')
-
-                            # Extract chapters from HTML
-                            chapters_data = processor.extract_html_chapters(content, title)
-                            print(f'[CREATE PROJECT API] Extracted {len(chapters_data)} chapters from HTML')
-
-                            # Save raw HTML
-                            raw_html_file = os.path.join(project_path, 'raw_text.html')
-                            with open(raw_html_file, 'w', encoding='utf-8') as f:
-                                f.write(content)
-                            print(f'[CREATE PROJECT API] Saved raw HTML to {raw_html_file}')
-
-                            # Create chapters with chunks
-                            new_chapters = []
-                            for i, (chapter_title, chapter_text) in enumerate(chapters_data):
-                                # Chunk the chapter text
-                                chunks = converter.smart_chunk_text(chapter_text)
-
-                                # Add chunk structure
-                                for chunk in chunks:
-                                    chunk['dirty'] = False
-                                    chunk['generated_audios'] = []
-
-                                # Add chapter title as the first chunk (so it gets read aloud)
-                                title_chunk = {
-                                    'id': 0,
-                                    'type': 'text',
-                                    'text': chapter_title,
-                                    'nickname': chapter_title[:50].strip() + ('...' if len(chapter_title) > 50 else ''),
-                                    'dirty': False,
-                                    'generated_audios': []
-                                }
-                                # Renumber existing chunks to start from 1
-                                for j, chunk in enumerate(chunks):
-                                    chunk['id'] = j + 1
-                                chunks.insert(0, title_chunk)
-
-                                chapter_entry = {
-                                    'id': f'chapter_{i}',
-                                    'title': chapter_title,
-                                    'order': i,
-                                    'chunks': chunks,
-                                    'audio_output': None,
-                                    'added_at': datetime.now().isoformat(),
-                                    'source': 'gutenberg_html',
-                                    'source_url': url
-                                }
-
-                                new_chapters.append(chapter_entry)
-
-                            # Save chapter texts to texts directory
-                            for i, (chapter_title, chapter_text) in enumerate(chapters_data):
-                                sanitized = re.sub(r'[^\w\s-]', '', chapter_title)
-                                sanitized = re.sub(r'\s+', '_', sanitized)
-                                sanitized = sanitized.strip('_')[:50]
-                                if not sanitized:
-                                    sanitized = f"chapter_{i}"
-
-                                text_file_path = os.path.join(texts_dir, f'{sanitized}.txt')
-                                with open(text_file_path, 'w', encoding='utf-8') as f:
-                                    f.write(f"{chapter_title}\n\n{chapter_text}")
-
-                            # Generate XML content from all chapter texts
-                            all_text = '\n\n'.join([chapter_text for _, chapter_text in chapters_data])
-                            detected_chapters_for_xml = converter.detect_chapters(all_text)
-                            xml_content = converter.text_to_xml_content(all_text, detected_chapters_for_xml)
-
-                            # Update metadata with chapters and XML
-                            project_metadata['chapters'] = new_chapters
-                            project_metadata['content_xml'] = xml_content
-                            project_metadata['original_filename'] = f"{title}.html"
-                            project_metadata['version'] = '3.0'
-                            project_metadata.update(gutenberg_urls)
-
-                            print(f'[CREATE PROJECT API] Created {len(new_chapters)} chapters with HTML processing')
-
-                        else:
-                            # Process plain text content (original logic)
-                            print(f'[CREATE PROJECT API] Processing plain text content...')
-
-                            # Extract title
-                            title = processor.extract_title(content)
-                            if not title:
-                                title = processor.extract_book_name(url)
-                            print(f'[CREATE PROJECT API] Extracted title: {title}')
-
-                            # Strip Gutenberg metadata
-                            text = processor.strip_gutenberg_metadata(content, title)
-
-                            # Process carriage returns
-                            text = processor.process_carriage_returns(text)
-
-                            # Replace SECTION_BREAK markers
-                            text = text.replace('<<<SECTION_BREAK>>>', '\n\n')
-
-                            print(f'[CREATE PROJECT API] Processed text length: {len(text)} characters')
-
-                            # Save raw text to raw_text.txt
-                            raw_text_file = os.path.join(project_path, 'raw_text.txt')
-                            with open(raw_text_file, 'w', encoding='utf-8') as f:
-                                f.write(text)
-                            print(f'[CREATE PROJECT API] Saved raw text to {raw_text_file}')
-
-                            # Also save to texts directory
-                            text_file_path = os.path.join(texts_dir, f'{title}.txt')
-                            with open(text_file_path, 'w', encoding='utf-8') as f:
-                                f.write(text)
-
-                            # Detect chapters
-                            detected_chapters = converter.detect_chapters(text)
-                            print(f'[CREATE PROJECT API] Detected {len(detected_chapters)} chapter(s)')
-
-                            # Generate XML content
-                            xml_content = converter.text_to_xml_content(text, detected_chapters)
-
-                            # Create chapters with chunks
-                            new_chapters = []
-                            for detected_chapter in detected_chapters:
-                                chapter_title = detected_chapter['title']
-                                chunks = converter.smart_chunk_text(detected_chapter['text'])
-
-                                # Add chunk structure
-                                for chunk in chunks:
-                                    chunk['dirty'] = False
-                                    chunk['generated_audios'] = []
-
-                                # Add chapter title as the first chunk (so it gets read aloud)
-                                title_chunk = {
-                                    'id': 0,
-                                    'type': 'text',
-                                    'text': chapter_title,
-                                    'nickname': chapter_title[:50].strip() + ('...' if len(chapter_title) > 50 else ''),
-                                    'dirty': False,
-                                    'generated_audios': []
-                                }
-                                # Renumber existing chunks to start from 1
-                                for j, chunk in enumerate(chunks):
-                                    chunk['id'] = j + 1
-                                chunks.insert(0, title_chunk)
-
-                                chapter_entry = {
-                                    'id': detected_chapter['id'],
-                                    'title': chapter_title,
-                                    'order': detected_chapter['order'],
-                                    'chunks': chunks,
-                                    'audio_output': None,
-                                    'added_at': datetime.now().isoformat(),
-                                    'source': 'gutenberg',
-                                    'source_url': url
-                                }
-
-                                new_chapters.append(chapter_entry)
-
-                            # Update metadata with chapters and XML
-                            project_metadata['chapters'] = new_chapters
-                            project_metadata['content_xml'] = xml_content
-                            project_metadata['original_filename'] = f"{title}.txt"
-                            project_metadata['version'] = '3.0'
-                            project_metadata.update(gutenberg_urls)
-
-                            print(f'[CREATE PROJECT API] Created {len(new_chapters)} chapters with Gutenberg processing')
-
-                    except Exception as e:
-                        print(f'[CREATE PROJECT API] ✗ ERROR in Gutenberg processing: {str(e)}')
-                        import traceback
-                        print(traceback.format_exc())
-                        return jsonify({'error': f'Failed to process Gutenberg URL: {str(e)}'}), 400
-                else:
-                    # Regular URL (non-Gutenberg)
-                    print(f'[CREATE PROJECT API] Downloading from non-Gutenberg URL')
-                    try:
-                        with urllib.request.urlopen(url) as response:
-                            text_content = response.read().decode('utf-8')
-
-                        # Save raw text
-                        raw_text_path = os.path.join(project_path, 'raw_text.txt')
-                        with open(raw_text_path, 'w', encoding='utf-8') as f:
-                            f.write(text_content)
-
-                        # Also save to texts directory
-                        text_file_path = os.path.join(texts_dir, 'source.txt')
-                        with open(text_file_path, 'w', encoding='utf-8') as f:
-                            f.write(text_content)
-
-                        print(f'[CREATE PROJECT API] Downloaded and saved {len(text_content)} characters')
-                    except Exception as e:
-                        print(f'[CREATE PROJECT API] ✗ ERROR downloading from URL: {str(e)}')
-                        return jsonify({'error': f'Failed to download from URL: {str(e)}'}), 400
-
-            elif source_type == 'file':
-                # Uploaded file
-                text_content = text_source.get('content')
-                source_filename = text_source.get('filename', 'source.txt')
-                print(f'[CREATE PROJECT API] Using uploaded file: {source_filename}')
-
-                # Save raw text
-                raw_text_path = os.path.join(project_path, 'raw_text.txt')
-                with open(raw_text_path, 'w', encoding='utf-8') as f:
-                    f.write(text_content)
-
-                # Also save to texts directory
-                text_file_path = os.path.join(texts_dir, source_filename)
-                with open(text_file_path, 'w', encoding='utf-8') as f:
-                    f.write(text_content)
-
-                print(f'[CREATE PROJECT API] Saved {len(text_content)} characters')
-
-                # Build stage-1 book.txt so the editor shows content immediately
-                try:
-                    processor_tmp = GutenbergProcessor(output_dir=project_path)
-                    boilerplate_tmp = []
-                    try:
-                        boilerplate_tmp = processor_tmp.detect_boilerplate(text_content)
-                    except Exception:
-                        pass
-                    book_content, block_count, short_count = _build_stage1_from_newlines(
-                        text_content, boilerplate_tmp
-                    )
-                    book_file_path = os.path.join(project_path, 'book.txt')
-                    with open(book_file_path, 'w', encoding='utf-8') as f:
-                        f.write(book_content)
-                    project_metadata['book_file_stage'] = 1
-                    project_metadata['original_filename'] = source_filename
-                    print(f'[CREATE PROJECT API] stage-1 book.txt written: {block_count} blocks')
-                except Exception as e:
-                    print(f'[CREATE PROJECT API] book.txt build failed (non-fatal): {e}')
-
-        # Update converter metadata reference
-        converter.current_project_metadata = project_metadata
-
-        # Save project metadata to file
-        project_file = os.path.join(project_path, 'project.json')
-        with open(project_file, 'w', encoding='utf-8') as f:
-            json.dump(project_metadata, f, indent=2, ensure_ascii=False)
-        print(f'[CREATE PROJECT API] Saved project metadata to {project_file}')
-
-        print(f'[CREATE PROJECT API] ✓ Project created successfully')
-        print(f'[CREATE PROJECT API] Returning: project_path={project_path}')
-        print(f'[CREATE PROJECT API] Path repr: {repr(project_path)}')
-        print(f'[CREATE PROJECT API] Path bytes: {[hex(ord(c)) for c in project_path]}')
-        print('━━━ [CREATE PROJECT API] END ━━━\n')
-
-        result = {
-            'success': True,
-            'project_path': project_path,
-            'metadata': project_metadata
-        }
-        print(f'[CREATE PROJECT API] JSON being returned: {json.dumps(result, indent=2)}')
-
-        return jsonify(result)
-
-    except Exception as e:
-        import traceback
-        print(f"[CREATE PROJECT API] ✗ ERROR: {str(e)}")
-        print(traceback.format_exc())
-        print('━━━ [CREATE PROJECT API] END (ERROR) ━━━\n')
-        return jsonify({'error': str(e)}), 500
 
 @app.route('/api/project/load', methods=['POST'])
 @auth_manager.require_api_key
@@ -2027,7 +1261,6 @@ def load_project():
         print(f'[LOAD PROJECT API] Reading project.json...')
         with open(project_file, 'r', encoding='utf-8') as f:
             project_metadata = json.load(f)
-        project_metadata = enrich_project_metadata_with_gutenberg_urls(project_metadata, project_path)
         print(f'[LOAD PROJECT API] Project metadata: {preview_json_for_log(project_metadata)}')
 
         # Add default audio settings if not present (backwards compatibility)
@@ -2049,6 +1282,7 @@ def load_project():
         # Update converter paths
         converter.current_project_path = project_path
         converter.current_project_metadata = project_metadata
+        converter.undo_stack = []  # fresh undo history per loaded project
         converter.audio_dir = os.path.join(project_path, 'audio')
         # Keep voice_samples_dir pointing to main folder (not project-specific)
 
@@ -2086,10 +1320,7 @@ def get_project_info():
         return jsonify({
             'has_project': True,
             'project_path': converter.current_project_path,
-            'metadata': enrich_project_metadata_with_gutenberg_urls(
-                converter.current_project_metadata,
-                converter.current_project_path
-            )
+            'metadata': converter.current_project_metadata
         })
 
     except Exception as e:
@@ -2145,111 +1376,6 @@ def update_project_defaults():
         print(traceback.format_exc())
         return jsonify({'error': str(e)}), 500
 
-@app.route('/api/project/add-text-file', methods=['POST'])
-@auth_manager.require_api_key
-def add_text_file_to_project():
-    """Add a text file to the project with chapter detection and chunking"""
-    try:
-        import json
-        from datetime import datetime
-        import uuid
-
-        if converter.current_project_path is None:
-            return jsonify({'error': 'No project loaded'}), 400
-
-        # Get file from request
-        if 'file' not in request.files:
-            return jsonify({'error': 'No file provided'}), 400
-
-        file = request.files['file']
-        if file.filename == '':
-            return jsonify({'error': 'No file selected'}), 400
-
-        # Read text content
-        text_content = file.read().decode('utf-8')
-        original_filename = file.filename
-
-        print(f"\n=== Adding text file: {original_filename} ===")
-
-        # Detect chapters in the text
-        detected_chapters = converter.detect_chapters(text_content)
-        print(f"Detected {len(detected_chapters)} chapter(s)")
-
-        # Generate XML content
-        xml_content = converter.text_to_xml_content(text_content, detected_chapters)
-
-        # Initialize chapters structure if not present
-        if 'chapters' not in converter.current_project_metadata:
-            converter.current_project_metadata['chapters'] = []
-
-        # Create chapters with chunks for each detected chapter
-        new_chapters = []
-        for detected_chapter in detected_chapters:
-            chapter_title = detected_chapter['title']
-
-            # Chunk the chapter text
-            chunks = converter.smart_chunk_text(detected_chapter['text'])
-
-            # Add chunk structure with dirty flag and generated_audios
-            for chunk in chunks:
-                chunk['dirty'] = False
-                chunk['generated_audios'] = []
-
-            # Add chapter title as the first chunk (so it gets read aloud)
-            title_chunk = {
-                'id': 0,
-                'type': 'text',
-                'text': chapter_title,
-                'nickname': chapter_title[:50].strip() + ('...' if len(chapter_title) > 50 else ''),
-                'dirty': False,
-                'generated_audios': []
-            }
-            # Renumber existing chunks to start from 1
-            for j, chunk in enumerate(chunks):
-                chunk['id'] = j + 1
-            chunks.insert(0, title_chunk)
-
-            # Create chapter entry
-            chapter_entry = {
-                'id': detected_chapter['id'],
-                'title': chapter_title,
-                'order': detected_chapter['order'],
-                'chunks': chunks,
-                'audio_output': None,  # Will be set when chapter is stitched
-                'added_at': datetime.now().isoformat()
-            }
-
-            new_chapters.append(chapter_entry)
-            converter.current_project_metadata['chapters'].append(chapter_entry)
-
-        # Store/update XML content
-        converter.current_project_metadata['content_xml'] = xml_content
-        converter.current_project_metadata['original_filename'] = original_filename
-        converter.current_project_metadata['last_modified'] = datetime.now().isoformat()
-        converter.current_project_metadata['version'] = '3.0'
-
-        # Save to file
-        project_file = os.path.join(converter.current_project_path, 'project.json')
-        with open(project_file, 'w', encoding='utf-8') as f:
-            json.dump(converter.current_project_metadata, f, indent=2, ensure_ascii=False)
-
-        # Invalidate lookup caches after modifying metadata
-        converter._invalidate_lookup_caches()
-
-        print(f"Successfully added {len(new_chapters)} chapters to project")
-
-        return jsonify({
-            'success': True,
-            'chapters': new_chapters,
-            'chapter_count': len(new_chapters),
-            'content_xml': xml_content
-        })
-
-    except Exception as e:
-        import traceback
-        print(f"Error adding text file to project: {str(e)}")
-        print(traceback.format_exc())
-        return jsonify({'error': str(e)}), 500
 
 @app.route('/api/project/get-text-files', methods=['GET'])
 def get_project_text_files():
@@ -2257,11 +1383,6 @@ def get_project_text_files():
     try:
         if converter.current_project_path is None:
             return jsonify({'error': 'No project loaded'}), 400
-
-        converter.current_project_metadata = enrich_project_metadata_with_gutenberg_urls(
-            converter.current_project_metadata,
-            converter.current_project_path
-        )
 
         # Return both chapters (new) and text_files (old) for backwards compatibility
         chapters = converter.current_project_metadata.get('chapters', [])
@@ -2318,92 +1439,36 @@ def update_chunk_text():
         if not chunk:
             return jsonify({'error': 'Chunk not found'}), 404
 
-        # Check if the new text exceeds max chunk size and needs splitting
+        # Length is measured on the text actually sent to the TTS engine (pronunciation
+        # markup resolved, tags stripped) — NOT the displayed text with {display|spoken}
+        # or [tag] annotations. If it's too long we refuse the edit and say so explicitly
+        # rather than silently auto-splitting (which could drop content).
         max_chunk_size = config.MAX_CHUNK_SIZE
-        was_split = False
-        new_chunks = []
+        new_text = new_text or ''
+        resolved = converter.strip_xml_tags(converter.process_pronunciation_markup(new_text))
+        if len(resolved) > max_chunk_size:
+            print(f"[UPDATE CHUNK] Rejected chunk {chunk_id}: {len(resolved)} TTS chars "
+                  f"(raw {len(new_text)}) exceeds max {max_chunk_size}")
+            return jsonify({
+                'error': (f'Chunk too long for the TTS engine: {len(resolved)} characters after '
+                          f'resolving markup (limit {max_chunk_size}). Shorten it or split the chunk.'),
+                'too_long': True,
+                'resolved_length': len(resolved),
+                'raw_length': len(new_text),
+                'max_length': max_chunk_size,
+            }), 400
 
-        if len(new_text) > max_chunk_size:
-            # Text is too long, need to split it
-            print(f"[UPDATE CHUNK] Chunk {chunk_id} text ({len(new_text)} chars) exceeds max ({max_chunk_size}), splitting...")
-
-            # Get split chunks
-            split_result = converter.smart_chunk_text(new_text, max_chunk_size)
-
-            if len(split_result) > 1:
-                was_split = True
-
-                # Find the chunk's position in the container's chunks list
-                chunks_list = container.get('chunks', [])
-                chunk_index = next((i for i, c in enumerate(chunks_list) if c['id'] == chunk_id), None)
-
-                if chunk_index is None:
-                    return jsonify({'error': 'Chunk position not found'}), 404
-
-                # Update the original chunk with the first split piece
-                first_piece = split_result[0]
-                chunk['text'] = first_piece['text']
-                chunk['nickname'] = first_piece['text'][:50].strip() + ('...' if len(first_piece['text']) > 50 else '')
-
-                # Mark as dirty if there are generated audios
-                if len(chunk.get('generated_audios', [])) > 0:
-                    chunk['dirty'] = True
-
-                new_chunks.append(chunk)
-
-                # Get the highest chunk ID in this chapter
-                max_id = max(c['id'] for c in chunks_list)
-
-                # Insert remaining pieces as new chunks after the original
-                for i, piece in enumerate(split_result[1:], 1):
-                    new_chunk = {
-                        'id': max_id + i,
-                        'type': 'text',
-                        'text': piece['text'],
-                        'nickname': piece['text'][:50].strip() + ('...' if len(piece['text']) > 50 else ''),
-                        'start_pos': piece.get('start_pos', 0),
-                        'end_pos': piece.get('end_pos', len(piece['text'])),
-                        'dirty': False,
-                        'generated_audios': []
-                    }
-                    # Insert at the correct position
-                    chunks_list.insert(chunk_index + i, new_chunk)
-                    new_chunks.append(new_chunk)
-
-                print(f"[UPDATE CHUNK] Split into {len(split_result)} chunks")
+        push_undo()
+        chunk['text'] = new_text
+        if new_nickname is not None:
+            chunk['nickname'] = new_nickname
         else:
-            # No split needed, just update the chunk normally
-            chunk['text'] = new_text
-            # Use provided nickname if available, otherwise auto-generate from text
-            if new_nickname is not None:
-                chunk['nickname'] = new_nickname
-            else:
-                chunk['nickname'] = new_text[:50].strip() + ('...' if len(new_text) > 50 else '')
+            chunk['nickname'] = new_text[:50].strip() + ('...' if len(new_text) > 50 else '')
+        if len(chunk.get('generated_audios', [])) > 0:
+            chunk['dirty'] = True
 
-            # Mark as dirty if there are generated audios
-            if len(chunk.get('generated_audios', [])) > 0:
-                chunk['dirty'] = True
-
-            new_chunks.append(chunk)
-
-        # Update project metadata
-        converter.current_project_metadata['last_modified'] = datetime.now().isoformat()
-
-        # Save to file
-        project_file = os.path.join(converter.current_project_path, 'project.json')
-        with open(project_file, 'w', encoding='utf-8') as f:
-            json.dump(converter.current_project_metadata, f, indent=2, ensure_ascii=False)
-
-        # Invalidate lookup caches after modifying metadata
-        converter._invalidate_lookup_caches()
-
-        return jsonify({
-            'success': True,
-            'chunk': chunk,
-            'was_split': was_split,
-            'new_chunks': new_chunks,
-            'split_count': len(new_chunks) if was_split else 0
-        })
+        _save_current_project()
+        return jsonify({'success': True, 'chunk': chunk, 'was_split': False})
 
     except Exception as e:
         import traceback
@@ -2474,6 +1539,7 @@ def insert_chunk():
             return jsonify({'error': 'No project loaded'}), 400
 
         data = request.json
+        push_undo()
         chapter_id = data.get('chapter_id') or data.get('text_file_id')  # Support both old and new formats
         insert_after_id = data.get('insert_after_id')  # Insert after this chunk ID (or -1 to insert at beginning)
         chunk_type = data.get('type', 'text')  # 'text', 'pause', or 'common_file'
@@ -2581,6 +1647,66 @@ def insert_chunk():
         print(traceback.format_exc())
         return jsonify({'error': str(e)}), 500
 
+@app.route('/api/project/set-pause-duration', methods=['POST'])
+@auth_manager.require_api_key
+def set_pause_duration():
+    """Update a pause chunk's duration. Body: { chapter_id, chunk_id, duration_ms }."""
+    try:
+        if converter.current_project_path is None:
+            return jsonify({'error': 'No project loaded'}), 400
+        data = request.json or {}
+        chapter_id = data.get('chapter_id') or data.get('text_file_id')
+        chunk_id = data.get('chunk_id')
+        duration_ms = int(data.get('duration_ms', 500))
+        duration_ms = max(0, min(duration_ms, 60000))
+        push_undo()
+
+        chapter = _find_chapter(chapter_id)
+        if not chapter:
+            return jsonify({'error': 'Chapter not found'}), 404
+        chunk = next((c for c in chapter.get('chunks', []) if str(c.get('id')) == str(chunk_id)), None)
+        if not chunk:
+            return jsonify({'error': 'Chunk not found'}), 404
+        if chunk.get('type') != 'pause':
+            return jsonify({'error': 'Chunk is not a pause'}), 400
+
+        chunk['duration_ms'] = duration_ms
+        chunk['text'] = f'[Pause: {duration_ms}ms]'
+        chunk['nickname'] = f'Pause ({duration_ms}ms)'
+        _save_current_project()
+        return jsonify({'success': True, 'chunk_id': chunk_id, 'duration_ms': duration_ms})
+    except Exception as e:
+        import traceback; print(traceback.format_exc())
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/project/delete-chunk', methods=['POST'])
+@auth_manager.require_api_key
+def delete_chunk():
+    """Delete a chunk (e.g. a pause). Body: { chapter_id, chunk_id }."""
+    try:
+        if converter.current_project_path is None:
+            return jsonify({'error': 'No project loaded'}), 400
+        data = request.json or {}
+        chapter_id = data.get('chapter_id') or data.get('text_file_id')
+        chunk_id = data.get('chunk_id')
+        push_undo()
+
+        chapter = _find_chapter(chapter_id)
+        if not chapter:
+            return jsonify({'error': 'Chapter not found'}), 404
+        chunks = chapter.get('chunks', [])
+        idx = next((i for i, c in enumerate(chunks) if str(c.get('id')) == str(chunk_id)), None)
+        if idx is None:
+            return jsonify({'error': 'Chunk not found'}), 404
+        del chunks[idx]
+        _save_current_project()
+        return jsonify({'success': True})
+    except Exception as e:
+        import traceback; print(traceback.format_exc())
+        return jsonify({'error': str(e)}), 500
+
+
 @app.route('/api/project/add-audio-to-chunk', methods=['POST'])
 def add_audio_to_chunk():
     """Add generated audio metadata to a chunk in the project"""
@@ -2651,6 +1777,7 @@ def set_chunk_best_take():
             return jsonify({'error': 'No project loaded'}), 400
 
         data = request.json
+        push_undo()
         text_file_id = data.get('text_file_id')
         chunk_id = data.get('chunk_id')
         audio_filename = data.get('audio_filename')
@@ -2717,6 +1844,7 @@ def delete_project_audio():
             return jsonify({'error': 'No project loaded'}), 400
 
         data = request.json
+        push_undo()
         text_file_id = data.get('text_file_id')
         chunk_id = data.get('chunk_id')
         audio_filename = data.get('audio_file') or data.get('audio_filename')
@@ -3337,35 +2465,6 @@ def stitch_project_best_takes():
         print(traceback.format_exc())
         return jsonify({'error': str(e)}), 500
 
-@app.route('/api/project/save-text', methods=['POST'])
-def save_text_to_project():
-    """Save a text file to the current project"""
-    try:
-        if converter.current_project_path is None:
-            return jsonify({'error': 'No project loaded'}), 400
-
-        data = request.json
-        filename = data.get('filename')
-        content = data.get('content')
-
-        if not filename or content is None:
-            return jsonify({'error': 'filename and content are required'}), 400
-
-        texts_dir = os.path.join(converter.current_project_path, 'texts')
-        file_path = os.path.join(texts_dir, filename)
-
-        with open(file_path, 'w', encoding='utf-8') as f:
-            f.write(content)
-
-        # Return relative path
-        relative_path = converter.get_relative_path(file_path)
-        return jsonify({'success': True, 'file_path': relative_path})
-
-    except Exception as e:
-        import traceback
-        print(f"Error saving text: {str(e)}")
-        print(traceback.format_exc())
-        return jsonify({'error': str(e)}), 500
 
 @app.route('/api/set-best-take', methods=['POST'])
 def set_best_take():
@@ -3502,119 +2601,7 @@ def delete_take():
         print(traceback.format_exc())
         return jsonify({'error': str(e)}), 500
 
-@app.route('/api/chunk-text', methods=['POST'])
-def chunk_text():
-    """Chunk text into manageable pieces"""
-    try:
-        data = request.json
-        text = data.get('text', '')
-        max_chunk_size = data.get('max_chunk_size', config.MAX_CHUNK_SIZE)
 
-        if not text:
-            return jsonify({'error': 'Text is required'}), 400
-
-        chunks = converter.smart_chunk_text(text, max_chunk_size)
-        return jsonify({'chunks': chunks})
-
-    except Exception as e:
-        import traceback
-        print(f"Error chunking text: {str(e)}")
-        print(traceback.format_exc())
-        return jsonify({'error': str(e)}), 500
-
-@app.route('/api/generate-chunk', methods=['POST'])
-def generate_chunk():
-    """Generate audio for a specific chunk of text"""
-    try:
-        import json
-        import time
-
-        print(f"\n=== Received chunk generation request ===")
-
-        if 'file' not in request.files:
-            return jsonify({'error': 'No file provided'}), 400
-
-        file = request.files['file']
-        filename = request.form.get('filename', file.filename)
-        chunk_id = int(request.form.get('chunk_id', 0))
-        chunk_text = request.form.get('chunk_text', '')
-
-        # Get optional parameters
-        language_id = request.form.get('language_id', 'en')
-        exaggeration = float(request.form.get('exaggeration', 0.5))
-        cfg_weight = float(request.form.get('cfg_weight', 0.5))
-        voice_sample_name = request.form.get('voice_sample', None)
-
-        # Resolve voice sample — never fall back to the Chatterbox default voice.
-        audio_prompt_path = resolve_voice_sample_path(voice_sample_name)
-        if audio_prompt_path is None:
-            audio_prompt_path = resolve_voice_sample_path(getattr(config, 'DEFAULT_VOICE', None))
-        if audio_prompt_path is None:
-            return jsonify({
-                'error': 'No usable voice sample found. Refusing to generate with the '
-                         'Chatterbox default voice. Set a project voice or configure DEFAULT_VOICE.',
-                'requested_voice': voice_sample_name,
-            }), 400
-        voice_sample_name = os.path.basename(audio_prompt_path)
-
-        print(f"Generating chunk {chunk_id} for: {filename}")
-        print(f"Chunk text length: {len(chunk_text)} characters")
-        print(f"Parameters - Language: {language_id}, Exaggeration: {exaggeration}, CFG Weight: {cfg_weight}")
-
-        # Process pronunciation markup and strip XML tags before TTS processing
-        clean_text = converter.process_pronunciation_markup(chunk_text)
-        clean_text = converter.strip_xml_tags(clean_text)
-        print(f"Clean text length (after pronunciation + XML strip): {len(clean_text)} characters")
-
-        # Generate audio filename with timestamp and chunk ID
-        base_name = os.path.splitext(os.path.basename(filename))[0]
-        timestamp = int(time.time() * 1000)
-        audio_filename = f"{base_name}_chunk{chunk_id}_{timestamp}.wav"
-        audio_path = os.path.join(converter.audio_dir, audio_filename)
-
-        # Save metadata
-        metadata_filename = f"{base_name}_chunk{chunk_id}_{timestamp}.json"
-        metadata_path = os.path.join(converter.audio_dir, metadata_filename)
-        metadata = {
-            'text_file': filename,
-            'chunk_id': chunk_id,
-            'timestamp': timestamp,
-            'language_id': language_id,
-            'exaggeration': exaggeration,
-            'cfg_weight': cfg_weight,
-            'voice_sample': voice_sample_name,
-            'audio_file': audio_filename,
-            'text_preview': chunk_text[:200],  # Keep original text with tags for display
-            'is_best_take': False
-        }
-
-        # Generate audio using clean text (no XML tags)
-        print(f"Generating audio for chunk {chunk_id}...")
-        result = converter.generate_audio(
-            clean_text,
-            audio_path,
-            audio_prompt_path=audio_prompt_path,
-            language_id=language_id,
-            exaggeration=exaggeration,
-            cfg_weight=cfg_weight
-        )
-        print(f"Chunk audio generated successfully!")
-
-        # Save metadata
-        with open(metadata_path, 'w') as f:
-            json.dump(metadata, f, indent=2)
-
-        return jsonify({
-            'audio_url': f'/api/audio/{audio_filename}',
-            'audio_path': audio_path,
-            'metadata': metadata
-        })
-
-    except Exception as e:
-        import traceback
-        print(f"Error generating chunk audio: {str(e)}")
-        print(traceback.format_exc())
-        return jsonify({'error': str(e)}), 500
 
 @app.route('/api/generation-stats', methods=['GET'])
 def get_generation_stats():
@@ -3689,189 +2676,11 @@ def get_generation_progress():
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 
-@app.route('/api/estimate-time', methods=['POST'])
-def estimate_generation_time():
-    """Estimate generation time for given text"""
-    try:
-        data = request.json
-        text = data.get('text', '')
-        char_count = len(text)
-
-        estimate = converter.estimate_generation_time(char_count)
-
-        if estimate is None:
-            return jsonify({
-                'char_count': char_count,
-                'has_estimate': False,
-                'message': 'No historical data available yet'
-            })
-
-        return jsonify({
-            'char_count': char_count,
-            'has_estimate': True,
-            **estimate
-        })
-    except Exception as e:
-        return jsonify({'error': str(e)}), 500
-
-@app.route('/api/stitch-audio', methods=['POST'])
-def stitch_audio():
-    """Stitch together the best takes from all chunks"""
-    try:
-        import json
-        import time
-
-        data = request.json
-        txt_filename = data.get('txt_filename')
-        chunk_ids = data.get('chunk_ids', [])
-
-        if not txt_filename:
-            return jsonify({'error': 'txt_filename is required'}), 400
-
-        base_name = os.path.splitext(txt_filename)[0]
-        audio_paths = []
-
-        # Find the best take for each chunk in order
-        for chunk_id in chunk_ids:
-            best_audio = None
-            best_timestamp = 0
-
-            # Search for the best take for this chunk
-            for filename in os.listdir(converter.audio_dir):
-                if filename.startswith(base_name) and f'_chunk{chunk_id}_' in filename and filename.endswith('.json'):
-                    metadata_path = os.path.join(converter.audio_dir, filename)
-
-                    with open(metadata_path, 'r') as f:
-                        metadata = json.load(f)
-
-                    if metadata.get('is_best_take', False):
-                        audio_file = metadata['audio_file']
-                        audio_path = os.path.join(converter.audio_dir, audio_file)
-                        if os.path.exists(audio_path):
-                            best_audio = audio_path
-                            break
-
-            # If no best take found, use the most recent one
-            if not best_audio:
-                for filename in os.listdir(converter.audio_dir):
-                    if filename.startswith(base_name) and f'_chunk{chunk_id}_' in filename and filename.endswith('.json'):
-                        metadata_path = os.path.join(converter.audio_dir, filename)
-
-                        with open(metadata_path, 'r') as f:
-                            metadata = json.load(f)
-
-                        if metadata['timestamp'] > best_timestamp:
-                            best_timestamp = metadata['timestamp']
-                            audio_file = metadata['audio_file']
-                            audio_path = os.path.join(converter.audio_dir, audio_file)
-                            if os.path.exists(audio_path):
-                                best_audio = audio_path
-
-            if best_audio:
-                audio_paths.append(best_audio)
-            else:
-                return jsonify({'error': f'No audio found for chunk {chunk_id}'}), 400
-
-        # Create stitched audio filename
-        timestamp = int(time.time() * 1000)
-        stitched_filename = f"{base_name}_stitched_{timestamp}.wav"
-        stitched_path = os.path.join(converter.audio_dir, stitched_filename)
-
-        # Stitch the audio files
-        converter.stitch_audio_files(audio_paths, stitched_path)
-
-        # Save metadata for stitched audio
-        metadata_filename = f"{base_name}_stitched_{timestamp}.json"
-        metadata_path = os.path.join(converter.audio_dir, metadata_filename)
-        metadata = {
-            'text_file': txt_filename,
-            'timestamp': timestamp,
-            'audio_file': stitched_filename,
-            'is_stitched': True,
-            'chunk_count': len(chunk_ids),
-            'chunk_ids': chunk_ids
-        }
-
-        with open(metadata_path, 'w') as f:
-            json.dump(metadata, f, indent=2)
-
-        return jsonify({
-            'audio_url': f'/api/audio/{stitched_filename}',
-            'audio_path': stitched_path,
-            'metadata': metadata
-        })
-
-    except Exception as e:
-        import traceback
-        print(f"Error stitching audio: {str(e)}")
-        print(traceback.format_exc())
-        return jsonify({'error': str(e)}), 500
-
-@app.route('/api/process-gutenberg', methods=['POST'])
-def process_gutenberg():
-    """Process Project Gutenberg URLs and save to directory"""
-    try:
-        data = request.json
-        output_dir = data.get('output_dir')
-        urls = data.get('urls', [])
-
-        if not output_dir:
-            return jsonify({'error': 'output_dir is required'}), 400
-
-        if not urls or len(urls) == 0:
-            return jsonify({'error': 'At least one URL is required'}), 400
-
-        # Validate URLs
-        for url in urls:
-            if not url.strip():
-                return jsonify({'error': 'Empty URL provided'}), 400
-            if 'gutenberg.org' not in url.lower():
-                return jsonify({'error': f'URL does not appear to be from Project Gutenberg: {url}'}), 400
-
-        # Create processor and process URLs
-        processor = GutenbergProcessor(output_dir)
-        results = processor.process_urls(urls)
-
-        # Count successes and failures
-        successes = sum(1 for r in results.values() if 'error' not in r)
-        failures = sum(1 for r in results.values() if 'error' in r)
-        total_chapters = sum(r.get('count', 0) for r in results.values() if 'error' not in r)
-
-        return jsonify({
-            'success': True,
-            'output_dir': output_dir,
-            'processed': len(urls),
-            'successes': successes,
-            'failures': failures,
-            'total_chapters': total_chapters,
-            'results': results
-        })
-
-    except Exception as e:
-        import traceback
-        print(f"Error processing Gutenberg URLs: {str(e)}")
-        print(traceback.format_exc())
-        return jsonify({'error': str(e)}), 500
-
-SHORT_BLOCK_CHARS = 120  # blocks ≤ this many chars are flagged as potential headings
 
 
-DEFAULT_NEWLINE_RULES = {'2': 'paragraph', '3': 'chapter', '4+': 'chapter'}
 
 
-def _scan_newline_distribution(raw_text):
-    """
-    Return a dict of {str(count): occurrence_count} for all runs of 2+ newlines.
-    Runs longer than 9 are grouped under '9+'.
-    CRLF is normalised first so Gutenberg .txt files (\\r\\n) are handled correctly.
-    """
-    raw_text = raw_text.replace('\r\n', '\n').replace('\r', '\n')
-    dist = {}
-    for m in re.finditer(r'\n{2,}', raw_text):
-        n = len(m.group())
-        key = str(n) if n <= 9 else '9+'
-        dist[key] = dist.get(key, 0) + 1
-    return dist
+
 
 
 def _get_newline_action(n_newlines, rules):
@@ -3889,282 +2698,37 @@ def _get_newline_action(n_newlines, rules):
     return rules.get('4+', 'chapter')
 
 
-def _build_stage1_from_newlines(raw_text, boilerplate_regions, newline_rules=None):
+
+
+
+
+def _carry_over_takes(old_chapters, new_chapters):
+    """Move already-generated takes from a prior project's chapters onto freshly-built ones.
+
+    Re-importing rebuilds chapters deterministically from book.json (chapter ids are new
+    UUIDs, but chunk ids are positional and the text is stable for a given variant). We
+    match on (chapter order, chunk id) and only carry takes when the chunk text is byte-for-
+    byte identical, so a variant change (different spoken text) correctly drops stale takes.
+
+    Returns the number of chunks whose takes were preserved.
     """
-    Build stage-1 annotated book.txt using newline-based chapter splitting.
-
-    Normalization pipeline applied to non-boilerplate text:
-      1. Carriage returns normalised (\\r\\n → \\n, \\r → \\n)
-      2. Each run of 2+ consecutive \\n dispatched via newline_rules:
-           'chapter'   → split into a new chapter block
-           'paragraph' → kept as single \\n (paragraph separator) within the block
-           'trailing'  → appended as trailing \\n to the preceding block; no new block
-           'ignore'    → removed entirely
-      3. Within each paragraph segment, single \\n (hard line-wrap) → space
-
-    Each resulting text block gets a preceding <chapter title="..."/> marker.
-    Short blocks (≤ SHORT_BLOCK_CHARS chars) are flagged as potential section headings.
-
-    Returns (content: str, block_count: int, short_count: int)
-    """
-    rules = {**DEFAULT_NEWLINE_RULES, **(newline_rules or {})}
-
-    # Normalise line endings
-    raw_text = raw_text.replace('\r\n', '\n').replace('\r', '\n')
-
-    lines = raw_text.split('\n')
-    n = len(lines)
-
-    # Sort boilerplate ranges for sequential scanning
-    bp_ranges = sorted(boilerplate_regions, key=lambda r: r['start_line'])
-
-    # Build a set of all boilerplate line indices for O(1) lookup
-    bp_set = set()
-    for r in bp_ranges:
-        bp_set.update(range(r['start_line'], r['end_line'] + 1))
-
-    # Partition lines into (type, text) pieces in document order
-    pieces = []
-    i = 0
-    while i < n:
-        if i in bp_set:
-            region_end = next(
-                r['end_line'] for r in bp_ranges
-                if r['start_line'] <= i <= r['end_line']
-            )
-            pieces.append(('bp', '\n'.join(lines[i:region_end + 1])))
-            i = region_end + 1
-        else:
-            next_bp = next(
-                (r['start_line'] for r in bp_ranges if r['start_line'] > i), n
-            )
-            pieces.append(('text', '\n'.join(lines[i:next_bp])))
-            i = next_bp
-
-    result = []
-    block_count = 0
-    short_count = 0
-
-    def _normalize_para(para):
-        """Join hard-wrapped single newlines with spaces; skip decorative lines."""
-        p = para.replace('\n', ' ').strip()
-        p = re.sub(r' {2,}', ' ', p)
-        if not p or re.fullmatch(r'[-–—*_.=~\s]+', p):
-            return None
-        return p
-
-    def _emit_block(paras, trailing=''):
-        nonlocal block_count, short_count
-        if not paras:
-            return
-        block_text = '\n'.join(paras) + trailing
-        block_text = block_text.rstrip('\n')
-        if not block_text.strip():
-            return
-        block_count += 1
-        flat_len = len(block_text.replace('\n', ''))
-        is_short = flat_len <= SHORT_BLOCK_CHARS
-        if is_short:
-            short_count += 1
-        if is_short:
-            title = block_text.replace('\n', ' ')
-        else:
-            words = block_text.replace('\n', ' ').split()
-            title = ' '.join(words[:8]) + ('…' if len(words) > 8 else '')
-        safe_title = title.replace('"', '&quot;')
-        result.append(f'<chapter title="{safe_title}"/>')
-        result.append(block_text)
-
-    for ptype, ptext in pieces:
-        if ptype == 'bp':
-            result.append(f'<delete>\n{ptext}\n</delete>')
-            continue
-
-        # Tokenise: alternate [text_segment, newline_run, text_segment, ...]
-        tokens = re.split(r'(\n{2,})', ptext)
-
-        current_paras = []  # normalized paragraphs in the current block
-        trailing = ''       # trailing newlines to append to current block
-
-        for idx, tok in enumerate(tokens):
-            if idx % 2 == 0:
-                # Text segment — apply single-newline → space
-                p = _normalize_para(tok)
-                if p:
-                    current_paras.append(p)
-                    trailing = ''  # reset trailing once we have content after it
-            else:
-                # Newline run
-                action = _get_newline_action(len(tok), rules)
-                if action == 'chapter':
-                    _emit_block(current_paras, trailing)
-                    current_paras = []
-                    trailing = ''
-                elif action == 'paragraph':
-                    # Paragraph separator: the next text goes in the same block
-                    pass  # paragraphs joined by \n when emitted
-                elif action == 'trailing':
-                    # Append a blank line to the current block's last paragraph
-                    trailing = '\n'
-                elif action == 'ignore':
-                    pass  # discard
-
-        _emit_block(current_paras, trailing)
-
-    return '\n\n'.join(result), block_count, short_count
-
-
-@app.route('/api/project/add-gutenberg-url', methods=['POST'])
-@auth_manager.require_api_key
-def add_gutenberg_url_to_project():
-    """
-    Load a Gutenberg book into the current project as a stage-1 annotated book.txt.
-
-    Stage 1 keeps the raw plain text intact but wraps boilerplate in <delete> tags
-    and inserts self-closing <chapter title="..."/> markers at detected chapter starts.
-    The user then adjusts the structure in the editor before confirming.
-    """
-    try:
-        import json
-        from datetime import datetime
-
-        if converter.current_project_path is None:
-            return jsonify({'error': 'No project loaded'}), 400
-
-        data = request.json
-        url = data.get('url', '').strip()
-        scan_only = bool(data.get('scan_only', False))
-        newline_rules = data.get('newline_rules', None)  # dict or None → uses defaults
-        if not url:
-            return jsonify({'error': 'url is required'}), 400
-
-        # Accept a plain integer as a Gutenberg book ID
-        if re.match(r'^\d+$', url):
-            book_id = url
-            url = f"https://www.gutenberg.org/ebooks/{book_id}"
-        elif 'gutenberg.org' not in url.lower():
-            return jsonify({'error': f'Not a Gutenberg URL or book ID: {url}'}), 400
-
-        print(f"\n=== Loading Gutenberg book (stage-1): {url} ===")
-
-        processor = GutenbergProcessor(output_dir=converter.current_project_path)
-        book_id = processor.get_gutenberg_book_id(url)
-        if not book_id:
-            return jsonify({'error': f'Could not extract a book ID from: {url}'}), 400
-
-        gutenberg_urls = build_gutenberg_url_metadata(book_id, url, processor)
-        plain_text_url = gutenberg_urls['gutenberg_txt_url']
-
-        # --- Download raw plain text (do NOT strip or process) ---
-        print(f"[STAGE1] Downloading plain text: {plain_text_url}")
-        raw_content = processor.download_text(plain_text_url)
-        print(f"[STAGE1] Downloaded {len(raw_content):,} chars")
-
-        title = processor.extract_title(raw_content) or processor.extract_book_name(url)
-        print(f"[STAGE1] Title: {title}")
-
-        # Save the raw (unstripped) content as raw_text.txt
-        raw_text_file = os.path.join(converter.current_project_path, 'raw_text.txt')
-        with open(raw_text_file, 'w', encoding='utf-8') as f:
-            f.write(raw_content)
-
-        debug_info = {
-            'book_id': book_id,
-            'txt_url': plain_text_url,
-            'txt_chars': len(raw_content),
-            'epub_downloaded': False,
-            'epub_bytes': 0,
-            'epub_titles': [],
-            'epub_titles_matched': 0,
-            'chapter_source': None,
-        }
-
-        # --- Cache EPUB (for future reference; no longer used for chapter detection) ---
-        epub_bytes = None
-        epub_cache = os.path.join(converter.current_project_path, 'source.epub')
-        if not os.path.exists(epub_cache):
-            print(f"[STAGE1] Downloading EPUB for cache")
-            try:
-                epub_bytes = processor.download_epub(book_id)
-                if epub_bytes:
-                    with open(epub_cache, 'wb') as ef:
-                        ef.write(epub_bytes)
-                    debug_info['epub_downloaded'] = True
-                    debug_info['epub_bytes'] = len(epub_bytes)
-            except Exception as e:
-                print(f"[STAGE1] EPUB download failed (non-fatal): {e}")
-        else:
-            debug_info['epub_downloaded'] = True
-            debug_info['epub_bytes'] = os.path.getsize(epub_cache)
-
-        # --- Detect boilerplate regions in the raw text ---
-        boilerplate = []
-        try:
-            boilerplate = processor.detect_boilerplate(raw_content)
-            print(f"[STAGE1] Boilerplate regions found: {len(boilerplate)}")
-        except Exception as e:
-            print(f"[STAGE1] Boilerplate detection failed: {e}")
-
-        # --- Scan newline distribution (always done; cheap) ---
-        newline_distribution = _scan_newline_distribution(raw_content)
-        print(f"[STAGE1] Newline distribution: {newline_distribution}")
-
-        # --- Scan-only mode: return distribution without creating book.txt ---
-        if scan_only:
-            return jsonify({
-                'scan_only': True,
-                'title': title,
-                'url': url,
-                'newline_distribution': newline_distribution,
-                'default_rules': DEFAULT_NEWLINE_RULES,
-            })
-
-        # --- Build stage-1 annotated book.txt using newline-based splitting ---
-        book_content, block_count, short_count = _build_stage1_from_newlines(
-            raw_content, boilerplate, newline_rules=newline_rules
-        )
-        debug_info['chapter_source'] = 'newline-split'
-        debug_info['block_count'] = block_count
-        debug_info['short_block_count'] = short_count
-
-        book_file_path = os.path.join(converter.current_project_path, 'book.txt')
-        with open(book_file_path, 'w', encoding='utf-8') as f:
-            f.write(book_content)
-        print(f"[STAGE1] book.txt written: {len(book_content):,} chars, "
-              f"{block_count} blocks ({short_count} short/heading), "
-              f"{len(boilerplate)} delete regions")
-
-        # --- Update project metadata (no chapters array yet — stage 1) ---
-        converter.current_project_metadata['original_filename'] = f"{title}.txt"
-        converter.current_project_metadata.update(gutenberg_urls)
-        converter.current_project_metadata['last_modified'] = datetime.now().isoformat()
-        converter.current_project_metadata['version'] = '3.0'
-        converter.current_project_metadata['book_file_stage'] = 1
-        # Clear any stale chapters from a previous load
-        converter.current_project_metadata['chapters'] = []
-
-        project_file = os.path.join(converter.current_project_path, 'project.json')
-        with open(project_file, 'w', encoding='utf-8') as f:
-            json.dump(converter.current_project_metadata, f, indent=2, ensure_ascii=False)
-
-        return jsonify({
-            'success': True,
-            'title': title,
-            'url': url,
-            'stage': 1,
-            'chapter_marker_count': block_count,
-            'short_block_count': short_count,
-            'boilerplate_region_count': len(boilerplate),
-            'newline_distribution': newline_distribution,
-            'newline_rules_applied': {**DEFAULT_NEWLINE_RULES, **(newline_rules or {})},
-            'debug': {**debug_info, 'epub_url': gutenberg_urls['gutenberg_epub_url']},
-        })
-
-    except Exception as e:
-        import traceback
-        print(f"Error adding Gutenberg URL to project: {str(e)}")
-        print(traceback.format_exc())
-        return jsonify({'error': str(e)}), 500
+    old_by_pos = {}
+    for ci, ch in enumerate(old_chapters or []):
+        for chunk in ch.get('chunks', []):
+            old_by_pos[(ci, chunk.get('id'))] = chunk
+    carried = 0
+    for ci, ch in enumerate(new_chapters):
+        for chunk in ch.get('chunks', []):
+            old = old_by_pos.get((ci, chunk.get('id')))
+            if not old:
+                continue
+            takes = old.get('generated_audios') or []
+            if takes and (old.get('text') or '') == (chunk.get('text') or ''):
+                chunk['generated_audios'] = takes
+                if 'dirty' in old:
+                    chunk['dirty'] = old['dirty']
+                carried += 1
+    return carried
 
 
 def build_chapters_from_rewriter_blocks(blocks, variant='original'):
@@ -4210,6 +2774,7 @@ def build_chapters_from_rewriter_blocks(blocks, variant='original'):
                 'id': 0,
                 'type': 'text',
                 'text': title,
+                'original_text': title,
                 'nickname': title[:50].strip() + ('...' if len(title) > 50 else ''),
                 'dirty': False,
                 'generated_audios': []
@@ -4231,6 +2796,7 @@ def build_chapters_from_rewriter_blocks(blocks, variant='original'):
                 'id': len(current['chunks']),
                 'type': 'text',
                 'text': ptext,
+                'original_text': text,   # the full un-edited source paragraph
                 'nickname': ptext[:50].strip() + ('...' if len(ptext) > 50 else ''),
                 'dirty': False,
                 'generated_audios': []
@@ -4242,6 +2808,14 @@ def build_chapters_from_rewriter_blocks(blocks, variant='original'):
                     chunk['image'] = block['image']
                 if block.get('caption'):
                     chunk['caption'] = block['caption']
+                # Enrichment authored upstream in Cowork: footnote/sidenote/gloss notes
+                # and an optional enriched-markdown rendering. Carried through verbatim;
+                # Henty only renders them (see reader_tab.js). Absent => renders as today.
+                if block.get('notes'):
+                    chunk['notes'] = block['notes']
+                enriched = block.get('enriched') or block.get('enriched_text')
+                if enriched and str(enriched).strip():
+                    chunk['enriched_text'] = str(enriched).strip()
                 chunk['source_block_id'] = block.get('id')
             current['chunks'].append(chunk)
 
@@ -4256,16 +2830,16 @@ def build_chapters_from_rewriter_blocks(blocks, variant='original'):
     return [ch for ch in chapters if len(ch['chunks']) > 0]
 
 
-@app.route('/api/rewriter/books', methods=['GET'])
+@app.route('/api/books', methods=['GET'])
 @auth_manager.require_api_key
-def list_rewriter_books():
-    """List Rewriter book folders (each containing a book.json) under the configured dir."""
+def list_books():
+    """List book folders (each containing a book.json) under the configured BOOKS_DIR."""
     try:
         import json as _json
-        books_dir = config.REWRITER_BOOKS_DIR
+        books_dir = config.BOOKS_DIR
         books = []
         if books_dir and os.path.isdir(books_dir):
-            for item in sorted(os.listdir(books_dir)):
+            for item in os.listdir(books_dir):
                 folder = os.path.join(books_dir, item)
                 book_json = os.path.join(folder, 'book.json')
                 if not os.path.isfile(book_json):
@@ -4278,14 +2852,22 @@ def list_rewriter_books():
                     title = data.get('title') or item
                     block_count = len(data.get('blocks', []))
                 except Exception as e:
-                    print(f"[REWRITER] Error reading {book_json}: {e}")
+                    print(f"[IMPORT] Error reading {book_json}: {e}")
+                project_json = os.path.join(folder, 'project.json')
+                # "Most recent" = the latest of the project.json / book.json mtimes, so
+                # recently-opened or freshly-produced books float to the top.
+                mtime = os.path.getmtime(book_json)
+                if os.path.isfile(project_json):
+                    mtime = max(mtime, os.path.getmtime(project_json))
                 books.append({
                     'folder': item,
                     'title': title,
                     'path': os.path.abspath(folder),
                     'block_count': block_count,
-                    'has_project': os.path.isfile(os.path.join(folder, 'project.json')),
+                    'has_project': os.path.isfile(project_json),
+                    'mtime': mtime,
                 })
+        books.sort(key=lambda b: b.get('mtime', 0), reverse=True)
         return jsonify({
             'books_dir': os.path.abspath(books_dir) if books_dir else None,
             'books': books
@@ -4296,14 +2878,82 @@ def list_rewriter_books():
         return jsonify({'error': str(e)}), 500
 
 
-@app.route('/api/project/import-rewriter', methods=['POST'])
+# Seed for the priority queue — the books to process first, in order. Persisted to a
+# JSON file in BOOKS_DIR so the curated order survives restarts.
+DEFAULT_PRIORITY_QUEUE = [
+    'treasure_island',
+    'the_count_of_monte_cristo',
+    'king_solomon_s_mines',
+    'a_knight_of_the_white_cross_a_tale_of_the_siege_of_rhodes',
+    'the_three_musketeers',
+    'dracula',
+    'the_sign_of_the_four',
+]
+
+
+def _queue_file_path():
+    return os.path.join(config.BOOKS_DIR, '.henty_priority_queue.json') if config.BOOKS_DIR else None
+
+
+@app.route('/api/queue', methods=['GET'])
 @auth_manager.require_api_key
-def import_rewriter_book():
-    """Create/refresh a Henty project from a Rewriter book.json.
+def get_priority_queue():
+    """Return the ordered priority queue (list of book folder names).
+
+    On first run (no file yet) the queue is seeded from DEFAULT_PRIORITY_QUEUE and written
+    to disk so it becomes editable.
+    """
+    try:
+        import json
+        path = _queue_file_path()
+        queue = list(DEFAULT_PRIORITY_QUEUE)
+        if path and os.path.isfile(path):
+            with open(path, 'r', encoding='utf-8') as f:
+                queue = json.load(f).get('queue', queue)
+        elif path:
+            try:
+                with open(path, 'w', encoding='utf-8') as f:
+                    json.dump({'queue': queue}, f, indent=2)
+            except Exception as e:
+                print(f"[QUEUE] Could not seed queue file: {e}")
+        return jsonify({'queue': queue})
+    except Exception as e:
+        import traceback
+        print(traceback.format_exc())
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/queue', methods=['PUT'])
+@auth_manager.require_api_key
+def set_priority_queue():
+    """Persist the ordered priority queue. Body: { queue: [folder, ...] }."""
+    try:
+        import json
+        path = _queue_file_path()
+        if not path:
+            return jsonify({'error': 'BOOKS_DIR is not configured'}), 400
+        data = request.json or {}
+        queue = data.get('queue', [])
+        if not isinstance(queue, list):
+            return jsonify({'error': 'queue must be a list'}), 400
+        queue = [str(f) for f in queue]
+        with open(path, 'w', encoding='utf-8') as f:
+            json.dump({'queue': queue}, f, indent=2)
+        return jsonify({'queue': queue})
+    except Exception as e:
+        import traceback
+        print(traceback.format_exc())
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/project/import-book', methods=['POST'])
+@auth_manager.require_api_key
+def import_book():
+    """Create/refresh a Henty project from a book.json.
 
     The book's own folder becomes the project directory: project.json and the audio/
     folder are saved alongside book.json. Chapters are built directly from the blocks
-    and locked (no Gutenberg parsing needed).
+    and locked (no parsing needed).
 
     Body: { folder | book_path, variant: 'original'|'rewrite' }
     """
@@ -4321,9 +2971,9 @@ def import_rewriter_book():
             folder = data.get('folder') or data.get('book')
             if not folder:
                 return jsonify({'error': 'book_path or folder is required'}), 400
-            if not config.REWRITER_BOOKS_DIR:
-                return jsonify({'error': 'REWRITER_BOOKS_DIR is not configured'}), 400
-            book_path = os.path.join(config.REWRITER_BOOKS_DIR, folder)
+            if not config.BOOKS_DIR:
+                return jsonify({'error': 'BOOKS_DIR is not configured'}), 400
+            book_path = os.path.join(config.BOOKS_DIR, folder)
 
         book_path = os.path.abspath(book_path)
         book_json = os.path.join(book_path, 'book.json')
@@ -4343,6 +2993,7 @@ def import_rewriter_book():
             return jsonify({'error': 'No chapters could be built from book.json'}), 400
 
         project_path = book_path
+        keep_audio = bool(data.get('preserve_audio', True))
         audio_dir = os.path.join(project_path, 'audio')
         texts_dir = os.path.join(project_path, 'texts')
         os.makedirs(audio_dir, exist_ok=True)
@@ -4366,15 +3017,18 @@ def import_rewriter_book():
         metadata['name'] = metadata.get('name') or title
         metadata['last_modified'] = datetime.now().isoformat()
         metadata['version'] = '3.0'
-        metadata['source'] = 'rewriter_json'
-        metadata['rewriter_book_path'] = project_path
-        metadata['rewriter_variant'] = variant
+        metadata['source'] = 'book_json'
+        metadata['book_path'] = project_path
+        metadata['text_variant'] = variant
         metadata['original_filename'] = f"{title}.json"
+        # Re-import rebuilds chapters from book.json, which would otherwise discard any
+        # takes already generated (e.g. by the Run Queue before the book was ever opened
+        # in the UI). Carry takes across when the rebuilt chunk text is identical.
+        carried = 0
+        if keep_audio and metadata.get('chapters'):
+            carried = _carry_over_takes(metadata['chapters'], chapters)
         metadata['chapters'] = chapters
         metadata['chapters_locked'] = True
-        # Stage 3 = fully chunked & locked. The chapters are already chunked here, so
-        # the editor must not present the stage-2 "chunking in progress" state.
-        metadata['book_file_stage'] = 3
 
         with open(project_file, 'w', encoding='utf-8') as f:
             json.dump(metadata, f, indent=2, ensure_ascii=False)
@@ -4390,18 +3044,20 @@ def import_rewriter_book():
             with open(os.path.join(project_path, 'chapters_original.txt'), 'w', encoding='utf-8') as f:
                 f.write('\n\n'.join(parts))
         except Exception as e:
-            print(f"[REWRITER] Could not write chapters_original.txt: {e}")
+            print(f"[IMPORT] Could not write chapters_original.txt: {e}")
 
         # Activate as the current project.
         converter.current_project_path = project_path
         converter.current_project_metadata = metadata
+        converter.undo_stack = []
         converter.audio_dir = audio_dir
 
         total_chunks = sum(
             len([c for c in ch['chunks'] if c.get('type') == 'text']) for ch in chapters
         )
-        print(f"[REWRITER] Imported '{title}' ({variant}): "
-              f"{len(chapters)} chapters, {total_chunks} chunks → {project_path}")
+        print(f"[IMPORT] Imported '{title}' ({variant}): "
+              f"{len(chapters)} chapters, {total_chunks} chunks → {project_path}"
+              + (f" (preserved takes on {carried} chunks)" if carried else ""))
 
         return jsonify({
             'success': True,
@@ -4410,6 +3066,7 @@ def import_rewriter_book():
             'variant': variant,
             'chapter_count': len(chapters),
             'chunk_count': total_chunks,
+            'preserved_takes': carried,
         })
     except Exception as e:
         import traceback
@@ -4511,6 +3168,15 @@ def generate_entire_book():
 
         print(f"\n=== Generating entire book ({len(chapters)} chapters) ===")
 
+        project_file = os.path.join(converter.current_project_path, 'project.json')
+
+        def _persist():
+            converter.current_project_metadata['last_modified'] = datetime.now().isoformat()
+            tmp = project_file + '.tmp'
+            with open(tmp, 'w', encoding='utf-8') as f:
+                json.dump(converter.current_project_metadata, f, indent=2, ensure_ascii=False)
+            os.replace(tmp, project_file)   # atomic: never leave a half-written project.json
+
         for chapter in chapters:
             if chapter.get('non_voiced'):
                 continue
@@ -4570,6 +3236,11 @@ def generate_entire_book():
                     generated += 1
                     print(f"      ✓ done c{chunk['id']}", flush=True)
 
+                    # Persist incrementally so an interruption (or overnight restart) never
+                    # strands generated WAVs that project.json doesn't reference.
+                    if generated % 10 == 0:
+                        _persist()
+
                 except Exception as ce:
                     errors += 1
                     error_detail.append({
@@ -4579,10 +3250,7 @@ def generate_entire_book():
                     })
                     print(f"✗ Error chunk {chunk.get('id')}: {ce}")
 
-        project_file = os.path.join(converter.current_project_path, 'project.json')
-        converter.current_project_metadata['last_modified'] = datetime.now().isoformat()
-        with open(project_file, 'w', encoding='utf-8') as f:
-            json.dump(converter.current_project_metadata, f, indent=2, ensure_ascii=False)
+        _persist()
 
         print(f"=== Book generation done: {generated} generated, "
               f"{skipped} skipped, {errors} errors ===")
@@ -4600,786 +3268,474 @@ def generate_entire_book():
         return jsonify({'error': str(e)}), 500
 
 
-@app.route('/api/project/parsing-methods', methods=['GET'])
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+@app.route('/api/project/delete-non-best-takes', methods=['POST'])
 @auth_manager.require_api_key
-def list_parsing_methods():
-    """Return the available chapter-parsing methods and their descriptions."""
-    from scripts.gutenberg_processor import GutenbergProcessor
-    return jsonify({'methods': GutenbergProcessor.PARSING_METHODS})
+def delete_non_best_takes():
+    """Delete every take that is not the best take, freeing disk space after review.
 
-
-@app.route('/api/project/reparse-chapters', methods=['POST'])
-@auth_manager.require_api_key
-def reparse_chapters():
-    """Re-parse chapters from the stored raw text + cached EPUB using a chosen method.
-
-    Expects JSON: { "method": "<method_key>" }
-    Returns the new chapter list and verbose log lines.
+    Scope: whole book by default, or one chapter when `chapter_id` is given. A chunk with
+    takes but none flagged best keeps its most recent take (so nothing useful is lost).
+    Deletes the WAV files and prunes generated_audios. Returns counts. Undoable.
     """
     try:
-        import json
-        from datetime import datetime
-        import uuid
-
         if converter.current_project_path is None:
             return jsonify({'error': 'No project loaded'}), 400
+        data = request.get_json() or {}
+        chapter_id = data.get('chapter_id')
 
-        data = request.json
-        method = data.get('method', 'epub_toc')
-
-        processor = GutenbergProcessor(output_dir=converter.current_project_path)
-        log_lines: list = []
-
-        converter.current_project_metadata = enrich_project_metadata_with_gutenberg_urls(
-            converter.current_project_metadata,
-            converter.current_project_path
-        )
-        book_id = converter.current_project_metadata.get('gutenberg_book_id')
-
-        if book_id:
-            log_lines.append(f"[REPARSE] Gutenberg book ID (GN): {book_id}")
-            # Always re-download the canonical plain text file for parsing
-            plain_text_url = (
-                converter.current_project_metadata.get('gutenberg_txt_url')
-                or processor.get_plain_text_url(book_id)
-            )
-            log_lines.append(f"[REPARSE] Fetching plain text: {plain_text_url}")
-            print(f"[REPARSE] GN={book_id} — downloading plain text: {plain_text_url}")
-            try:
-                raw_content = processor.download_text(plain_text_url)
-                log_lines.append(f"[REPARSE] Plain text downloaded: {len(raw_content):,} chars")
-                title = processor.extract_title(raw_content) or converter.current_project_metadata.get('title', '')
-                text = processor.strip_gutenberg_metadata(raw_content, title)
-                text = processor.process_carriage_returns(text)
-                text = text.replace('<<<SECTION_BREAK>>>', '\n\n')
-                log_lines.append(f"[REPARSE] Plain text processed: {len(text):,} chars")
-            except Exception as e:
-                log_lines.append(f"[REPARSE] WARNING: Failed to download plain text ({e}) — falling back to cached raw_text.txt")
-                print(f"[REPARSE] Plain text download failed: {e}")
-                raw_text_file = os.path.join(converter.current_project_path, 'raw_text.txt')
-                if not os.path.exists(raw_text_file):
-                    return jsonify({'error': 'No raw text found and plain text download failed.'}), 400
-                with open(raw_text_file, 'r', encoding='utf-8') as f:
-                    text = f.read()
-        else:
-            log_lines.append("[REPARSE] No Gutenberg book ID found — using cached raw_text.txt")
-            raw_text_file = os.path.join(converter.current_project_path, 'raw_text.txt')
-            if not os.path.exists(raw_text_file):
-                return jsonify({'error': 'No raw text found. Load a Gutenberg text first.'}), 400
-            with open(raw_text_file, 'r', encoding='utf-8') as f:
-                text = f.read()
-
-        # Load or download the EPUB
-        epub_bytes, epub_error = ensure_cached_project_epub(
-            converter.current_project_path,
-            converter.current_project_metadata
-        )
-        if epub_bytes:
-            log_lines.append(f"[REPARSE] Loaded cached EPUB: {len(epub_bytes):,} bytes")
-            print(f"[REPARSE] Loaded cached EPUB: {len(epub_bytes):,} bytes")
-        elif epub_error:
-            log_lines.append(f"[REPARSE] WARNING: {epub_error}")
-            print(f"[REPARSE] {epub_error}")
-        else:
-            log_lines.append("[REPARSE] No Gutenberg book ID — EPUB not available")
-
-        # Run the selected parsing method with verbose logging
-        parsed = processor.parse_chapters(text, epub_bytes, method, log=log_lines)
-
-        # Print log to server console too
-        for line in log_lines:
-            print(line)
-
-        if not parsed:
-            log_lines.append(f"[REPARSE] Method '{method}' returned 0 chapters")
-            return jsonify({
-                'success': False,
-                'error': f"Method '{method}' produced no chapters. Try a different method.",
-                'log': log_lines,
-                'chapters': [],
-            })
-
-        # Build chapter structures
-        new_chapters = []
-        for i, (ch_title, ch_text) in enumerate(parsed):
-            chunks = converter.smart_chunk_text(ch_text)
-            for chunk in chunks:
-                chunk['dirty'] = False
-                chunk['generated_audios'] = []
-
-            chapter_entry = {
-                'id': str(uuid.uuid4()),
-                'title': ch_title or f"Chapter {i + 1}",
-                'order': i,
-                'chunks': chunks,
-                'audio_output': None,
-                'added_at': datetime.now().isoformat(),
-                'source': f'gutenberg_{method}',
-            }
-            new_chapters.append(chapter_entry)
-
-        # Replace chapters in project metadata
-        converter.current_project_metadata['chapters'] = new_chapters
-        converter.current_project_metadata['last_modified'] = datetime.now().isoformat()
-        converter.current_project_metadata['book_file_stage'] = 3
-
-        # Regenerate book.txt
-        try:
-            book_content = generate_book_file(new_chapters)
-            book_file_path = os.path.join(converter.current_project_path, 'book.txt')
-            with open(book_file_path, 'w', encoding='utf-8') as f:
-                f.write(book_content)
-            log_lines.append(f"[REPARSE] Generated book.txt ({len(book_content)} chars)")
-        except Exception as bf_err:
-            log_lines.append(f"[REPARSE] Warning: Failed to generate book.txt: {bf_err}")
-
-        # Save
-        project_file = os.path.join(converter.current_project_path, 'project.json')
-        with open(project_file, 'w', encoding='utf-8') as f:
-            json.dump(converter.current_project_metadata, f, indent=2, ensure_ascii=False)
-
-        log_lines.append(f"[REPARSE] Saved {len(new_chapters)} chapters (method={method})")
-
-        return jsonify({
-            'success': True,
-            'method': method,
-            'chapter_count': len(new_chapters),
-            'chapters': new_chapters,
-            'log': log_lines,
-        })
-
-    except Exception as e:
-        import traceback
-        print(f"Error reparsing chapters: {str(e)}")
-        print(traceback.format_exc())
-        return jsonify({'error': str(e), 'log': [f"[REPARSE] EXCEPTION: {str(e)}"]}), 500
-
-
-@app.route('/api/project/lock-chapters', methods=['POST'])
-@auth_manager.require_api_key
-def lock_chapters():
-    """Lock chapter divisions and save original text with chapter boundaries."""
-    try:
-        if converter.current_project_path is None:
-            return jsonify({'error': 'No project loaded'}), 400
-
+        audio_dir = os.path.join(converter.current_project_path, 'audio')
         chapters = converter.current_project_metadata.get('chapters', [])
-        if not chapters:
-            return jsonify({'error': 'No chapters to lock'}), 400
+        if chapter_id is not None:
+            chapters = [ch for ch in chapters if str(ch.get('id')) == str(chapter_id)]
+            if not chapters:
+                return jsonify({'error': 'Chapter not found'}), 404
 
-        # Save original text with chapter divisions
-        original_text_path = os.path.join(converter.current_project_path, 'chapters_original.txt')
-        with open(original_text_path, 'w', encoding='utf-8') as f:
-            for ch in chapters:
-                f.write(f"## {ch.get('title', 'Untitled')}\n\n")
-                for chunk in ch.get('chunks', []):
-                    if chunk.get('type') == 'text':
-                        f.write(chunk.get('text', '') + '\n')
-                f.write('\n---\n\n')
+        push_undo()
+        removed_files = removed_takes = files_missing = 0
+        for ch in chapters:
+            for chunk in ch.get('chunks', []):
+                takes = chunk.get('generated_audios') or []
+                if len(takes) <= 1:
+                    continue
+                # Keep the best take; if none is flagged, keep the most recent.
+                keep = next((t for t in takes if t.get('is_best_take')), None)
+                if keep is None:
+                    keep = max(takes, key=lambda t: t.get('timestamp', 0))
+                    keep['is_best_take'] = True
+                doomed = [t for t in takes if t is not keep]
+                for t in doomed:
+                    fn = t.get('audio_file')
+                    if fn:
+                        path = os.path.join(audio_dir, fn)
+                        try:
+                            if os.path.exists(path):
+                                os.remove(path); removed_files += 1
+                            else:
+                                files_missing += 1
+                        except Exception as fe:
+                            print(f"[CLEAN] could not delete {path}: {fe}")
+                    removed_takes += 1
+                chunk['generated_audios'] = [keep]
 
-        converter.current_project_metadata['chapters_locked'] = True
-        converter.current_project_metadata['last_modified'] = datetime.now().isoformat()
-
-        project_file = os.path.join(converter.current_project_path, 'project.json')
-        with open(project_file, 'w', encoding='utf-8') as f:
-            json.dump(converter.current_project_metadata, f, indent=2, ensure_ascii=False)
-
-        return jsonify({'success': True, 'message': 'Chapters locked'})
-
+        _save_current_project()
+        print(f"[CLEAN] Removed {removed_takes} non-best takes "
+              f"({removed_files} files deleted, {files_missing} already gone)", flush=True)
+        return jsonify({'success': True, 'removed_takes': removed_takes,
+                        'removed_files': removed_files, 'files_missing': files_missing})
     except Exception as e:
-        import traceback
-        print(f"Error locking chapters: {e}")
-        print(traceback.format_exc())
+        import traceback; print(traceback.format_exc())
         return jsonify({'error': str(e)}), 500
 
 
-@app.route('/api/project/unlock-chapters', methods=['POST'])
+@app.route('/api/project/recover-takes', methods=['POST'])
 @auth_manager.require_api_key
-def unlock_chapters():
-    """Unlock chapter divisions to allow re-parsing."""
+def recover_takes():
+    """Rebuild generated_audios references from WAVs on disk for the current project.
+
+    Audio filenames are `{safe_chapter_title}_chunk{chunk_id}_{timestamp}.wav`, so a project
+    whose project.json lost its take references (e.g. an interrupted generate-entire-book)
+    can be reconstructed from the files alone. Non-destructive: only fills chunks that
+    currently have no takes (unless force=true). Newest take per chunk becomes best.
+    """
     try:
         if converter.current_project_path is None:
             return jsonify({'error': 'No project loaded'}), 400
+        force = bool((request.get_json() or {}).get('force', False))
 
-        converter.current_project_metadata['chapters_locked'] = False
-        converter.current_project_metadata['last_modified'] = datetime.now().isoformat()
+        audio_dir = os.path.join(converter.current_project_path, 'audio')
+        if not os.path.isdir(audio_dir):
+            return jsonify({'error': 'No audio directory'}), 400
 
-        project_file = os.path.join(converter.current_project_path, 'project.json')
-        with open(project_file, 'w', encoding='utf-8') as f:
-            json.dump(converter.current_project_metadata, f, indent=2, ensure_ascii=False)
+        fre = re.compile(r'^(.*)_chunk(\d+)_(\d+)\.wav$')
+        pool = {}
+        for f in os.listdir(audio_dir):
+            if not f.lower().endswith('.wav'):
+                continue
+            mt = fre.match(f)
+            if not mt:
+                continue
+            pool.setdefault((mt.group(1), int(mt.group(2))), []).append((int(mt.group(3)), f))
 
-        return jsonify({'success': True, 'message': 'Chapters unlocked'})
+        meta = converter.current_project_metadata
+        defs = meta.get('default_audio_settings', {})
+        chunks_recovered = takes_assigned = 0
+        for ch in meta.get('chapters', []):
+            pfx = _safe_filename_part(ch.get('title') or ch.get('name') or 'chunk')
+            for c in ch.get('chunks', []):
+                if c.get('type', 'text') != 'text':
+                    continue
+                if c.get('generated_audios') and not force:
+                    continue
+                takes = pool.get((pfx, c.get('id')))
+                if not takes:
+                    continue
+                takes.sort()
+                gas = []
+                for i, (ts, fn) in enumerate(takes):
+                    gas.append({
+                        'audio_file': fn,
+                        'audio_url': f"/api/audio/{fn}",
+                        'timestamp': ts,
+                        'voice_sample': defs.get('voice_sample'),
+                        'exaggeration': defs.get('exaggeration'),
+                        'cfg_weight': defs.get('cfg_weight'),
+                        'language_id': defs.get('language_id', 'en'),
+                        'input_text': c.get('text'),
+                        'text_preview': (c.get('text') or '')[:200],
+                        'is_best_take': i == len(takes) - 1,
+                        'recovered': True,
+                    })
+                c['generated_audios'] = gas
+                c['dirty'] = False
+                chunks_recovered += 1
+                takes_assigned += len(gas)
 
+        if chunks_recovered:
+            _save_current_project()
+        print(f"[RECOVER] {chunks_recovered} chunks, {takes_assigned} takes from {audio_dir}", flush=True)
+        return jsonify({'success': True, 'chunks_recovered': chunks_recovered,
+                        'takes_assigned': takes_assigned})
     except Exception as e:
+        import traceback; print(traceback.format_exc())
         return jsonify({'error': str(e)}), 500
 
 
-@app.route('/api/project/confirm-structure', methods=['POST'])
+@app.route('/api/project/chapter/publish', methods=['POST'])
 @auth_manager.require_api_key
-def confirm_structure():
-    """
-    Convert a stage-1 annotated book.txt to stage-2 chapter-structured format.
+def publish_chapter():
+    """Compile a chapter's best takes (and pauses) into one WAV and publish it.
 
-    Stage-1 format (input):
-        <delete>...</delete>              boilerplate to discard
-        plain text
-        <chapter title="Chapter I"/>      self-closing chapter break marker
+    Walks the chapter's chunks in order: each text chunk contributes its best take
+    (falling back to its most recent take), and each pause chunk contributes silence.
+    The result is stitched into `<project>/published/<chapter>.wav` and exposed at
+    /api/published/<file>. A future external preview server can pick the file up from
+    there; for now it is served locally.
 
-    Stage-2 format (output):
-        <chapter title="Chapter I">
-        text of that chapter
-        </chapter>
-
-    Body: {"content": "<stage-1 book.txt content>"}
-    If content is omitted the current book.txt is used.
+    Body: { chapter_id }
     """
     try:
-        from datetime import datetime
-
         if converter.current_project_path is None:
             return jsonify({'error': 'No project loaded'}), 400
+        data = request.get_json() or {}
+        chapter_id = data.get('chapter_id')
+        if chapter_id is None:
+            return jsonify({'error': 'chapter_id is required'}), 400
 
-        data = request.json or {}
-        content = data.get('content', '').strip()
+        chapter = _find_chapter(chapter_id)
+        if not chapter:
+            return jsonify({'error': 'Chapter not found'}), 404
 
-        if not content:
-            # Load current book.txt
-            book_file_path = os.path.join(converter.current_project_path, 'book.txt')
-            if not os.path.exists(book_file_path):
-                return jsonify({'error': 'No book.txt found'}), 400
-            with open(book_file_path, 'r', encoding='utf-8') as f:
-                content = f.read()
+        audio_dir = os.path.join(converter.current_project_path, 'audio')
+        items = []          # paths / pause tuples for stitch_audio_files
+        missing = []        # text chunks with no usable take
+        timeline = []       # per-chunk [start_ms, end_ms) into the stitched WAV
+        offset_ms = 0       # running position as we walk the chunks in order
+        for chunk in chapter.get('chunks', []):
+            ctype = chunk.get('type', 'text')
+            if ctype == 'pause':
+                ms = chunk.get('duration_ms')
+                if ms is None:
+                    ms = int(round(chunk.get('duration', 0.5) * 1000))
+                ms = max(0, int(ms))
+                items.append(('pause', ms))
+                timeline.append({'chunk_id': chunk.get('id'), 'type': 'pause',
+                                 'start_ms': offset_ms, 'end_ms': offset_ms + ms,
+                                 'duration_ms': ms})
+                offset_ms += ms
+                continue
+            if ctype != 'text':
+                continue
+            takes = chunk.get('generated_audios') or []
+            if not takes:
+                missing.append(chunk.get('id'))
+                continue
+            best = next((t for t in takes if t.get('is_best_take')), takes[-1])
+            items.append(os.path.join(audio_dir, best.get('audio_file', '')))
+            dur_ms = int(round((best.get('audio_duration_seconds') or 0) * 1000))
+            timeline.append({'chunk_id': chunk.get('id'), 'type': 'text',
+                             'start_ms': offset_ms, 'end_ms': offset_ms + dur_ms,
+                             'duration_ms': dur_ms})
+            offset_ms += dur_ms
 
-        # ------------------------------------------------------------------ #
-        # 1. Remove <delete> blocks                                           #
-        # ------------------------------------------------------------------ #
-        cleaned = re.sub(r'<delete>.*?</delete>', '', content, flags=re.DOTALL)
+        if not any(not isinstance(it, tuple) for it in items):
+            return jsonify({'error': 'No takes to publish in this chapter. Generate audio first.',
+                            'missing_chunk_ids': missing}), 400
 
-        # ------------------------------------------------------------------ #
-        # 2. Split on self-closing <chapter title="..."/> markers             #
-        # ------------------------------------------------------------------ #
-        chapter_marker_re = re.compile(r'<chapter\s+title="([^"]*)"[^/]*/>', re.IGNORECASE)
-        parts = chapter_marker_re.split(cleaned)
+        published_dir = os.path.join(converter.current_project_path, 'published')
+        os.makedirs(published_dir, exist_ok=True)
+        out_name = f"{_safe_filename_part(chapter.get('title') or 'chapter', maxlen=60)}.wav"
+        out_path = os.path.join(published_dir, out_name)
+        converter.stitch_audio_files(items, out_path)
 
-        # parts alternates: [text_before_first_chapter, title1, body1, title2, body2, ...]
-        stage2_lines = []
+        # Bake the chunk-level timeline into the project so a passage can be mapped to a
+        # position in the published audio (drives reader scroll-sync). Offsets are derived
+        # from the stitch order above, so they match the published WAV exactly. The shape
+        # is forward-compatible: a future forced-alignment pass can add `words` per entry.
+        from datetime import datetime as _dt
+        chapter['timeline'] = {
+            'published_file': out_name,
+            'total_ms': offset_ms,
+            'generated_at': _dt.now().isoformat(),
+            'chunks': timeline,
+        }
+        _save_current_project()
 
-        # Text before the first chapter marker (discard or treat as preamble)
-        # We silently drop any pre-chapter text so the output starts cleanly.
-        # (Indices: parts[0] = pre-chapter, parts[1::2] = titles, parts[2::2] = bodies)
-        if len(parts) < 3:
-            return jsonify({
-                'error': 'No <chapter title="..."/> markers found in the content. '
-                         'Add chapter breaks before confirming.'
-            }), 400
-
-        titles  = parts[1::2]
-        bodies  = parts[2::2]
-
-        new_chapters_stage2 = []
-        for title, body in zip(titles, bodies):
-            title = title.strip()
-            body  = body.strip()
-            stage2_lines.append(f'<chapter title="{title}">')
-            stage2_lines.append(body)
-            stage2_lines.append('</chapter>')
-            stage2_lines.append('')
-            new_chapters_stage2.append((title, body))
-
-        stage2_content = '\n'.join(stage2_lines).strip()
-
-        # ------------------------------------------------------------------ #
-        # 3. Write stage-2 book.txt                                           #
-        # ------------------------------------------------------------------ #
-        book_file_path = os.path.join(converter.current_project_path, 'book.txt')
-        with open(book_file_path, 'w', encoding='utf-8') as f:
-            f.write(stage2_content)
-
-        # ------------------------------------------------------------------ #
-        # 4. Build chapters array (no chunks yet — user will auto-chunk)      #
-        # ------------------------------------------------------------------ #
-        import uuid
-        new_chapters = []
-        for i, (ch_title, ch_body) in enumerate(new_chapters_stage2):
-            new_chapters.append({
-                'id': str(uuid.uuid4()),
-                'title': ch_title,
-                'name':  ch_title,
-                'order': i,
-                'chunks': [],
-                'non_voiced': False,
-            })
-
-        converter.current_project_metadata['chapters'] = new_chapters
-        converter.current_project_metadata['book_file_stage'] = 2
-        converter.current_project_metadata['last_modified'] = datetime.now().isoformat()
-
-        project_file = os.path.join(converter.current_project_path, 'project.json')
-        with open(project_file, 'w', encoding='utf-8') as f:
-            json.dump(converter.current_project_metadata, f, indent=2, ensure_ascii=False)
-
-        print(f"[CONFIRM-STRUCTURE] Stage-2 book.txt written: "
-              f"{len(new_chapters)} chapters, {len(stage2_content)} chars")
-
+        size = os.path.getsize(out_path) if os.path.isfile(out_path) else 0
+        print(f"[PUBLISH] Chapter '{chapter.get('title')}' → {out_path} "
+              f"({size} bytes, {len(missing)} chunks missing takes)", flush=True)
         return jsonify({
             'success': True,
-            'stage': 2,
-            'chapter_count': len(new_chapters),
+            'file': out_name,
+            'url': f"/api/published/{out_name}",
+            'bytes': size,
+            'missing_chunk_ids': missing,
+            'timeline': chapter['timeline'],
         })
-
     except Exception as e:
-        import traceback
-        print(f"Error in confirm-structure: {e}")
-        print(traceback.format_exc())
+        import traceback; print(traceback.format_exc())
         return jsonify({'error': str(e)}), 500
 
 
-@app.route('/api/project/book-file', methods=['GET'])
+def _find_chapter(chapter_id):
+    """Return the chapter dict with the given id, or None."""
+    for ch in converter.current_project_metadata.get('chapters', []):
+        if str(ch.get('id')) == str(chapter_id):
+            return ch
+    return None
+
+
+def _save_current_project():
+    from datetime import datetime
+    converter.current_project_metadata['last_modified'] = datetime.now().isoformat()
+    project_file = os.path.join(converter.current_project_path, 'project.json')
+    with open(project_file, 'w', encoding='utf-8') as f:
+        json.dump(converter.current_project_metadata, f, indent=2, ensure_ascii=False)
+    converter._invalidate_lookup_caches()
+
+
+def push_undo():
+    """Snapshot the current chapters before a mutating edit. Keeps up to 20 moves."""
+    try:
+        if converter.current_project_metadata is None:
+            return
+        snap = json.loads(json.dumps(converter.current_project_metadata.get('chapters', [])))
+        converter.undo_stack.append(snap)
+        if len(converter.undo_stack) > 20:
+            del converter.undo_stack[0]
+    except Exception as e:
+        print(f"[UNDO] push failed: {e}")
+
+
+@app.route('/api/project/undo', methods=['POST'])
 @auth_manager.require_api_key
-def get_book_file():
-    """Return the book.txt content and current stage. Migrates from old format if needed."""
+def undo_edit():
+    """Restore the chapters snapshot from before the last edit (up to 20 moves)."""
     try:
         if converter.current_project_path is None:
             return jsonify({'error': 'No project loaded'}), 400
-
-        book_file_path = os.path.join(converter.current_project_path, 'book.txt')
-
-        if not os.path.exists(book_file_path):
-            # Attempt migration
-            content = migrate_to_book_file(
-                converter.current_project_path,
-                converter.current_project_metadata
-            )
-            if content is None:
-                return jsonify({'error': 'No book file found. Load a Gutenberg book first.'}), 400
-        else:
-            with open(book_file_path, 'r', encoding='utf-8') as f:
-                content = f.read()
-
-        stage = converter.current_project_metadata.get('book_file_stage', 0)
-        return jsonify({'content': content, 'stage': stage})
-
+        if not converter.undo_stack:
+            return jsonify({'success': False, 'empty': True})
+        snap = converter.undo_stack.pop()
+        converter.current_project_metadata['chapters'] = snap
+        _save_current_project()
+        return jsonify({'success': True, 'remaining': len(converter.undo_stack)})
     except Exception as e:
-        return jsonify({'error': str(e)}), 500
-
-
-@app.route('/api/project/save-book-file', methods=['POST'])
-@auth_manager.require_api_key
-def save_book_file():
-    """
-    Save book.txt content, re-parse it into chapters array, and update project.json.
-    Preserves existing audio data.
-    """
-    try:
-        if converter.current_project_path is None:
-            return jsonify({'error': 'No project loaded'}), 400
-
-        data = request.json or {}
-        content = data.get('content', '')
-        if not content:
-            return jsonify({'error': 'No content provided'}), 400
-
-        book_file_path = os.path.join(converter.current_project_path, 'book.txt')
-        with open(book_file_path, 'w', encoding='utf-8') as f:
-            f.write(content)
-
-        # Parse book.txt into chapters, preserving existing audio
-        existing_chapters = converter.current_project_metadata.get('chapters', [])
-        new_chapters = parse_book_file(content, existing_chapters)
-
-        converter.current_project_metadata['chapters'] = new_chapters
-        converter.current_project_metadata['last_modified'] = datetime.now().isoformat()
-
-        # Update stage if it looks like chapters are present
-        if new_chapters and converter.current_project_metadata.get('book_file_stage', 0) < 2:
-            converter.current_project_metadata['book_file_stage'] = 2
-        has_chunks = any(len(ch.get('chunks', [])) > 0 for ch in new_chapters)
-        if has_chunks and converter.current_project_metadata.get('book_file_stage', 0) < 3:
-            converter.current_project_metadata['book_file_stage'] = 3
-
-        project_file = os.path.join(converter.current_project_path, 'project.json')
-        with open(project_file, 'w', encoding='utf-8') as f:
-            json.dump(converter.current_project_metadata, f, indent=2, ensure_ascii=False)
-
-        # Count dirty chunks
-        dirty_count = sum(
-            1 for ch in new_chapters
-            for ck in ch.get('chunks', [])
-            if ck.get('dirty', False)
-        )
-
-        return jsonify({
-            'success': True,
-            'chapter_count': len(new_chapters),
-            'dirty_count': dirty_count
-        })
-
-    except Exception as e:
-        return jsonify({'error': str(e)}), 500
-
-
-@app.route('/api/project/tag-chunks', methods=['POST'])
-@auth_manager.require_api_key
-def tag_chunks():
-    """
-    Run smart chunking on current book.txt, inserting </chunk> markers.
-    Operates on the chapter bodies without disturbing <chapter>/<delete> tags.
-    """
-    try:
-        if converter.current_project_path is None:
-            return jsonify({'error': 'No project loaded'}), 400
-
-        book_file_path = os.path.join(converter.current_project_path, 'book.txt')
-        if not os.path.exists(book_file_path):
-            return jsonify({'error': 'No book.txt found'}), 400
-
-        with open(book_file_path, 'r', encoding='utf-8') as f:
-            content = f.read()
-
-        def rechunk_chapter_body(body_text):
-            """Re-chunk a chapter body using smart_chunk_text, writing new wrapping format."""
-            # Strip both old </chunk> separators and new <chunk id="...">...</chunk> tags
-            body_text = re.sub(r'<chunk\s+id="[a-f0-9]{8}"[^>]*>|</chunk>', '', body_text)
-            chunks = converter.smart_chunk_text(body_text)
-            if not chunks:
-                return body_text
-            parts = []
-            for c in chunks:
-                hex_id = uuid.uuid4().hex[:8]
-                parts.append(f'<chunk id="{hex_id}">{c["text"]}</chunk>')
-            return '\n'.join(parts)
-
-        # Replace chapter bodies with re-chunked versions
-        def replace_body(m):
-            tag_open = m.group(1)
-            body = m.group(2)
-            new_body = rechunk_chapter_body(body)
-            return f'{tag_open}\n{new_body}\n</chapter>'
-
-        new_content = re.sub(
-            r'(<chapter[^>]*>)(.*?)(</chapter>)',
-            replace_body,
-            content,
-            flags=re.DOTALL
-        )
-
-        with open(book_file_path, 'w', encoding='utf-8') as f:
-            f.write(new_content)
-
-        # Re-parse to update project.json
-        existing_chapters = converter.current_project_metadata.get('chapters', [])
-        new_chapters = parse_book_file(new_content, existing_chapters)
-        converter.current_project_metadata['chapters'] = new_chapters
-        converter.current_project_metadata['book_file_stage'] = 3
-        converter.current_project_metadata['last_modified'] = datetime.now().isoformat()
-
-        project_file = os.path.join(converter.current_project_path, 'project.json')
-        with open(project_file, 'w', encoding='utf-8') as f:
-            json.dump(converter.current_project_metadata, f, indent=2, ensure_ascii=False)
-
-        return jsonify({
-            'success': True,
-            'content': new_content,
-            'chapter_count': len(new_chapters)
-        })
-
-    except Exception as e:
+        import traceback; print(traceback.format_exc())
         return jsonify({'error': str(e)}), 500
 
 
 @app.route('/api/project/split-chunk', methods=['POST'])
 @auth_manager.require_api_key
 def split_chunk():
-    """
-    Split a chunk at the given character offset.
-    Body: { "hex_id": "a3f2c1b8", "char_offset": 145 }
-    Finds the chunk in book.txt by hex_id, splits text at the nearest word
-    boundary (or sentence boundary) at/before char_offset, assigns two new
-    hex IDs, preserves all other chunks unchanged.
+    """Split a text chunk into two, operating directly on project.json chapters.
+
+    Body: { "chapter_id": "...", "chunk_id": 3, "char_offset": 145 }
+    The first part keeps the original chunk id (its takes are marked dirty since the
+    text changed); the second part becomes a new chunk inserted immediately after.
     """
     try:
         if converter.current_project_path is None:
             return jsonify({'error': 'No project loaded'}), 400
 
         data = request.get_json() or {}
-        hex_id = data.get('hex_id', '')
+        chapter_id = data.get('chapter_id')
+        chunk_id = data.get('chunk_id')
         char_offset = int(data.get('char_offset', 0))
+        if chapter_id is None or chunk_id is None:
+            return jsonify({'error': 'chapter_id and chunk_id are required'}), 400
+        push_undo()
 
-        if not hex_id:
-            return jsonify({'error': 'hex_id is required'}), 400
+        chapter = _find_chapter(chapter_id)
+        if not chapter:
+            return jsonify({'error': 'Chapter not found'}), 404
+        chunks = chapter.get('chunks', [])
+        idx = next((i for i, c in enumerate(chunks) if str(c.get('id')) == str(chunk_id)), None)
+        if idx is None:
+            return jsonify({'error': 'Chunk not found'}), 404
+        chunk = chunks[idx]
+        if chunk.get('type', 'text') != 'text':
+            return jsonify({'error': 'Only text chunks can be split'}), 400
 
-        book_file_path = os.path.join(converter.current_project_path, 'book.txt')
-        if not os.path.exists(book_file_path):
-            return jsonify({'error': 'No book.txt found'}), 400
-
-        with open(book_file_path, 'r', encoding='utf-8') as f:
-            content = f.read()
-
-        # Find the chunk with this hex_id
-        chunk_re = re.compile(r'<chunk\s+id="' + re.escape(hex_id) + r'"[^>]*>([\s\S]*?)</chunk>')
-        m = chunk_re.search(content)
-        if not m:
-            return jsonify({'error': f'Chunk {hex_id} not found'}), 404
-
-        text = m.group(1)
-
-        # Clamp offset
+        text = chunk.get('text', '')
         char_offset = max(0, min(char_offset, len(text)))
 
-        # Find split point: prefer sentence boundary, then word boundary
+        # Prefer a sentence boundary near the offset, else a word boundary.
         split_at = char_offset
-        # Look for sentence end (. ! ?) within 30 chars before offset
-        sentence_re = re.compile(r'[.!?]\s+', re.DOTALL)
         best_sentence = None
-        for sm in sentence_re.finditer(text):
+        for sm in re.finditer(r'[.!?]\s+', text, re.DOTALL):
             if sm.end() <= char_offset:
                 best_sentence = sm.end()
         if best_sentence and best_sentence > max(0, char_offset - 60):
             split_at = best_sentence
         else:
-            # Fall back to word boundary
             space_pos = text.rfind(' ', 0, char_offset)
             if space_pos > 0:
                 split_at = space_pos + 1
 
         part_a = text[:split_at].strip()
         part_b = text[split_at:].strip()
-
         if not part_a or not part_b:
             return jsonify({'error': 'Cannot split: one part would be empty'}), 400
 
-        new_id_a = uuid.uuid4().hex[:8]
-        new_id_b = uuid.uuid4().hex[:8]
-        replacement = f'<chunk id="{new_id_a}">{part_a}</chunk>\n<chunk id="{new_id_b}">{part_b}</chunk>'
+        had_audio = len(chunk.get('generated_audios', [])) > 0
+        chunk['text'] = part_a
+        chunk['nickname'] = part_a[:50].strip() + ('...' if len(part_a) > 50 else '')
+        if had_audio:
+            chunk['dirty'] = True
 
-        new_content = chunk_re.sub(replacement, content, count=1)
+        new_id = max([c.get('id', 0) for c in chunks if isinstance(c.get('id'), int)] + [0]) + 1
+        new_chunk = {
+            'id': new_id,
+            'type': 'text',
+            'text': part_b,
+            'original_text': chunk.get('original_text', ''),  # both halves keep the source paragraph
+            'nickname': part_b[:50].strip() + ('...' if len(part_b) > 50 else ''),
+            'dirty': False,
+            'generated_audios': []
+        }
+        chunks.insert(idx + 1, new_chunk)
 
-        with open(book_file_path, 'w', encoding='utf-8') as f:
-            f.write(new_content)
-
-        # Re-parse to update project.json
-        existing_chapters = converter.current_project_metadata.get('chapters', [])
-        new_chapters = parse_book_file(new_content, existing_chapters)
-        converter.current_project_metadata['chapters'] = new_chapters
-        converter.current_project_metadata['last_modified'] = datetime.now().isoformat()
-
-        project_file = os.path.join(converter.current_project_path, 'project.json')
-        with open(project_file, 'w', encoding='utf-8') as f:
-            json.dump(converter.current_project_metadata, f, indent=2, ensure_ascii=False)
-
-        return jsonify({'success': True, 'new_ids': [new_id_a, new_id_b]})
+        _save_current_project()
+        return jsonify({'success': True, 'chapter_id': chapter_id,
+                        'chunk_id': chunk['id'], 'new_chunk_id': new_id})
 
     except Exception as e:
+        import traceback
+        print(traceback.format_exc())
         return jsonify({'error': str(e)}), 500
 
 
 @app.route('/api/project/merge-chunk', methods=['POST'])
 @auth_manager.require_api_key
 def merge_chunk():
-    """
-    Merge a chunk with its neighbour.
-    Body: { "hex_id": "a3f2c1b8", "direction": "prev" | "next" }
-    Finds the chunk and the adjacent chunk (in direction), joins their text with
-    a single newline, assigns a new hex ID, and writes book.txt back.
+    """Merge a text chunk with its neighbour, operating on project.json chapters.
+
+    Body: { "chapter_id": "...", "chunk_id": 3, "direction": "prev"|"next" }
+    The surviving chunk keeps the earlier chunk's id; its takes are marked dirty
+    because the text changed.
     """
     try:
         if converter.current_project_path is None:
             return jsonify({'error': 'No project loaded'}), 400
 
         data = request.get_json() or {}
-        hex_id = data.get('hex_id', '')
+        chapter_id = data.get('chapter_id')
+        chunk_id = data.get('chunk_id')
         direction = data.get('direction', 'prev')
-
-        if not hex_id:
-            return jsonify({'error': 'hex_id is required'}), 400
+        if chapter_id is None or chunk_id is None:
+            return jsonify({'error': 'chapter_id and chunk_id are required'}), 400
+        push_undo()
         if direction not in ('prev', 'next'):
             return jsonify({'error': 'direction must be "prev" or "next"'}), 400
 
-        book_file_path = os.path.join(converter.current_project_path, 'book.txt')
-        if not os.path.exists(book_file_path):
-            return jsonify({'error': 'No book.txt found'}), 400
+        all_chapters = converter.current_project_metadata.get('chapters', [])
+        ci = next((i for i, ch in enumerate(all_chapters) if str(ch.get('id')) == str(chapter_id)), None)
+        if ci is None:
+            return jsonify({'error': 'Chapter not found'}), 404
+        chapter = all_chapters[ci]
+        chunks = chapter.get('chunks', [])
+        idx = next((i for i, c in enumerate(chunks) if str(c.get('id')) == str(chunk_id)), None)
+        if idx is None:
+            return jsonify({'error': 'Chunk not found'}), 404
 
-        with open(book_file_path, 'r', encoding='utf-8') as f:
-            content = f.read()
+        at_boundary = (direction == 'prev' and idx == 0) or (direction == 'next' and idx == len(chunks) - 1)
 
-        # Find all chunks in order
-        chunk_re = re.compile(r'<chunk\s+id="([a-f0-9]{8})"[^>]*>([\s\S]*?)</chunk>')
-        matches = list(chunk_re.finditer(content))
-        ids = [m.group(1) for m in matches]
+        # ---- Cross-chapter merge: the chunk is at the chapter boundary ----
+        if at_boundary:
+            if not data.get('cross_chapter'):
+                return jsonify({'error': f'No {direction} chunk to merge with'}), 400
+            adj = ci - 1 if direction == 'prev' else ci + 1
+            if adj < 0 or adj >= len(all_chapters):
+                return jsonify({'error': 'No adjacent chapter to merge into'}), 400
 
-        if hex_id not in ids:
-            return jsonify({'error': f'Chunk {hex_id} not found'}), 404
+            moving = chunks[idx]
+            if moving.get('type', 'text') != 'text':
+                return jsonify({'error': 'Only text chunks can be merged across chapters'}), 400
+            target_chapter = all_chapters[adj]
+            tchunks = target_chapter.get('chunks', [])
+            # Target chunk: last text chunk (prev) or first text chunk (next).
+            text_idxs = [i for i, c in enumerate(tchunks) if c.get('type', 'text') == 'text']
 
-        idx = ids.index(hex_id)
+            if text_idxs:
+                tgt = tchunks[text_idxs[-1] if direction == 'prev' else text_idxs[0]]
+                if direction == 'prev':
+                    merged = (tgt.get('text', '').strip() + '\n' + moving.get('text', '').strip()).strip()
+                else:
+                    merged = (moving.get('text', '').strip() + '\n' + tgt.get('text', '').strip()).strip()
+                tgt['text'] = merged
+                tgt['nickname'] = merged[:50].strip() + ('...' if len(merged) > 50 else '')
+                if tgt.get('generated_audios') or moving.get('generated_audios'):
+                    tgt['dirty'] = True
+                survivor_id = tgt['id']
+            else:
+                # No text chunk in the target — move this chunk over instead of merging.
+                new_id = max([c.get('id', 0) for c in tchunks if isinstance(c.get('id'), int)] + [-1]) + 1
+                moving = {**moving, 'id': new_id, 'dirty': bool(moving.get('generated_audios'))}
+                tchunks.insert(len(tchunks) if direction == 'prev' else 0, moving)
+                survivor_id = new_id
 
-        if direction == 'prev':
-            if idx == 0:
-                return jsonify({'error': 'No previous chunk to merge with'}), 400
-            a_match, b_match = matches[idx - 1], matches[idx]
-        else:
-            if idx == len(matches) - 1:
-                return jsonify({'error': 'No next chunk to merge with'}), 400
-            a_match, b_match = matches[idx], matches[idx + 1]
+            del chunks[idx]
+            removed_chapter = False
+            if not chunks:                       # chapter is now empty → remove it
+                del all_chapters[ci]
+                removed_chapter = True
 
-        text_a = a_match.group(2).strip()
-        text_b = b_match.group(2).strip()
-        merged_text = text_a + '\n' + text_b
-        new_id = uuid.uuid4().hex[:8]
-        replacement = f'<chunk id="{new_id}">{merged_text}</chunk>'
+            _save_current_project()
+            return jsonify({'success': True, 'cross_chapter': True,
+                            'target_chapter_id': target_chapter.get('id'),
+                            'chunk_id': survivor_id, 'removed_chapter': removed_chapter})
 
-        # Replace from the start of a_match to the end of b_match
-        new_content = content[:a_match.start()] + replacement + content[b_match.end():]
+        # ---- Normal in-chapter merge ----
+        a_idx, b_idx = (idx - 1, idx) if direction == 'prev' else (idx, idx + 1)
+        a, b = chunks[a_idx], chunks[b_idx]
+        if a.get('type', 'text') != 'text' or b.get('type', 'text') != 'text':
+            return jsonify({'error': 'Only adjacent text chunks can be merged'}), 400
 
-        with open(book_file_path, 'w', encoding='utf-8') as f:
-            f.write(new_content)
+        merged = (a.get('text', '').strip() + '\n' + b.get('text', '').strip()).strip()
+        a['text'] = merged
+        a['nickname'] = merged[:50].strip() + ('...' if len(merged) > 50 else '')
+        if a.get('generated_audios') or b.get('generated_audios'):
+            a['dirty'] = True
+        del chunks[b_idx]
 
-        # Re-parse to update project.json
-        existing_chapters = converter.current_project_metadata.get('chapters', [])
-        new_chapters = parse_book_file(new_content, existing_chapters)
-        converter.current_project_metadata['chapters'] = new_chapters
-        converter.current_project_metadata['last_modified'] = datetime.now().isoformat()
-
-        project_file = os.path.join(converter.current_project_path, 'project.json')
-        with open(project_file, 'w', encoding='utf-8') as f:
-            json.dump(converter.current_project_metadata, f, indent=2, ensure_ascii=False)
-
-        return jsonify({'success': True, 'new_id': new_id})
-
-    except Exception as e:
-        return jsonify({'error': str(e)}), 500
-
-
-@app.route('/api/project/epub-spine-preview', methods=['GET'])
-@auth_manager.require_api_key
-def epub_spine_preview():
-    """Return EPUB spine items with heading and first-paragraph body preview."""
-    try:
-        if converter.current_project_path is None:
-            return jsonify({'error': 'No project loaded'}), 400
-
-        converter.current_project_metadata = enrich_project_metadata_with_gutenberg_urls(
-            converter.current_project_metadata,
-            converter.current_project_path
-        )
-        epub_bytes, epub_error = ensure_cached_project_epub(
-            converter.current_project_path,
-            converter.current_project_metadata
-        )
-        if not epub_bytes:
-            return jsonify({'error': epub_error or 'No cached EPUB found. Load a Gutenberg book first.'}), 400
-
-        processor = GutenbergProcessor(output_dir=converter.current_project_path)
-        items = processor.get_spine_preview(epub_bytes, num_words=60)
-        return jsonify({
-            'items': items,
-            'count': len(items),
-            'epub_url': converter.current_project_metadata.get('gutenberg_epub_url'),
-            'txt_url': converter.current_project_metadata.get('gutenberg_txt_url'),
-        })
-
-    except Exception as e:
-        return jsonify({'error': str(e)}), 500
-
-
-@app.route('/api/project/detect-boilerplate', methods=['GET'])
-@auth_manager.require_api_key
-def detect_boilerplate():
-    """Detect PG header, footer, and TOC in the current raw text file."""
-    try:
-        if converter.current_project_path is None:
-            return jsonify({'error': 'No project loaded'}), 400
-
-        raw_text_file = os.path.join(converter.current_project_path, 'raw_text.txt')
-        if not os.path.exists(raw_text_file):
-            return jsonify({'error': 'No raw text file found. Load a Gutenberg book first.'}), 400
-
-        with open(raw_text_file, 'r', encoding='utf-8') as f:
-            text = f.read()
-
-        processor = GutenbergProcessor(output_dir=converter.current_project_path)
-        sections = processor.detect_boilerplate(text)
-        return jsonify({'sections': sections, 'total_lines': text.count('\n') + 1})
-
-    except Exception as e:
-        return jsonify({'error': str(e)}), 500
-
-
-@app.route('/api/project/delete-text-lines', methods=['POST'])
-@auth_manager.require_api_key
-def delete_text_lines():
-    """Delete one or more line ranges from raw_text.txt (0-indexed, inclusive).
-
-    Body: {"regions": [{"start_line": N, "end_line": M}, ...]}
-    Regions are applied in reverse order so earlier line numbers stay valid.
-    """
-    try:
-        if converter.current_project_path is None:
-            return jsonify({'error': 'No project loaded'}), 400
-
-        data = request.json or {}
-        regions = data.get('regions', [])
-        if not regions:
-            return jsonify({'error': 'No regions specified'}), 400
-
-        raw_text_file = os.path.join(converter.current_project_path, 'raw_text.txt')
-        if not os.path.exists(raw_text_file):
-            return jsonify({'error': 'No raw text file found.'}), 400
-
-        with open(raw_text_file, 'r', encoding='utf-8') as f:
-            lines = f.read().split('\n')
-
-        # Sort regions in reverse order (highest start_line first) to preserve positions
-        regions_sorted = sorted(regions, key=lambda r: r['start_line'], reverse=True)
-        deleted_lines = 0
-        for region in regions_sorted:
-            start = int(region['start_line'])
-            end = int(region['end_line'])
-            if 0 <= start <= end < len(lines):
-                del lines[start:end + 1]
-                deleted_lines += end - start + 1
-
-        new_text = '\n'.join(lines)
-        with open(raw_text_file, 'w', encoding='utf-8') as f:
-            f.write(new_text)
-
-        return jsonify({
-            'success': True,
-            'deleted_lines': deleted_lines,
-            'line_count': len(lines),
-            'char_count': len(new_text),
-        })
-
-    except Exception as e:
-        return jsonify({'error': str(e)}), 500
-
-
-@app.route('/api/project/chapter-candidates', methods=['GET'])
-@auth_manager.require_api_key
-def chapter_candidates():
-    """Run chapter detection strategies against current raw_text.txt and EPUB.
-
-    Returns candidate chapter break positions with context for each EPUB spine item.
-    """
-    try:
-        if converter.current_project_path is None:
-            return jsonify({'error': 'No project loaded'}), 400
-
-        raw_text_file = os.path.join(converter.current_project_path, 'raw_text.txt')
-        if not os.path.exists(raw_text_file):
-            return jsonify({'error': 'No raw text file found.'}), 400
-
-        with open(raw_text_file, 'r', encoding='utf-8') as f:
-            text = f.read()
-
-        epub_cache = os.path.join(converter.current_project_path, 'source.epub')
-        epub_bytes = None
-        if os.path.exists(epub_cache):
-            with open(epub_cache, 'rb') as f:
-                epub_bytes = f.read()
-
-        processor = GutenbergProcessor(output_dir=converter.current_project_path)
-        result = processor.get_chapter_candidates(text, epub_bytes)
-        return jsonify(result)
+        _save_current_project()
+        return jsonify({'success': True, 'chapter_id': chapter_id, 'chunk_id': a['id']})
 
     except Exception as e:
         import traceback
@@ -5387,126 +3743,16 @@ def chapter_candidates():
         return jsonify({'error': str(e)}), 500
 
 
-@app.route('/api/project/search-text-position', methods=['POST'])
-@auth_manager.require_api_key
-def search_text_position():
-    """Find the last occurrence of a phrase in raw_text.txt.
-
-    Body: {"phrase": "..."}
-    Returns: {found, position, line_num, context}
-    """
-    try:
-        if converter.current_project_path is None:
-            return jsonify({'error': 'No project loaded'}), 400
-
-        data = request.json or {}
-        phrase = data.get('phrase', '').strip()
-        if not phrase:
-            return jsonify({'error': 'No phrase provided'}), 400
-
-        raw_text_file = os.path.join(converter.current_project_path, 'raw_text.txt')
-        if not os.path.exists(raw_text_file):
-            return jsonify({'error': 'No raw text file found.'}), 400
-
-        with open(raw_text_file, 'r', encoding='utf-8') as f:
-            text = f.read()
-
-        # Find last occurrence (back-to-front to skip TOC)
-        pos = None
-        for m in re.finditer(re.escape(phrase), text, re.IGNORECASE):
-            pos = m.start()
-
-        if pos is None:
-            return jsonify({'found': False})
-
-        processor = GutenbergProcessor(output_dir=converter.current_project_path)
-        line_num = text[:pos].count('\n') + 1
-        context = processor._get_context(text, pos)
-        return jsonify({'found': True, 'position': pos, 'line_num': line_num, 'context': context})
-
-    except Exception as e:
-        return jsonify({'error': str(e)}), 500
 
 
-@app.route('/api/project/apply-chapter-breaks', methods=['POST'])
-@auth_manager.require_api_key
-def apply_chapter_breaks():
-    """Build chapter structure from user-confirmed break positions.
 
-    Body: {"breaks": [{"title": "...", "position": N}, ...]}
-    Positions are character offsets in the current raw_text.txt.
-    """
-    try:
-        import uuid as uuid_mod
 
-        if converter.current_project_path is None:
-            return jsonify({'error': 'No project loaded'}), 400
 
-        data = request.json or {}
-        breaks = data.get('breaks', [])
-        if not breaks:
-            return jsonify({'error': 'No breaks provided'}), 400
 
-        raw_text_file = os.path.join(converter.current_project_path, 'raw_text.txt')
-        if not os.path.exists(raw_text_file):
-            return jsonify({'error': 'No raw text file found.'}), 400
 
-        with open(raw_text_file, 'r', encoding='utf-8') as f:
-            text = f.read()
 
-        # Sort breaks by position
-        breaks_sorted = sorted(breaks, key=lambda b: int(b['position']))
 
-        # Slice text into chapters
-        parsed = []
-        for i, brk in enumerate(breaks_sorted):
-            pos = int(brk['position'])
-            next_pos = int(breaks_sorted[i + 1]['position']) if i + 1 < len(breaks_sorted) else len(text)
-            ch_text = text[pos:next_pos].strip()
-            if ch_text:
-                parsed.append((brk.get('title', f'Chapter {i + 1}'), ch_text))
 
-        if not parsed:
-            return jsonify({'error': 'No non-empty chapters produced from the given breaks'}), 400
-
-        new_chapters = []
-        for i, (ch_title, ch_text) in enumerate(parsed):
-            chunks = converter.smart_chunk_text(ch_text)
-            for chunk in chunks:
-                chunk['dirty'] = False
-                chunk['generated_audios'] = []
-            new_chapters.append({
-                'id': str(uuid_mod.uuid4()),
-                'title': ch_title or f'Chapter {i + 1}',
-                'order': i,
-                'chunks': chunks,
-                'audio_output': None,
-                'added_at': datetime.now().isoformat(),
-                'source': 'interactive_wizard',
-            })
-
-        converter.current_project_metadata['chapters'] = new_chapters
-        xml_content = converter.text_to_xml_content(text, [
-            {'id': ch['id'], 'title': ch['title'], 'text': ch_text, 'order': ch['order'], 'non_voiced': False}
-            for ch, (_, ch_text) in zip(new_chapters, parsed)
-        ])
-        converter.current_project_metadata['content_xml'] = xml_content
-        converter.current_project_metadata['last_modified'] = datetime.now().isoformat()
-
-        project_file = os.path.join(converter.current_project_path, 'project.json')
-        with open(project_file, 'w', encoding='utf-8') as f:
-            json.dump(converter.current_project_metadata, f, indent=2, ensure_ascii=False)
-
-        return jsonify({
-            'success': True,
-            'chapter_count': len(new_chapters),
-            'chapters': new_chapters,
-        })
-
-    except Exception as e:
-        import traceback
-        print(traceback.format_exc())
-        return jsonify({'error': str(e)}), 500
 
 
 @app.route('/api/project/chapter/generate-all', methods=['POST'])
@@ -5715,10 +3961,10 @@ def get_recent_projects():
                 add_project(os.path.join(projects_dir, item), include_without_json=True)
 
         # Rewriter books folder: only include folders already imported (have project.json).
-        rewriter_dir = getattr(config, 'REWRITER_BOOKS_DIR', None)
-        if rewriter_dir and os.path.isdir(rewriter_dir):
-            for item in os.listdir(rewriter_dir):
-                add_project(os.path.join(rewriter_dir, item), include_without_json=False)
+        books_dir = getattr(config, 'BOOKS_DIR', None)
+        if books_dir and os.path.isdir(books_dir):
+            for item in os.listdir(books_dir):
+                add_project(os.path.join(books_dir, item), include_without_json=False)
 
         # Sort by last_modified (most recent first), then by name
         recent_projects.sort(key=lambda x: (x.get('last_modified', ''), x.get('name', '')), reverse=True)
@@ -5731,952 +3977,26 @@ def get_recent_projects():
         print(traceback.format_exc())
         return jsonify({'error': str(e)}), 500
 
-@app.route('/api/project/raw-text', methods=['GET', 'POST'])
-@auth_manager.require_api_key
-def project_raw_text():
-    """Get or save raw text for the current project"""
-    try:
-        if converter.current_project_path is None:
-            return jsonify({'error': 'No project loaded'}), 400
 
-        raw_text_file = os.path.join(converter.current_project_path, 'raw_text.txt')
 
-        if request.method == 'POST':
-            # Save raw text
-            data = request.json
-            raw_text = data.get('raw_text', '')
 
-            with open(raw_text_file, 'w', encoding='utf-8') as f:
-                f.write(raw_text)
 
-            return jsonify({'success': True})
-        else:
-            # Get raw text
-            if os.path.exists(raw_text_file):
-                with open(raw_text_file, 'r', encoding='utf-8') as f:
-                    raw_text = f.read()
-                return jsonify({'raw_text': raw_text})
-            else:
-                return jsonify({'raw_text': ''})
 
-    except Exception as e:
-        import traceback
-        print(f"Error with raw text: {str(e)}")
-        print(traceback.format_exc())
-        return jsonify({'error': str(e)}), 500
 
-@app.route('/api/project/save-raw-text', methods=['POST'])
-@auth_manager.require_api_key
-def save_project_raw_text():
-    """Save raw text for the current project"""
-    try:
-        if converter.current_project_path is None:
-            return jsonify({'error': 'No project loaded'}), 400
 
-        data = request.json
-        raw_text = data.get('raw_text', '')
 
-        # Save raw text to file
-        raw_text_file = os.path.join(converter.current_project_path, 'raw_text.txt')
-        with open(raw_text_file, 'w', encoding='utf-8') as f:
-            f.write(raw_text)
 
-        return jsonify({'success': True})
 
-    except Exception as e:
-        import traceback
-        print(f"Error saving raw text: {str(e)}")
-        print(traceback.format_exc())
-        return jsonify({'error': str(e)}), 500
 
-@app.route('/api/project/validate-chunks', methods=['POST'])
-@auth_manager.require_api_key
-def validate_project_chunks():
-    """Validate chunk sizes and identify chunks that are too large"""
-    try:
-        if converter.current_project_path is None:
-            return jsonify({'error': 'No project loaded'}), 400
 
-        data = request.json or {}
-        max_chunk_size = data.get('max_chunk_size', config.MAX_CHUNK_SIZE)
 
-        project_file = os.path.join(converter.current_project_path, 'project.json')
-        with open(project_file, 'r') as f:
-            project_data = json.load(f)
 
-        oversized_chunks = []
 
-        for chapter in project_data.get('chapters', []):
-            chapter_title = chapter.get('title') or chapter.get('name', '')
-            for chunk in chapter.get('chunks', []):
-                chunk_text = chunk.get('text', '')
-                if len(chunk_text) > max_chunk_size:
-                    oversized_chunks.append({
-                        'chapter_id': chapter.get('id', ''),
-                        'chapter_title': chapter_title,
-                        'chunk_id': chunk.get('id', 0),
-                        'size': len(chunk_text),
-                        'chunk_preview': chunk_text[:50] + '...'
-                    })
 
-        return jsonify({
-            'success': True,
-            'max_chunk_size': max_chunk_size,
-            'total_chunks': sum(len(ch.get('chunks', [])) for ch in project_data.get('chapters', [])),
-            'oversized_count': len(oversized_chunks),
-            'oversized_chunks': oversized_chunks
-        })
 
-    except Exception as e:
-        import traceback
-        print(f"Error validating chunks: {str(e)}")
-        print(traceback.format_exc())
-        return jsonify({'error': str(e)}), 500
 
-@app.route('/api/project/auto-rechunk', methods=['POST'])
-@auth_manager.require_api_key
-def auto_rechunk_oversized():
-    """Automatically rechunk oversized chunks with minimal disruption"""
-    try:
-        if converter.current_project_path is None:
-            return jsonify({'error': 'No project loaded'}), 400
 
-        data = request.json
-        max_chunk_size = data.get('max_chunk_size', config.MAX_CHUNK_SIZE)
-        chapter_id = data.get('chapter_id')  # Optional: rechunk specific chapter
 
-        project_file = os.path.join(converter.current_project_path, 'project.json')
-        with open(project_file, 'r') as f:
-            project_data = json.load(f)
-
-        rechunked_count = 0
-
-        for chapter in project_data.get('chapters', []):
-            # Skip if specific chapter requested and this isn't it
-            if chapter_id and chapter['id'] != chapter_id:
-                continue
-
-            chunks = chapter.get('chunks', [])
-            new_chunks = []
-            chunk_id_counter = 0
-
-            for chunk in chunks:
-                chunk_text = chunk.get('text', '')
-
-                if len(chunk_text) <= max_chunk_size:
-                    # Keep chunk as-is, but update ID to maintain sequence
-                    chunk['id'] = chunk_id_counter
-                    new_chunks.append(chunk)
-                    chunk_id_counter += 1
-                else:
-                    # Rechunk this oversized chunk
-                    rechunked_count += 1
-                    sub_chunks = converter.smart_chunk_text(chunk_text, max_chunk_size)
-
-                    for sub_chunk in sub_chunks:
-                        new_chunk = {
-                            'id': chunk_id_counter,
-                            'text': sub_chunk['text'],
-                            'nickname': sub_chunk['nickname'],
-                            'start_pos': sub_chunk['start_pos'],
-                            'end_pos': sub_chunk['end_pos'],
-                            'dirty': False,
-                            'generated_audios': []  # Reset audio for rechunked pieces
-                        }
-                        new_chunks.append(new_chunk)
-                        chunk_id_counter += 1
-
-            chapter['chunks'] = new_chunks
-
-        # Save updated project
-        project_data['last_modified'] = datetime.now().isoformat()
-        with open(project_file, 'w') as f:
-            json.dump(project_data, f, indent=2)
-
-        return jsonify({
-            'success': True,
-            'rechunked_count': rechunked_count,
-            'message': f'Successfully rechunked {rechunked_count} oversized chunks'
-        })
-
-    except Exception as e:
-        import traceback
-        print(f"Error auto-rechunking: {str(e)}")
-        print(traceback.format_exc())
-        return jsonify({'error': str(e)}), 500
-
-@app.route('/api/project/split-chapter', methods=['POST'])
-@auth_manager.require_api_key
-def split_chapter():
-    """Split a chapter at a specified position"""
-    try:
-        if converter.current_project_path is None:
-            return jsonify({'error': 'No project loaded'}), 400
-
-        data = request.json
-        chapter_id = data.get('chapter_id')
-        split_position = data.get('split_position')  # Character position to split
-
-        if not chapter_id or split_position is None:
-            return jsonify({'error': 'chapter_id and split_position required'}), 400
-
-        project_file = os.path.join(converter.current_project_path, 'project.json')
-        with open(project_file, 'r') as f:
-            project_data = json.load(f)
-
-        # Find the chapter
-        chapter_index = None
-        for i, chapter in enumerate(project_data.get('chapters', [])):
-            if chapter['id'] == chapter_id:
-                chapter_index = i
-                break
-
-        if chapter_index is None:
-            return jsonify({'error': 'Chapter not found'}), 404
-
-        chapter = project_data['chapters'][chapter_index]
-
-        # Reconstruct full chapter text from chunks
-        full_text = '\n\n'.join(chunk['text'] for chunk in chapter.get('chunks', []))
-
-        # Split the text
-        text_part1 = full_text[:split_position].strip()
-        text_part2 = full_text[split_position:].strip()
-
-        # Create two new chapters
-        new_chapter1 = {
-            'id': str(uuid.uuid4()),
-            'name': chapter.get('name', 'Chapter') + ' (Part 1)',
-            'path': chapter.get('path', ''),
-            'chunks': converter.smart_chunk_text(text_part1)
-        }
-
-        new_chapter2 = {
-            'id': str(uuid.uuid4()),
-            'name': chapter.get('name', 'Chapter') + ' (Part 2)',
-            'path': '',
-            'chunks': converter.smart_chunk_text(text_part2)
-        }
-
-        # Replace old chapter with new ones
-        project_data['chapters'][chapter_index:chapter_index+1] = [new_chapter1, new_chapter2]
-
-        # Save updated project
-        project_data['last_modified'] = datetime.now().isoformat()
-        with open(project_file, 'w') as f:
-            json.dump(project_data, f, indent=2)
-
-        return jsonify({
-            'success': True,
-            'new_chapters': [new_chapter1['id'], new_chapter2['id']],
-            'message': 'Chapter split successfully'
-        })
-
-    except Exception as e:
-        import traceback
-        print(f"Error splitting chapter: {str(e)}")
-        print(traceback.format_exc())
-        return jsonify({'error': str(e)}), 500
-
-@app.route('/api/project/merge-chapters', methods=['POST'])
-@auth_manager.require_api_key
-def merge_chapters():
-    """Merge two adjacent chapters"""
-    try:
-        if converter.current_project_path is None:
-            return jsonify({'error': 'No project loaded'}), 400
-
-        data = request.json
-        chapter_id1 = data.get('chapter_id1')
-        chapter_id2 = data.get('chapter_id2')
-
-        if not chapter_id1 or not chapter_id2:
-            return jsonify({'error': 'chapter_id1 and chapter_id2 required'}), 400
-
-        project_file = os.path.join(converter.current_project_path, 'project.json')
-        with open(project_file, 'r', encoding='utf-8') as f:
-            project_data = json.load(f)
-
-        chapters = project_data.get('chapters', [])
-
-        # Find both chapters
-        chapter1_index = None
-        chapter2_index = None
-
-        for i, chapter in enumerate(chapters):
-            if chapter['id'] == chapter_id1:
-                chapter1_index = i
-            if chapter['id'] == chapter_id2:
-                chapter2_index = i
-
-        if chapter1_index is None or chapter2_index is None:
-            return jsonify({'error': 'One or both chapters not found'}), 404
-
-        # Ensure they're adjacent
-        if abs(chapter1_index - chapter2_index) != 1:
-            return jsonify({'error': 'Chapters must be adjacent to merge'}), 400
-
-        # Order them correctly
-        first_index = min(chapter1_index, chapter2_index)
-        second_index = max(chapter1_index, chapter2_index)
-
-        chapter1 = chapters[first_index]
-        chapter2 = chapters[second_index]
-
-        # Merge the chunks
-        merged_chunks = chapter1.get('chunks', []) + chapter2.get('chunks', [])
-
-        # Renumber chunk IDs
-        for i, chunk in enumerate(merged_chunks):
-            chunk['id'] = i
-
-        # Create merged chapter
-        merged_chapter = {
-            'id': str(uuid.uuid4()),
-            'name': chapter1.get('name', 'Chapter') + ' + ' + chapter2.get('name', 'Chapter'),
-            'path': chapter1.get('path', ''),
-            'chunks': merged_chunks
-        }
-
-        # Replace the two chapters with the merged one
-        chapters[first_index:second_index+1] = [merged_chapter]
-
-        # Save updated project
-        project_data['last_modified'] = datetime.now().isoformat()
-        with open(project_file, 'w', encoding='utf-8') as f:
-            json.dump(project_data, f, indent=2, ensure_ascii=False)
-
-        return jsonify({
-            'success': True,
-            'merged_chapter_id': merged_chapter['id'],
-            'message': 'Chapters merged successfully'
-        })
-
-    except Exception as e:
-        import traceback
-        print(f"Error merging chapters: {str(e)}")
-        print(traceback.format_exc())
-        return jsonify({'error': str(e)}), 500
-
-@app.route('/api/project/save-xml', methods=['POST'])
-@auth_manager.require_api_key
-def save_xml_content():
-    """Save XML content to project and update chunk data (legacy endpoint)"""
-    try:
-        if converter.current_project_path is None:
-            return jsonify({'error': 'No project loaded'}), 400
-
-        data = request.json
-        xml_content = data.get('xml_content')
-
-        if not xml_content:
-            return jsonify({'error': 'xml_content is required'}), 400
-
-        # Parse XML to update chapter/chunk data
-        chapters_updated = parse_xml_to_chapters(xml_content, converter.current_project_metadata.get('chapters', []))
-
-        # Save XML content and updated chapters to metadata
-        converter.current_project_metadata['content_xml'] = xml_content
-        converter.current_project_metadata['chapters'] = chapters_updated
-        converter.current_project_metadata['last_modified'] = datetime.now().isoformat()
-
-        # Save to file
-        project_file = os.path.join(converter.current_project_path, 'project.json')
-        with open(project_file, 'w', encoding='utf-8') as f:
-            json.dump(converter.current_project_metadata, f, indent=2, ensure_ascii=False)
-
-        # Invalidate lookup caches after modifying metadata
-        converter._invalidate_lookup_caches()
-
-        return jsonify({
-            'success': True,
-            'message': 'XML content saved successfully',
-            'chapters_count': len(chapters_updated)
-        })
-
-    except Exception as e:
-        import traceback
-        print(f"Error saving XML content: {str(e)}")
-        print(traceback.format_exc())
-        return jsonify({'error': str(e)}), 500
-
-
-@app.route('/api/project/save-markdown', methods=['POST'])
-@auth_manager.require_api_key
-def save_markdown_content():
-    """Save Markdown content to project and update chunk data"""
-    try:
-        if converter.current_project_path is None:
-            return jsonify({'error': 'No project loaded'}), 400
-
-        data = request.json
-        markdown_content = data.get('markdown_content')
-
-        if not markdown_content:
-            return jsonify({'error': 'markdown_content is required'}), 400
-
-        # Parse markdown to update chapter/chunk data
-        chapters_updated = parse_markdown_to_chapters(markdown_content, converter.current_project_metadata.get('chapters', []))
-
-        # Save markdown content and updated chapters to metadata
-        converter.current_project_metadata['content_markdown'] = markdown_content
-        converter.current_project_metadata['chapters'] = chapters_updated
-        converter.current_project_metadata['last_modified'] = datetime.now().isoformat()
-
-        # Save to file
-        project_file = os.path.join(converter.current_project_path, 'project.json')
-        with open(project_file, 'w', encoding='utf-8') as f:
-            json.dump(converter.current_project_metadata, f, indent=2, ensure_ascii=False)
-
-        # Invalidate lookup caches after modifying metadata
-        converter._invalidate_lookup_caches()
-
-        return jsonify({
-            'success': True,
-            'message': 'Markdown content saved successfully',
-            'chapters_count': len(chapters_updated)
-        })
-
-    except Exception as e:
-        import traceback
-        print(f"Error saving markdown content: {str(e)}")
-        print(traceback.format_exc())
-        return jsonify({'error': str(e)}), 500
-
-
-def parse_xml_to_chapters(xml_content, existing_chapters):
-    """
-    Parse XML content and update chapters with new chunk text.
-    Preserves existing audio takes but updates chunk text.
-    """
-    import re
-
-    # Create a map of existing chapters by title for matching
-    existing_chapter_map = {}
-    for chapter in existing_chapters:
-        title = chapter.get('title') or chapter.get('name', '')
-        existing_chapter_map[title] = chapter
-
-    new_chapters = []
-
-    # Parse chapter tags
-    chapter_pattern = r'<chapter\s+title="([^"]*)">([\s\S]*?)</chapter>'
-    non_voiced_pattern = r'<non-voiced\s+title="([^"]*)">([\s\S]*?)</non-voiced>'
-
-    # Find all chapters and non-voiced sections
-    all_sections = []
-
-    for match in re.finditer(chapter_pattern, xml_content):
-        all_sections.append({
-            'type': 'chapter',
-            'title': match.group(1),
-            'content': match.group(2),
-            'start': match.start()
-        })
-
-    for match in re.finditer(non_voiced_pattern, xml_content):
-        all_sections.append({
-            'type': 'non-voiced',
-            'title': match.group(1),
-            'content': match.group(2),
-            'start': match.start()
-        })
-
-    # Sort by position in document
-    all_sections.sort(key=lambda x: x['start'])
-
-    for section in all_sections:
-        title = section['title']
-        content = section['content']
-        is_non_voiced = section['type'] == 'non-voiced'
-
-        # Get existing chapter if it exists
-        existing_chapter = existing_chapter_map.get(title)
-
-        # Parse chunks from content
-        chunk_pattern = r'<chunk>([\s\S]*?)</chunk>'
-        pause_pattern = r'<pause\s+duration="([^"]*)"\s*/>'
-        common_file_pattern = r'<common_file\s+path="([^"]*)"\s*/>'
-
-        new_chunks = []
-        chunk_id = 0
-
-        # Find all elements (chunks, pauses, common_files) and sort by position
-        elements = []
-
-        for match in re.finditer(chunk_pattern, content):
-            elements.append({
-                'type': 'text',
-                'text': match.group(1).strip(),
-                'start': match.start()
-            })
-
-        for match in re.finditer(pause_pattern, content):
-            elements.append({
-                'type': 'pause',
-                'duration': float(match.group(1)),
-                'start': match.start()
-            })
-
-        for match in re.finditer(common_file_pattern, content):
-            elements.append({
-                'type': 'common_file',
-                'path': match.group(1),
-                'start': match.start()
-            })
-
-        # Sort by position
-        elements.sort(key=lambda x: x['start'])
-
-        # Create chunk map from existing chapter
-        existing_chunk_map = {}
-        if existing_chapter:
-            for i, chunk in enumerate(existing_chapter.get('chunks', [])):
-                existing_chunk_map[i] = chunk
-
-        # Process elements and create new chunk list
-        for i, elem in enumerate(elements):
-            if elem['type'] == 'text':
-                # Try to find matching existing chunk
-                existing_chunk = existing_chunk_map.get(i, {})
-
-                # Check if text has changed
-                old_text = existing_chunk.get('text', '')
-                new_text = elem['text']
-
-                # Create chunk with preserved audio data
-                chunk = {
-                    'id': existing_chunk.get('id', chunk_id),
-                    'type': 'text',
-                    'text': new_text,
-                    'nickname': new_text[:50].strip() + ('...' if len(new_text) > 50 else ''),
-                    'dirty': old_text != new_text and len(existing_chunk.get('generated_audios', [])) > 0,
-                    'generated_audios': existing_chunk.get('generated_audios', [])
-                }
-                new_chunks.append(chunk)
-                chunk_id = max(chunk_id, chunk['id']) + 1
-
-            elif elem['type'] == 'pause':
-                chunk = {
-                    'id': chunk_id,
-                    'type': 'pause',
-                    'duration': elem['duration'],
-                    'generated_audios': []
-                }
-                new_chunks.append(chunk)
-                chunk_id += 1
-
-            elif elem['type'] == 'common_file':
-                chunk = {
-                    'id': chunk_id,
-                    'type': 'common_file',
-                    'path': elem['path'],
-                    'generated_audios': []
-                }
-                new_chunks.append(chunk)
-                chunk_id += 1
-
-        # Create new chapter
-        new_chapter = {
-            'id': existing_chapter.get('id') if existing_chapter else str(uuid.uuid4()),
-            'title': title,
-            'name': title,
-            'non_voiced': is_non_voiced,
-            'chunks': new_chunks
-        }
-        new_chapters.append(new_chapter)
-
-    return new_chapters
-
-
-def parse_markdown_to_chapters(markdown_content, existing_chapters):
-    """
-    Parse Markdown content and update chapters with new chunk text.
-    Preserves existing audio takes but updates chunk text.
-
-    Format:
-        ## Chapter Title        <- Chapter header (title becomes first chunk)
-        Chunk text here.</chunk>Next chunk.</chunk>More text...
-        [pause:1.5]</chunk>     <- Pause marker (inline)
-        Text after pause...
-
-        ### Section [non-voiced] <- Non-voiced section
-
-    Notes:
-    - </chunk> markers are inline, splitting text into chunks
-    - Newlines in text represent actual paragraph breaks (from <p> tags)
-    - [pause:X] and [file:X] are special markers
-    """
-    import re
-
-    # Create a map of existing chapters by title for matching
-    existing_chapter_map = {}
-    for chapter in existing_chapters:
-        title = chapter.get('title') or chapter.get('name', '')
-        existing_chapter_map[title] = chapter
-
-    new_chapters = []
-
-    # Split content by chapter headers (## or ###)
-    # Pattern matches: ## Title or ### Title [non-voiced]
-    chapter_split_pattern = r'(?=^#{2,3}\s+.+$)'
-    chapter_sections = re.split(chapter_split_pattern, markdown_content, flags=re.MULTILINE)
-
-    for section in chapter_sections:
-        section = section.strip()
-        if not section:
-            continue
-
-        # Extract chapter header
-        header_match = re.match(r'^(#{2,3})\s+(.+?)(?:\s+\[non-voiced\])?\s*$', section, re.MULTILINE)
-        if not header_match:
-            continue
-
-        header_level = header_match.group(1)
-        title = header_match.group(2).strip()
-        # Remove [non-voiced] from title if present
-        title = re.sub(r'\s*\[non-voiced\]\s*$', '', title, flags=re.IGNORECASE).strip()
-        is_non_voiced = '[non-voiced]' in section.split('\n')[0].lower() or header_level == '###'
-
-        # Get content after the header line
-        content = section[header_match.end():].strip()
-
-        # Parse chunks from content by splitting on </chunk>
-        raw_chunks = content.split('</chunk>')
-
-        parsed_chunks = []
-
-        # First chunk is always the chapter title
-        parsed_chunks.append({'type': 'text', 'text': title})
-
-        for raw_chunk in raw_chunks:
-            raw_chunk = raw_chunk.strip()
-            if not raw_chunk:
-                continue
-
-            # Check for pause marker
-            pause_match = re.match(r'^\[pause:(\d+\.?\d*)\](.*)$', raw_chunk, re.DOTALL)
-            if pause_match:
-                parsed_chunks.append({
-                    'type': 'pause',
-                    'duration': float(pause_match.group(1))
-                })
-                # If there's text after the pause marker, add it as a text chunk
-                remaining = pause_match.group(2).strip()
-                if remaining:
-                    parsed_chunks.append({'type': 'text', 'text': remaining})
-                continue
-
-            # Check for file marker
-            file_match = re.match(r'^\[file:(.+?)\](.*)$', raw_chunk, re.DOTALL)
-            if file_match:
-                parsed_chunks.append({
-                    'type': 'common_file',
-                    'path': file_match.group(1)
-                })
-                # If there's text after the file marker, add it as a text chunk
-                remaining = file_match.group(2).strip()
-                if remaining:
-                    parsed_chunks.append({'type': 'text', 'text': remaining})
-                continue
-
-            # Regular text chunk - preserve newlines as they represent paragraph breaks
-            parsed_chunks.append({'type': 'text', 'text': raw_chunk})
-
-        # Get existing chapter for preserving audio data
-        existing_chapter = existing_chapter_map.get(title)
-        existing_chunk_map = {}
-        if existing_chapter:
-            for i, chunk in enumerate(existing_chapter.get('chunks', [])):
-                existing_chunk_map[i] = chunk
-
-        # Build final chunk list with preserved audio data
-        new_chunk_list = []
-        chunk_id = 0
-
-        for i, chunk_data in enumerate(parsed_chunks):
-            if chunk_data['type'] == 'text':
-                existing_chunk = existing_chunk_map.get(i, {})
-                old_text = existing_chunk.get('text', '')
-                new_text = chunk_data['text']
-
-                chunk = {
-                    'id': existing_chunk.get('id', chunk_id),
-                    'type': 'text',
-                    'text': new_text,
-                    'nickname': new_text[:50].strip() + ('...' if len(new_text) > 50 else ''),
-                    'dirty': old_text != new_text and len(existing_chunk.get('generated_audios', [])) > 0,
-                    'generated_audios': existing_chunk.get('generated_audios', [])
-                }
-                new_chunk_list.append(chunk)
-                chunk_id = max(chunk_id, chunk['id']) + 1
-
-            elif chunk_data['type'] == 'pause':
-                chunk = {
-                    'id': chunk_id,
-                    'type': 'pause',
-                    'duration': chunk_data.get('duration', 1.0),
-                    'generated_audios': []
-                }
-                new_chunk_list.append(chunk)
-                chunk_id += 1
-
-            elif chunk_data['type'] == 'common_file':
-                chunk = {
-                    'id': chunk_id,
-                    'type': 'common_file',
-                    'path': chunk_data.get('path', ''),
-                    'generated_audios': []
-                }
-                new_chunk_list.append(chunk)
-                chunk_id += 1
-
-        new_chapter = {
-            'id': existing_chapter.get('id') if existing_chapter else str(uuid.uuid4()),
-            'title': title,
-            'name': title,
-            'non_voiced': is_non_voiced,
-            'chunks': new_chunk_list
-        }
-        new_chapters.append(new_chapter)
-
-    return new_chapters
-
-
-def _parse_chunk_segments(chapter_content):
-    """
-    Parse chunk segments from chapter body text.
-    Supports two formats:
-      New: <chunk id="XXXXXXXX">text</chunk>  (and self-closing variants)
-      Old: text</chunk>text</chunk>...  (separator format, backward compat)
-    Returns list of dicts: {type, text/duration/path, hex_id (new format only)}
-    """
-    parsed_chunks = []
-
-    # Detect new format by presence of <chunk id="...">
-    if re.search(r'<chunk\s+id="[a-f0-9]{8}"', chapter_content):
-        # New wrapping format
-        chunk_re = re.compile(
-            r'<chunk\s+id="([a-f0-9]{8})"([^>]*)>([\s\S]*?)</chunk>|'
-            r'<chunk\s+id="([a-f0-9]{8})"([^/]*)/>', re.DOTALL
-        )
-        for m in chunk_re.finditer(chapter_content):
-            if m.group(1):  # wrapping tag
-                hex_id = m.group(1)
-                attrs = m.group(2)
-                text = m.group(3).strip()
-                pause_match = re.match(r'^\[pause:(\d+\.?\d*)\]\s*$', text)
-                file_match = re.match(r'^\[file:(.+?)\]\s*$', text)
-                if pause_match:
-                    parsed_chunks.append({'type': 'pause', 'duration': float(pause_match.group(1)), 'hex_id': hex_id})
-                elif file_match:
-                    parsed_chunks.append({'type': 'common_file', 'path': file_match.group(1), 'hex_id': hex_id})
-                elif text:
-                    parsed_chunks.append({'type': 'text', 'text': text, 'hex_id': hex_id})
-            else:  # self-closing
-                hex_id = m.group(4)
-                attrs = m.group(5)
-                ctype_m = re.search(r'type="([^"]*)"', attrs)
-                dur_m = re.search(r'duration="([^"]*)"', attrs)
-                path_m = re.search(r'path="([^"]*)"', attrs)
-                ctype = ctype_m.group(1) if ctype_m else 'text'
-                if ctype == 'pause':
-                    parsed_chunks.append({'type': 'pause', 'duration': float(dur_m.group(1)) if dur_m else 1.0, 'hex_id': hex_id})
-                elif ctype == 'file':
-                    parsed_chunks.append({'type': 'common_file', 'path': path_m.group(1) if path_m else '', 'hex_id': hex_id})
-    else:
-        # Old separator format: split on </chunk>
-        raw_segments = chapter_content.split('</chunk>')
-        for seg in raw_segments:
-            seg = seg.strip()
-            if not seg:
-                continue
-            pause_match = re.match(r'^\[pause:(\d+\.?\d*)\]\s*$', seg)
-            if pause_match:
-                parsed_chunks.append({'type': 'pause', 'duration': float(pause_match.group(1))})
-                continue
-            file_match = re.match(r'^\[file:(.+?)\]\s*$', seg)
-            if file_match:
-                parsed_chunks.append({'type': 'common_file', 'path': file_match.group(1)})
-                continue
-            parsed_chunks.append({'type': 'text', 'text': seg})
-
-    return parsed_chunks
-
-
-def parse_book_file(content, existing_chapters):
-    """
-    Parse book.txt content into a chapters array.
-
-    Supports two chunk formats:
-      New: <chunk id="XXXXXXXX">text</chunk>  (preferred)
-      Old: text</chunk>text</chunk>...        (backward compat, migrates on next save)
-
-    Preserves existing audio data by matching:
-      1. By hex_id if present (stable across edits)
-      2. By chunk index (fallback)
-    """
-
-    # Build lookup of existing chapters by title
-    existing_chapter_map = {}
-    for ch in existing_chapters:
-        title = ch.get('title') or ch.get('name', '')
-        existing_chapter_map[title] = ch
-
-    # Find all chapter blocks
-    chapter_pattern = re.compile(
-        r'<chapter\s+title="([^"]*)"([^>]*)>(.*?)</chapter>',
-        re.DOTALL
-    )
-    non_voiced_pattern = re.compile(r'non-voiced="true"')
-
-    new_chapters = []
-
-    for m in chapter_pattern.finditer(content):
-        title = m.group(1)
-        attrs = m.group(2)
-        chapter_content = m.group(3)
-        is_non_voiced = bool(non_voiced_pattern.search(attrs))
-
-        parsed_chunks = _parse_chunk_segments(chapter_content)
-
-        # Get existing chapter to preserve audio
-        existing_chapter = existing_chapter_map.get(title)
-        existing_chunks = existing_chapter.get('chunks', []) if existing_chapter else []
-
-        # Build hex_id → existing_chunk lookup for stable matching
-        hex_id_map = {}
-        for ec in existing_chunks:
-            hid = ec.get('hex_id')
-            if hid:
-                hex_id_map[hid] = ec
-
-        new_chunk_list = []
-        chunk_id = 0
-
-        for i, chunk_data in enumerate(parsed_chunks):
-            # Try to find existing chunk: first by hex_id, then by index
-            hex_id = chunk_data.get('hex_id')
-            if hex_id and hex_id in hex_id_map:
-                existing_chunk = hex_id_map[hex_id]
-            elif i < len(existing_chunks):
-                existing_chunk = existing_chunks[i]
-            else:
-                existing_chunk = {}
-
-            if chunk_data['type'] == 'text':
-                old_text = existing_chunk.get('text', '')
-                new_text = chunk_data['text']
-                has_audio = len(existing_chunk.get('generated_audios', [])) > 0
-                chunk = {
-                    'id': existing_chunk.get('id', chunk_id),
-                    'hex_id': hex_id or existing_chunk.get('hex_id') or uuid.uuid4().hex[:8],
-                    'type': 'text',
-                    'text': new_text,
-                    'nickname': new_text[:50].strip() + ('...' if len(new_text) > 50 else ''),
-                    'dirty': old_text != new_text and has_audio,
-                    'generated_audios': existing_chunk.get('generated_audios', [])
-                }
-            elif chunk_data['type'] == 'pause':
-                chunk = {
-                    'id': existing_chunk.get('id', chunk_id),
-                    'hex_id': hex_id or existing_chunk.get('hex_id') or uuid.uuid4().hex[:8],
-                    'type': 'pause',
-                    'duration': chunk_data['duration'],
-                    'generated_audios': existing_chunk.get('generated_audios', [])
-                }
-            elif chunk_data['type'] == 'common_file':
-                chunk = {
-                    'id': existing_chunk.get('id', chunk_id),
-                    'hex_id': hex_id or existing_chunk.get('hex_id') or uuid.uuid4().hex[:8],
-                    'type': 'common_file',
-                    'path': chunk_data['path'],
-                    'generated_audios': existing_chunk.get('generated_audios', [])
-                }
-            else:
-                continue
-
-            chunk_id = max(chunk_id, chunk.get('id', 0)) + 1
-            new_chunk_list.append(chunk)
-
-        new_chapter = {
-            'id': existing_chapter.get('id') if existing_chapter else str(uuid.uuid4()),
-            'title': title,
-            'name': title,
-            'non_voiced': is_non_voiced,
-            'chunks': new_chunk_list
-        }
-        new_chapters.append(new_chapter)
-
-    return new_chapters
-
-
-def generate_book_file(chapters):
-    """
-    Convert chapters array back into book.txt format.
-    Produces Stage 3 content using the new wrapping chunk format:
-      <chunk id="XXXXXXXX">text</chunk>
-    """
-    lines = []
-    for chapter in chapters:
-        title = chapter.get('title') or chapter.get('name', '')
-        non_voiced = chapter.get('non_voiced', False)
-        nv_attr = ' non-voiced="true"' if non_voiced else ''
-        lines.append(f'<chapter title="{title}"{nv_attr}>')
-
-        chunks = chapter.get('chunks', [])
-        for chunk in chunks:
-            ctype = chunk.get('type', 'text')
-            hex_id = chunk.get('hex_id') or uuid.uuid4().hex[:8]
-            if ctype == 'text':
-                text = chunk.get('text', '')
-                lines.append(f'<chunk id="{hex_id}">{text}</chunk>')
-            elif ctype == 'pause':
-                dur = chunk.get('duration', 1.0)
-                lines.append(f'<chunk id="{hex_id}" type="pause" duration="{dur}"/>')
-            elif ctype == 'common_file':
-                path = chunk.get('path', '')
-                lines.append(f'<chunk id="{hex_id}" type="file" path="{path}"/>')
-
-        lines.append('</chapter>')
-        lines.append('')
-
-    return '\n'.join(lines)
-
-
-def migrate_to_book_file(project_path, metadata):
-    """
-    Migrate an existing project to book.txt format.
-    Non-destructive: raw_text.txt is never modified.
-    Returns the book.txt content (also writes it to disk).
-    """
-    book_file_path = os.path.join(project_path, 'book.txt')
-
-    # Already migrated
-    if os.path.exists(book_file_path):
-        with open(book_file_path, 'r', encoding='utf-8') as f:
-            return f.read()
-
-    # Try to reconstruct from existing chapters
-    chapters = metadata.get('chapters', [])
-    if chapters:
-        content = generate_book_file(chapters)
-        with open(book_file_path, 'w', encoding='utf-8') as f:
-            f.write(content)
-        print(f"[migrate] Created book.txt from chapters array ({len(chapters)} chapters)")
-        return content
-
-    # Fall back to raw_text.txt (Stage 0)
-    raw_text_path = os.path.join(project_path, 'raw_text.txt')
-    if os.path.exists(raw_text_path):
-        with open(raw_text_path, 'r', encoding='utf-8') as f:
-            content = f.read()
-        with open(book_file_path, 'w', encoding='utf-8') as f:
-            f.write(content)
-        print(f"[migrate] Created book.txt from raw_text.txt (Stage 0)")
-        return content
-
-    return None
 
 
 # Serve static HTML and JavaScript files
@@ -6705,10 +4025,6 @@ def serve_reader():
     """Serve the reader page"""
     return send_file('reader.html')
 
-@app.route('/index_old.html')
-def serve_old_index():
-    """Serve the old index page"""
-    return send_file('index_old.html')
 
 # Serve JavaScript files
 @app.route('/<path:filename>.js')
