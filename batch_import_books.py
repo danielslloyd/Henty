@@ -239,9 +239,37 @@ def import_book(book_path, variant='original'):
 
 
 def main():
+    import argparse
+    parser = argparse.ArgumentParser(
+        description="Import book.json project(s) into Henty (build project.json)."
+    )
+    parser.add_argument(
+        '--folder',
+        help="Import only this single book folder (must contain book.json). "
+             "Default: import every folder in BOOKS_DIR."
+    )
+    parser.add_argument(
+        '--variant', default='original', choices=['original', 'rewrite'],
+        help="Which block text to voice (default: original)."
+    )
+    args = parser.parse_args()
+
     print("\n" + "="*70)
     print("  Batch Import Books")
     print("="*70 + "\n")
+
+    # Single-folder mode: import just the given book (one-article pipeline).
+    if args.folder:
+        folder_path = os.path.abspath(args.folder)
+        if not os.path.isfile(os.path.join(folder_path, 'book.json')):
+            print(f"ERROR: no book.json in {folder_path}")
+            sys.exit(1)
+        print(f"Importing single folder: {folder_path}\n")
+        ok = import_book(folder_path, variant=args.variant)
+        print("\n" + "="*70)
+        print(f"Complete: {'1 imported' if ok else '1 failed'}")
+        print("="*70 + "\n")
+        sys.exit(0 if ok else 1)
 
     if not config.BOOKS_DIR:
         print("ERROR: BOOKS_DIR not configured in .env or config.py")
@@ -277,7 +305,7 @@ def main():
 
     for folder_name, folder_path in sorted(book_folders):
         print(f"Importing: {folder_name}")
-        if import_book(folder_path, variant='original'):
+        if import_book(folder_path, variant=args.variant):
             imported += 1
         else:
             failed += 1

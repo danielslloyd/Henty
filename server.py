@@ -749,7 +749,7 @@ class TextToAudioConverter:
         return re.sub(r'\{([^|}]+)\|[^}]*\}', r'\1', text)
 
 
-    def generate_audio(self, text, output_path, audio_prompt_path=None, language_id="en", exaggeration=0.6, cfg_weight=0.4, tts_model="chatterbox"):
+    def generate_audio(self, text, output_path, audio_prompt_path=None, language_id="en", exaggeration=0.6, cfg_weight=0.4, tts_model="chatterbox", temperature=0.8, seed=0):
         """Generate audio from text using Chatterbox TTS or Chatterbox Turbo"""
         try:
             # Start timing and capture initial GPU stats
@@ -793,7 +793,8 @@ class TextToAudioConverter:
             # Prepare generation parameters with explicit float32 conversion
             gen_params = {
                 "exaggeration": torch.tensor(exaggeration, dtype=torch.float32).item(),
-                "cfg_weight": torch.tensor(cfg_weight, dtype=torch.float32).item()
+                "cfg_weight": torch.tensor(cfg_weight, dtype=torch.float32).item(),
+                "temperature": torch.tensor(temperature, dtype=torch.float32).item()
             }
 
             # Add audio prompt if provided
@@ -826,6 +827,13 @@ class TextToAudioConverter:
                     model = model.to(dtype=torch.float32)
                 except (AttributeError, RuntimeError):
                     pass
+
+            # Seed for reproducible generation when a non-zero seed is provided
+            # (seed=0 keeps the previous non-deterministic behavior).
+            if seed:
+                torch.manual_seed(seed)
+                if torch.cuda.is_available():
+                    torch.cuda.manual_seed_all(seed)
 
             wav = model.generate(text, **gen_params)
             print(f"Generated wav type: {type(wav)}, shape: {wav.shape if hasattr(wav, 'shape') else 'N/A'}")
@@ -1930,6 +1938,7 @@ def generate_project_chunk_audio():
         exaggeration = float(data.get('exaggeration', 0.6))
         cfg_weight = float(data.get('cfg_weight', 0.4))
         temperature = float(data.get('temperature', 0.8))
+        seed = int(data.get('seed', 0))
         language_id = data.get('language_id', 'en')
         tts_model = data.get('tts_model', config.DEFAULT_TTS_MODEL if hasattr(config, 'DEFAULT_TTS_MODEL') else 'chatterbox')
 
@@ -2006,7 +2015,9 @@ def generate_project_chunk_audio():
             language_id=language_id,
             exaggeration=exaggeration,
             cfg_weight=cfg_weight,
-            tts_model=tts_model
+            tts_model=tts_model,
+            temperature=temperature,
+            seed=seed
         )
 
         # Extract path, duration, and generation time from result
@@ -2045,6 +2056,7 @@ def generate_project_chunk_audio():
                     'exaggeration': exaggeration,
                     'cfg_weight': cfg_weight,
                     'temperature': temperature,
+                    'seed': seed,
                     'audio_duration_seconds': round(audio_duration, 2),
                     'possibly_truncated': possibly_truncated,
                     'generation_time_ms': generation_time_ms,
