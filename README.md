@@ -56,14 +56,22 @@ REQUIRE_AUTH=False
 API_KEY=...
 BOOKS_DIR=C:\Users\danie\OneDrive\Documents\Claude\Projects\Rewriter\books
 DEFAULT_VOICE=Haggard          # must match a file in voice_samples/ (extension-agnostic)
-DEFAULT_TTS_MODEL=chatterbox   # chatterbox | chatterbox_turbo
+DEFAULT_TTS_MODEL=chatterbox   # chatterbox | chatterbox_turbo | kokoro | orpheus
+KOKORO_DEFAULT_VOICE=af_heart  # named Kokoro voice (used when no voice is chosen)
+ORPHEUS_DEFAULT_VOICE=tara     # named Orpheus speaker
+CARRIER_ENABLED=True           # pad short chunks with carrier text, then trim it back off
+CARRIER_MAX_CHARS=140          # only chunks shorter than this get a carrier
+CARRIER_PRE=Here is the next passage.
+CARRIER_POST=That is the end of it.
 MAX_PARALLEL_GENERATIONS=3
 MAX_CHUNK_SIZE=500
 SKIP_PRECHECK=0
 ```
 
-> **Voice safety:** Henty never uses the Chatterbox built-in default voice. If a voice
-> can't be resolved (project voice → `DEFAULT_VOICE` fallback), generation errors out.
+> **Voice safety:** Henty never uses the Chatterbox built-in default voice. If a Chatterbox
+> voice can't be resolved (project voice → `DEFAULT_VOICE` fallback), generation errors out.
+> Kokoro and Orpheus use their own built-in **named voices** instead of reference-audio
+> cloning, so this rule does not apply to them.
 
 There is also a small standalone **Gradio app** (`app.py`) for quick one-off audio
 previewing, independent of the main server.
@@ -97,6 +105,13 @@ This stack is fiddly to assemble; pin these versions.
 | requests | 2.31.0 |
 | beautifulsoup4 | 4.14.2 |
 | python-dotenv | 1.0.1 |
+
+**Optional TTS engines** (the server starts without them; each is disabled if its imports fail):
+
+| Component | Notes |
+|-----------|-------|
+| kokoro | Kokoro-82M engine. Also needs `misaki[en]` (g2p) and the `espeak-ng` system binary on PATH. Named voices (e.g. `af_heart`); no reference-audio cloning. |
+| snac + transformers | Orpheus-3b engine (`canopylabs/orpheus-3b-0.1-ft`, ~6 GB download) decoded via `hubertsiuzdak/snac_24khz`. Named speakers (e.g. `tara`); no reference-audio cloning. |
 
 **Install the CUDA build of PyTorch explicitly:**
 ```

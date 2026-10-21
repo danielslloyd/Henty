@@ -44,3 +44,6 @@ books/
 generation_stats.json
 Projects/
 .claude/settings.local.json
+
+# Local secrets (API_KEY, HF_TOKEN, ...) -- see .env.example
+.env

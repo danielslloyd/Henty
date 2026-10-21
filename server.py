@@ -17,8 +17,56 @@ try:
 except ImportError:
     HAS_TURBO = False
     print("WARNING: chatterbox.tts_turbo not available. Emotion tags will be converted to display text.")
+
+# Kokoro-82M (named voices, no reference-audio cloning). Optional.
+try:
+    from kokoro import KPipeline as KokoroPipeline
+    HAS_KOKORO = True
+except ImportError:
+    HAS_KOKORO = False
+    print("WARNING: kokoro not available. The Kokoro TTS engine will be disabled.")
+
+# Orpheus-3b (named speakers, SNAC-decoded). Optional, heavy (~6GB). Phase-2 wiring.
+try:
+    from snac import SNAC as _OrpheusSNAC  # noqa: F401
+    from transformers import AutoModelForCausalLM as _OrpheusLM, AutoTokenizer as _OrpheusTok  # noqa: F401
+    HAS_ORPHEUS = True
+except ImportError:
+    HAS_ORPHEUS = False
+    print("WARNING: Orpheus dependencies (snac/transformers) not available. The Orpheus TTS engine will be disabled.")
+
 import torch
 import numpy as np
+
+# Forced aligner (for carrier-padding trim). torchaudio ships MMS_FA; it's a hard
+# dep already, so this just checks the API is present. Used to cut fixed carrier
+# text back off generated audio. Disabled gracefully if unavailable.
+try:
+    import torchaudio
+    HAS_ALIGNER = hasattr(torchaudio.pipelines, 'MMS_FA')
+except Exception:
+    HAS_ALIGNER = False
+    if 'torchaudio' not in sys.modules:
+        print("WARNING: torchaudio not importable; carrier-padding trim disabled.")
+
+# Built-in voice catalogs for the named-voice engines. Chatterbox uses reference-audio
+# files in voice_samples/ instead, resolved via resolve_voice_sample_path().
+KOKORO_VOICES = [
+    'af_heart', 'af_alloy', 'af_aoede', 'af_bella', 'af_jessica', 'af_kore',
+    'af_nicole', 'af_nova', 'af_river', 'af_sarah', 'af_sky',
+    'am_adam', 'am_echo', 'am_eric', 'am_fenrir', 'am_liam', 'am_michael',
+    'am_onyx', 'am_puck', 'am_santa',
+    'bf_alice', 'bf_emma', 'bf_isabella', 'bf_lily',
+    'bm_daniel', 'bm_fable', 'bm_george', 'bm_lewis',
+]
+ORPHEUS_VOICES = ['tara', 'leah', 'jess', 'leo', 'dan', 'mia', 'zac', 'zoe']
+
+MODEL_AVAILABILITY = {
+    'chatterbox': True,
+    'chatterbox_turbo': HAS_TURBO,
+    'kokoro': HAS_KOKORO,
+    'orpheus': HAS_ORPHEUS,
+}
 
 # Turbo dtype guard: ChatterboxTurboTTS.norm_loudness multiplies the float32 reference
 # wav by a numpy float64 loudness gain, upcasting the whole array to float64. That then
@@ -156,6 +204,16 @@ class TextToAudioConverter:
     def __init__(self):
         self.model = None
         self.turbo_model = None
+        self.kokoro_pipeline = None
+        self.orpheus_model = None
+        self.orpheus_tokenizer = None
+        self.orpheus_snac = None
+        # Forced aligner (carrier trim), lazy-loaded
+        self._align_model = None
+        self._align_tokenizer = None
+        self._align_aligner = None
+        self._align_sr = 16000
+        self._align_chars = set()
 
         # Detailed CUDA diagnostics
         print("\n" + "="*80)
@@ -324,6 +382,56 @@ class TextToAudioConverter:
             print(f"Chatterbox Turbo model loaded successfully on {self.device}")
             print(f"{'='*80}\n")
         return self.turbo_model
+
+    def load_kokoro(self):
+        """Load the Kokoro-82M pipeline (lazy, cached)."""
+        if not HAS_KOKORO:
+            raise RuntimeError("Kokoro not available. Install the 'kokoro' package.")
+        if self.kokoro_pipeline is None:
+            print(f"\n{'='*80}\nLoading Kokoro-82M pipeline...\nDevice: {self.device}\n{'='*80}\n")
+            # lang_code 'a' = American English. Pipeline runs on CUDA when available.
+            self.kokoro_pipeline = KokoroPipeline(lang_code='a', device=self.device)
+            print(f"Kokoro pipeline loaded successfully on {self.device}\n{'='*80}\n")
+        return self.kokoro_pipeline
+
+    def load_orpheus(self):
+        """Load the Orpheus-3b model and SNAC decoder (lazy, cached)."""
+        if not HAS_ORPHEUS:
+            raise RuntimeError("Orpheus not available. Install 'snac' and 'transformers'.")
+        if self.orpheus_model is None:
+            print(f"\n{'='*80}\nLoading Orpheus-3b model + SNAC decoder...\nDevice: {self.device}\n{'='*80}\n")
+            model_name = getattr(config, 'ORPHEUS_MODEL', 'canopylabs/orpheus-3b-0.1-ft')
+            self.orpheus_tokenizer = _OrpheusTok.from_pretrained(model_name)
+            # transformers renamed torch_dtype→dtype; pass dtype and fall back for older versions.
+            try:
+                self.orpheus_model = _OrpheusLM.from_pretrained(
+                    model_name, dtype=torch.bfloat16
+                ).to(self.device)
+            except TypeError:
+                self.orpheus_model = _OrpheusLM.from_pretrained(
+                    model_name, torch_dtype=torch.bfloat16
+                ).to(self.device)
+            self.orpheus_model.eval()
+            self.orpheus_snac = _OrpheusSNAC.from_pretrained(
+                "hubertsiuzdak/snac_24khz"
+            ).eval().to(self.device)
+            print(f"Orpheus model + SNAC loaded successfully on {self.device}\n{'='*80}\n")
+        return self.orpheus_model
+
+    def load_aligner(self):
+        """Load the torchaudio MMS forced-alignment model (lazy, cached)."""
+        if not HAS_ALIGNER:
+            raise RuntimeError("Forced aligner (torchaudio MMS_FA) not available.")
+        if self._align_model is None:
+            print(f"\n{'='*80}\nLoading forced aligner (MMS_FA)...\nDevice: {self.device}\n{'='*80}\n")
+            bundle = torchaudio.pipelines.MMS_FA
+            self._align_model = bundle.get_model().to(self.device).eval()
+            self._align_tokenizer = bundle.get_tokenizer()
+            self._align_aligner = bundle.get_aligner()
+            self._align_sr = bundle.sample_rate
+            self._align_chars = set(bundle.get_dict().keys())
+            print(f"Forced aligner loaded ({self._align_sr} Hz)\n{'='*80}\n")
+        return self._align_model
 
     def load_stats(self):
         """Load generation statistics from file"""
@@ -749,8 +857,230 @@ class TextToAudioConverter:
         return re.sub(r'\{([^|}]+)\|[^}]*\}', r'\1', text)
 
 
-    def generate_audio(self, text, output_path, audio_prompt_path=None, language_id="en", exaggeration=0.6, cfg_weight=0.4, tts_model="chatterbox", temperature=0.8, seed=0):
-        """Generate audio from text using Chatterbox TTS or Chatterbox Turbo"""
+    def _generate_wav(self, text, tts_model, voice=None, audio_prompt_path=None,
+                      language_id="en", exaggeration=0.6, cfg_weight=0.4,
+                      speed=1.0, temperature=0.7):
+        """Dispatch to the selected engine. Returns (wav, sample_rate).
+
+        wav may be a torch tensor or numpy array; the caller normalizes it.
+        """
+        if tts_model == 'kokoro':
+            return self._gen_kokoro(text, voice, speed)
+        if tts_model == 'orpheus':
+            return self._gen_orpheus(text, voice, temperature)
+        return self._gen_chatterbox(text, tts_model, audio_prompt_path,
+                                    language_id, exaggeration, cfg_weight, temperature)
+
+    def _gen_chatterbox(self, text, tts_model, audio_prompt_path, language_id,
+                        exaggeration, cfg_weight, temperature=0.7):
+        """Chatterbox (standard/turbo) reference-audio generation."""
+        use_turbo = (tts_model == 'chatterbox_turbo')
+        print(f"\n[TTS MODEL LOADING]")
+        print(f"  Model: {tts_model}, HAS_TURBO={HAS_TURBO}")
+        if use_turbo:
+            if not HAS_TURBO:
+                print(f"  ⚠️  Turbo selected but not available — loading Standard instead")
+                model = self.load_model()
+                print(f"  ✓ Loaded: {type(model).__name__} (Standard fallback)")
+            else:
+                print(f"  → Loading Turbo model...")
+                model = self.load_turbo_model()
+                print(f"  ✓ Loaded: {type(model).__name__} (Turbo)")
+        else:
+            print(f"  → Loading Standard model...")
+            model = self.load_model()
+            print(f"  ✓ Loaded: {type(model).__name__} (Standard)")
+
+        # Prepare generation parameters with explicit float32 conversion
+        gen_params = {
+            "exaggeration": torch.tensor(exaggeration, dtype=torch.float32).item(),
+            "cfg_weight": torch.tensor(cfg_weight, dtype=torch.float32).item(),
+            "temperature": torch.tensor(temperature, dtype=torch.float32).item()
+        }
+
+        # Add audio prompt if provided
+        if audio_prompt_path and os.path.exists(audio_prompt_path):
+            print(f"\n=== Validating voice sample: {audio_prompt_path} ===")
+            if self.ensure_valid_wav_format(audio_prompt_path):
+                gen_params["audio_prompt_path"] = audio_prompt_path
+                print(f"Voice sample ready for use")
+            else:
+                print(f"WARNING: Could not validate/convert voice sample, proceeding without voice cloning")
+
+        # Add language ID if not English
+        if language_id != "en":
+            gen_params["language_id"] = language_id
+
+        print(f"Generating with parameters: {gen_params}")
+
+        # Ensure float32 throughout — numpy <2.3 can produce float64 tensors
+        # which cause "expected scalar type Double but found Float" errors
+        torch.set_default_dtype(torch.float32)
+        try:
+            model = model.float()
+        except (AttributeError, RuntimeError):
+            try:
+                model = model.to(dtype=torch.float32)
+            except (AttributeError, RuntimeError):
+                pass
+
+        wav = model.generate(text, **gen_params)
+        return wav, model.sr
+
+    def _gen_kokoro(self, text, voice, speed):
+        """Kokoro-82M named-voice generation. Returns (wav_numpy, 24000)."""
+        pipeline = self.load_kokoro()
+        voice = voice or getattr(config, 'KOKORO_DEFAULT_VOICE', 'af_heart')
+        print(f"\n[KOKORO] voice={voice} speed={speed}")
+        # KPipeline yields result objects per segment; concatenate their audio.
+        segments = []
+        for result in pipeline(text, voice=voice, speed=float(speed)):
+            audio = getattr(result, 'audio', None)
+            if audio is None and isinstance(result, (list, tuple)):
+                audio = result[-1]  # older API: (gs, ps, audio)
+            if audio is None:
+                continue
+            if torch.is_tensor(audio):
+                audio = audio.detach().cpu().numpy()
+            segments.append(np.asarray(audio, dtype=np.float32).flatten())
+        if not segments:
+            raise RuntimeError("Kokoro produced no audio")
+        wav = np.concatenate(segments) if len(segments) > 1 else segments[0]
+        return wav, 24000
+
+    def _gen_orpheus(self, text, voice, temperature):
+        """Orpheus-3b named-speaker generation via SNAC decoding. Returns (wav_numpy, 24000)."""
+        self.load_orpheus()
+        voice = voice or getattr(config, 'ORPHEUS_DEFAULT_VOICE', 'tara')
+        print(f"\n[ORPHEUS] speaker={voice} temperature={temperature}")
+        wav = self._orpheus_synthesize(text, voice, float(temperature))
+        return wav, 24000
+
+    def _orpheus_synthesize(self, text, voice, temperature):
+        """Run the Orpheus LM to produce SNAC codes and decode to a waveform.
+
+        Follows the canopylabs/orpheus token protocol: prompt is wrapped with the
+        speaker name and special audio-start/end markers; generated token ids above
+        the audio-code offset (128266) are de-interleaved into SNAC's 3 codebooks.
+        """
+        tok = self.orpheus_tokenizer
+        model = self.orpheus_model
+        snac = self.orpheus_snac
+
+        prompt = f"{voice}: {text}"
+        input_ids = tok(prompt, return_tensors="pt").input_ids
+        # Special markers (per Orpheus reference implementation)
+        start = torch.tensor([[128259]], dtype=torch.int64)
+        end = torch.tensor([[128009, 128260]], dtype=torch.int64)
+        input_ids = torch.cat([start, input_ids, end], dim=1).to(self.device)
+        attn = torch.ones_like(input_ids)
+
+        with torch.no_grad():
+            generated = model.generate(
+                input_ids=input_ids, attention_mask=attn,
+                max_new_tokens=1200, do_sample=True,
+                temperature=temperature, top_p=0.95, repetition_penalty=1.1,
+                eos_token_id=128258,
+            )
+
+        # Keep only tokens after the last audio-start marker (128257)
+        seq = generated[0]
+        starts = (seq == 128257).nonzero()
+        cropped = seq[starts[-1].item() + 1:] if len(starts) else seq[input_ids.shape[1]:]
+        codes = [t.item() - 128266 for t in cropped if t.item() > 128266]
+        # Trim to a multiple of 7 (one SNAC frame = 7 interleaved codes)
+        codes = codes[: (len(codes) // 7) * 7]
+        if not codes:
+            raise RuntimeError("Orpheus produced no audio codes")
+
+        l0, l1, l2 = [], [], []
+        for i in range(len(codes) // 7):
+            f = codes[i * 7:i * 7 + 7]
+            l0.append(f[0])
+            l1.append(f[1] - 4096)
+            l2.append(f[2] - 2 * 4096)
+            l2.append(f[3] - 3 * 4096)
+            l1.append(f[4] - 4 * 4096)
+            l2.append(f[5] - 5 * 4096)
+            l2.append(f[6] - 6 * 4096)
+        layers = [
+            torch.tensor(l0, dtype=torch.int64, device=self.device).unsqueeze(0),
+            torch.tensor(l1, dtype=torch.int64, device=self.device).unsqueeze(0),
+            torch.tensor(l2, dtype=torch.int64, device=self.device).unsqueeze(0),
+        ]
+        with torch.no_grad():
+            audio = snac.decode(layers)
+        return audio.detach().squeeze().cpu().float().numpy()
+
+    # ---- Carrier padding (short-fragment quality) --------------------------
+    # Many TTS models garble very short inputs. When enabled, short chunks are wrapped
+    # with fixed lead-in/out "carrier" text before generation, then the carrier audio is
+    # trimmed back off via forced alignment so only the target span is kept.
+    def _should_use_carrier(self, text, override=None):
+        if override is not None:
+            want = bool(override)
+        else:
+            if not getattr(config, 'CARRIER_ENABLED', False):
+                return False
+            limit = int(getattr(config, 'CARRIER_MAX_CHARS', 0) or 0)
+            want = 0 < len((text or '').strip()) < limit
+        if want and not HAS_ALIGNER:
+            print("[CARRIER] requested but forced aligner unavailable; skipping")
+            return False
+        return want
+
+    def _normalize_align_words(self, text):
+        """Reduce text to the aligner's character set; return a list of words.
+        Characters outside the MMS dictionary become spaces; empty words are dropped."""
+        allowed = self._align_chars
+        cleaned = ''.join(ch if (ch in allowed or ch.isspace()) else ' ' for ch in (text or '').lower())
+        return [w for w in cleaned.split() if w]
+
+    def _trim_to_target(self, wav, sr, pre_words, target_words, post_words, guard_ms=60):
+        """Force-align the generated audio to (pre+target+post) words and slice out the
+        target span. Returns (trimmed_1d_float_numpy, (start_s, end_s))."""
+        self.load_aligner()
+        # Normalize to a mono float32 1-D tensor at the original sample rate.
+        if torch.is_tensor(wav):
+            w = wav.detach().cpu().float()
+        else:
+            w = torch.from_numpy(np.asarray(wav, dtype=np.float32))
+        w = w.squeeze()
+        if w.ndim > 1:
+            w = w[0] if w.shape[0] < w.shape[1] else w[:, 0]
+        orig = w.numpy()
+
+        wav16 = torchaudio.functional.resample(w.unsqueeze(0), sr, self._align_sr).to(self.device)
+        all_words = pre_words + target_words + post_words
+        tokens = self._align_tokenizer(all_words)
+        with torch.inference_mode():
+            emission, _ = self._align_model(wav16)
+            spans = self._align_aligner(emission[0], tokens)
+
+        ratio = wav16.size(1) / emission.size(1)        # 16k samples per emission frame
+        ti = len(pre_words)
+        tj = len(pre_words) + len(target_words) - 1
+        start_s = spans[ti][0].start * ratio / self._align_sr
+        end_s = spans[tj][-1].end * ratio / self._align_sr
+
+        guard = guard_ms / 1000.0
+        a = max(0, int((start_s - guard) * sr))
+        b = min(len(orig), int((end_s + guard) * sr))
+        if b <= a:
+            raise RuntimeError("carrier trim produced an empty span")
+        return orig[a:b], (round(float(start_s), 3), round(float(end_s), 3))
+
+    def generate_audio(self, text, output_path, voice=None, audio_prompt_path=None, language_id="en", exaggeration=0.6, cfg_weight=0.4, speed=1.0, temperature=0.7, tts_model="chatterbox", use_carrier=None, seed=0):
+        """Generate audio from text using the selected TTS engine.
+
+        Orchestrates the engine-agnostic work (timing, GPU stats, WebSocket events,
+        numpy normalization, WAV writing, logging). The engine-specific step — turning
+        text + voice + params into (wav, sample_rate) — is delegated to per-engine
+        helpers via _generate_wav().
+
+        - chatterbox / chatterbox_turbo: reference-audio cloning via audio_prompt_path.
+        - kokoro / orpheus: named voice passed as `voice`.
+        """
         try:
             # Start timing and capture initial GPU stats
             start_time = time.time()
@@ -773,60 +1103,17 @@ class TextToAudioConverter:
                     'estimated_time': self.current_generation['estimated_time']
                 })
 
-            use_turbo = (tts_model == 'chatterbox_turbo')
-            print(f"\n[TTS MODEL LOADING]")
-            print(f"  Model: {tts_model}, HAS_TURBO={HAS_TURBO}")
-            if use_turbo:
-                if not HAS_TURBO:
-                    print(f"  ⚠️  Turbo selected but not available — loading Standard instead")
-                    model = self.load_model()
-                    print(f"  ✓ Loaded: {type(model).__name__} (Standard fallback)")
-                else:
-                    print(f"  → Loading Turbo model...")
-                    model = self.load_turbo_model()
-                    print(f"  ✓ Loaded: {type(model).__name__} (Turbo)")
-            else:
-                print(f"  → Loading Standard model...")
-                model = self.load_model()
-                print(f"  ✓ Loaded: {type(model).__name__} (Standard)")
-
-            # Prepare generation parameters with explicit float32 conversion
-            gen_params = {
-                "exaggeration": torch.tensor(exaggeration, dtype=torch.float32).item(),
-                "cfg_weight": torch.tensor(cfg_weight, dtype=torch.float32).item(),
-                "temperature": torch.tensor(temperature, dtype=torch.float32).item()
-            }
-
-            # Add audio prompt if provided
-            if audio_prompt_path and os.path.exists(audio_prompt_path):
-                print(f"\n=== Validating voice sample: {audio_prompt_path} ===")
-                if self.ensure_valid_wav_format(audio_prompt_path):
-                    gen_params["audio_prompt_path"] = audio_prompt_path
-                    print(f"Voice sample ready for use")
-                else:
-                    print(f"WARNING: Could not validate/convert voice sample, proceeding without voice cloning")
-
-            # Add language ID if not English
-            if language_id != "en":
-                gen_params["language_id"] = language_id
-
-            # Get actual model device (safely)
             device_name = "GPU" if self.device == "cuda" else "CPU"
-
-            print(f"Generating with parameters: {gen_params}")
             print(f"Text length: {char_count} characters")
             print(f"Device: {device_name}")
 
-            # Ensure float32 throughout — numpy <2.3 can produce float64 tensors
-            # which cause "expected scalar type Double but found Float" errors
-            torch.set_default_dtype(torch.float32)
-            try:
-                model = model.float()
-            except (AttributeError, RuntimeError):
-                try:
-                    model = model.to(dtype=torch.float32)
-                except (AttributeError, RuntimeError):
-                    pass
+            def _gen(t):
+                return self._generate_wav(
+                    t, tts_model,
+                    voice=voice, audio_prompt_path=audio_prompt_path, language_id=language_id,
+                    exaggeration=exaggeration, cfg_weight=cfg_weight,
+                    speed=speed, temperature=temperature,
+                )
 
             # Seed for reproducible generation when a non-zero seed is provided
             # (seed=0 keeps the previous non-deterministic behavior).
@@ -835,7 +1122,33 @@ class TextToAudioConverter:
                 if torch.cuda.is_available():
                     torch.cuda.manual_seed_all(seed)
 
-            wav = model.generate(text, **gen_params)
+            # Carrier padding: wrap short fragments, generate, then trim the carrier
+            # back off via forced alignment. Engine-agnostic (operates on output audio).
+            carrier_info = {'used': False, 'trimmed': False}
+            do_carrier = self._should_use_carrier(text, use_carrier)
+            pre_txt = getattr(config, 'CARRIER_PRE', '') or ''
+            post_txt = getattr(config, 'CARRIER_POST', '') or ''
+            pre_words = self._normalize_align_words(pre_txt) if do_carrier else []
+            target_words = self._normalize_align_words(text) if do_carrier else []
+            post_words = self._normalize_align_words(post_txt) if do_carrier else []
+            if do_carrier and not target_words:
+                do_carrier = False  # nothing alignable in the target text
+
+            gen_text = f"{pre_txt} {text} {post_txt}".strip() if do_carrier else text
+            if do_carrier:
+                print(f"[CARRIER] padding short fragment (pre/post applied), generating {len(gen_text)} chars")
+
+            # Engine-specific generation → (wav, sample_rate)
+            wav, sample_rate = _gen(gen_text)
+            if do_carrier:
+                try:
+                    wav, span = self._trim_to_target(wav, sample_rate, pre_words, target_words, post_words)
+                    carrier_info = {'used': True, 'trimmed': True, 'target_span_s': span}
+                    print(f"[CARRIER] trimmed to target span {span}s")
+                except Exception as ce:
+                    print(f"[CARRIER] alignment/trim failed ({ce}); regenerating without carrier")
+                    wav, sample_rate = _gen(text)
+                    carrier_info = {'used': False, 'trimmed': False, 'fallback': True}
             print(f"Generated wav type: {type(wav)}, shape: {wav.shape if hasattr(wav, 'shape') else 'N/A'}")
 
             # Convert tensor to numpy array
@@ -860,14 +1173,14 @@ class TextToAudioConverter:
             wav_numpy = np.clip(wav_numpy, -1.0, 1.0)
             wav_int16 = (wav_numpy * 32767).astype(np.int16)
 
-            print(f"Final audio shape: {wav_int16.shape}, Sample rate: {model.sr}, dtype: {wav_int16.dtype}")
+            print(f"Final audio shape: {wav_int16.shape}, Sample rate: {sample_rate}, dtype: {wav_int16.dtype}")
 
             # Calculate audio duration
-            audio_duration_sec = len(wav_int16) / model.sr
+            audio_duration_sec = len(wav_int16) / sample_rate
 
             # Use scipy.io.wavfile which is more reliable on Windows
             try:
-                wavfile.write(output_path, model.sr, wav_int16)
+                wavfile.write(output_path, sample_rate, wav_int16)
                 print(f"Successfully wrote WAV file to: {output_path}")
             except Exception as write_error:
                 print(f"Error writing WAV file: {str(write_error)}")
@@ -903,7 +1216,8 @@ class TextToAudioConverter:
             return {
                 'path': output_path,
                 'duration_seconds': audio_duration_sec,
-                'generation_time_ms': generation_time_ms
+                'generation_time_ms': generation_time_ms,
+                'carrier': carrier_info
             }
         except Exception as e:
             # Emit error via WebSocket
@@ -998,7 +1312,19 @@ def status():
 @app.route('/api/config')
 def get_config():
     """Get client configuration (public endpoint)"""
-    return jsonify(config.get_client_config())
+    cfg = config.get_client_config()
+    # Describe each TTS engine: how its voice is chosen ('samples' = reference-audio
+    # file list; otherwise a list of named voices), which params it supports, and whether
+    # it is installed/available on this server. The frontend builds its UI from this.
+    cfg['tts_engines'] = {
+        'chatterbox':       {'voices': 'samples', 'params': ['exaggeration', 'cfg_weight'], 'available': MODEL_AVAILABILITY['chatterbox'], 'label': 'Chatterbox'},
+        'chatterbox_turbo': {'voices': 'samples', 'params': ['exaggeration', 'cfg_weight'], 'available': MODEL_AVAILABILITY['chatterbox_turbo'], 'label': 'Turbo'},
+        'kokoro':           {'voices': KOKORO_VOICES,  'params': ['speed'],       'available': MODEL_AVAILABILITY['kokoro'], 'label': 'Kokoro'},
+        'orpheus':          {'voices': ORPHEUS_VOICES, 'params': ['temperature'], 'available': MODEL_AVAILABILITY['orpheus'], 'label': 'Orpheus'},
+    }
+    # Carrier trim only works if the forced aligner is importable.
+    cfg.setdefault('carrier', {})['available'] = bool(HAS_ALIGNER)
+    return jsonify(cfg)
 
 @app.route('/api/device-status', methods=['GET'])
 @auth_manager.require_api_key
@@ -1290,6 +1616,9 @@ def load_project():
         # Update converter paths
         converter.current_project_path = project_path
         converter.current_project_metadata = project_metadata
+        # Lookup maps are cached per project; drop the previous project's, or
+        # generate/stitch resolve chunk ids against stale data ("Chunk not found").
+        converter._invalidate_lookup_caches()
         converter.undo_stack = []  # fresh undo history per loaded project
         converter.audio_dir = os.path.join(project_path, 'audio')
         # Keep voice_samples_dir pointing to main folder (not project-specific)
@@ -1939,6 +2268,8 @@ def generate_project_chunk_audio():
         cfg_weight = float(data.get('cfg_weight', 0.4))
         temperature = float(data.get('temperature', 0.8))
         seed = int(data.get('seed', 0))
+        speed = float(data.get('speed', 1.0))
+        use_carrier = data.get('use_carrier')  # None = auto (by length); True/False = override
         language_id = data.get('language_id', 'en')
         tts_model = data.get('tts_model', config.DEFAULT_TTS_MODEL if hasattr(config, 'DEFAULT_TTS_MODEL') else 'chatterbox')
 
@@ -1953,12 +2284,13 @@ def generate_project_chunk_audio():
         # Note: Chatterbox Turbo expects [laugh], [cough], etc. embedded directly in text.
         # process_pronunciation_markup strips the {display|[tag]} wrapper, leaving [tag] in the text.
 
-        # Auto-detect paralinguistic tags → force turbo
-        if has_paralinguistic_tags:
+        # Auto-detect paralinguistic tags → force turbo, but ONLY for Chatterbox-variant
+        # requests. Kokoro/Orpheus are never auto-switched to Chatterbox.
+        if has_paralinguistic_tags and requested_model in ('chatterbox', 'chatterbox_turbo'):
             tts_model = 'chatterbox_turbo'
             print(f"  → Emotion tags found, requesting Turbo model")
         else:
-            print(f"  → No emotion tags, using requested model: {requested_model}")
+            print(f"  → Using requested model: {requested_model}")
 
         if tts_model == 'chatterbox_turbo' and not HAS_TURBO:
             print(f"  ⚠️  Turbo requested but NOT INSTALLED (HAS_TURBO=False)")
@@ -1967,17 +2299,29 @@ def generate_project_chunk_audio():
 
         print(f"  ✓ Final model to use: {tts_model}")
 
-        # Resolve voice sample — never fall back to the Chatterbox default voice.
-        audio_prompt_path = resolve_voice_sample_path(voice_sample)
-        if audio_prompt_path is None:
-            audio_prompt_path = resolve_voice_sample_path(getattr(config, 'DEFAULT_VOICE', None))
-        if audio_prompt_path is None:
-            return jsonify({
-                'error': 'No usable voice sample found. Refusing to generate with the '
-                         'Chatterbox default voice. Set a project voice or configure DEFAULT_VOICE.',
-                'requested_voice': voice_sample,
-            }), 400
-        voice_sample = os.path.basename(audio_prompt_path)
+        # Resolve the voice per engine. Chatterbox uses reference-audio files (and must
+        # never fall back to its built-in default voice); Kokoro/Orpheus use named voices.
+        audio_prompt_path = None
+        named_voice = None
+        if tts_model in ('kokoro', 'orpheus'):
+            named_voice = resolve_named_voice(voice_sample, tts_model)
+            if named_voice is None:
+                return jsonify({
+                    'error': f'Unknown {tts_model} voice. Choose a valid named voice.',
+                    'requested_voice': voice_sample,
+                }), 400
+            voice_sample = named_voice
+        else:
+            audio_prompt_path = resolve_voice_sample_path(voice_sample)
+            if audio_prompt_path is None:
+                audio_prompt_path = resolve_voice_sample_path(getattr(config, 'DEFAULT_VOICE', None))
+            if audio_prompt_path is None:
+                return jsonify({
+                    'error': 'No usable voice sample found. Refusing to generate with the '
+                             'Chatterbox default voice. Set a project voice or configure DEFAULT_VOICE.',
+                    'requested_voice': voice_sample,
+                }), 400
+            voice_sample = os.path.basename(audio_prompt_path)
 
         # Check device before generation
         if converter.model is not None:
@@ -2011,12 +2355,15 @@ def generate_project_chunk_audio():
         generation_result = converter.generate_audio(
             text=tts_text,
             output_path=audio_path,
+            voice=named_voice,
             audio_prompt_path=audio_prompt_path,
             language_id=language_id,
             exaggeration=exaggeration,
             cfg_weight=cfg_weight,
-            tts_model=tts_model,
+            speed=speed,
             temperature=temperature,
+            tts_model=tts_model,
+            use_carrier=use_carrier,
             seed=seed
         )
 
@@ -2056,6 +2403,7 @@ def generate_project_chunk_audio():
                     'exaggeration': exaggeration,
                     'cfg_weight': cfg_weight,
                     'temperature': temperature,
+                    'speed': speed,
                     'seed': seed,
                     'audio_duration_seconds': round(audio_duration, 2),
                     'possibly_truncated': possibly_truncated,
@@ -2064,7 +2412,8 @@ def generate_project_chunk_audio():
                     'tts_input_text': tts_text,  # Exact text sent to TTS engine (for debugging)
                     'tts_model': tts_model,
                     'tts_model_requested': requested_model,
-                    'tts_model_emotion_forced': has_paralinguistic_tags and requested_model != tts_model
+                    'tts_model_emotion_forced': has_paralinguistic_tags and requested_model != tts_model,
+                    'carrier': generation_result.get('carrier')
                 }
                 chunk['generated_audios'].append(audio_entry)
 
@@ -2374,7 +2723,8 @@ def stitch_project_best_takes():
         timestamp = int(time.time() * 1000)
         if is_new_structure:
             chapter_title = chapter.get('title', 'output')
-            base_name = chapter_title.replace(' ', '_').replace('/', '_')[:50]
+            # Chapter titles can hold characters Windows forbids in filenames (? : " * < > | \).
+            base_name = re.sub(r'[<>:"/\\|?*\x00-\x1f]', '_', chapter_title.replace(' ', '_'))[:50].rstrip('. ')
         else:
             original_filename = chapter.get('original_filename', 'output')
             base_name = os.path.splitext(original_filename)[0]
@@ -3126,6 +3476,24 @@ def resolve_voice_sample_path(name):
     return None
 
 
+def resolve_named_voice(name, tts_model):
+    """Validate a named voice for an engine that uses built-in voices (kokoro/orpheus).
+
+    Returns a valid voice name (case-insensitive match), the configured default for the
+    engine when `name` is empty, or None when `name` is non-empty but unrecognized.
+    """
+    catalog = KOKORO_VOICES if tts_model == 'kokoro' else ORPHEUS_VOICES
+    if not name or name == 'none':
+        default = (getattr(config, 'KOKORO_DEFAULT_VOICE', 'af_heart') if tts_model == 'kokoro'
+                   else getattr(config, 'ORPHEUS_DEFAULT_VOICE', 'tara'))
+        return default if default in catalog else (catalog[0] if catalog else None)
+    lowered = name.strip().lower()
+    for v in catalog:
+        if v.lower() == lowered:
+            return v
+    return None
+
+
 @app.route('/api/project/generate-entire-book', methods=['POST'])
 @auth_manager.require_api_key
 def generate_entire_book():
@@ -3148,26 +3516,41 @@ def generate_entire_book():
         language_id = data.get('language_id') or defaults.get('language_id', 'en')
         exaggeration = data.get('exaggeration') or defaults.get('exaggeration', 0.6)
         cfg_weight = data.get('cfg_weight') or defaults.get('cfg_weight', 0.4)
-        # --- Resolve the voice sample. NEVER fall back to the Chatterbox default voice. ---
+        speed = data.get('speed') or defaults.get('speed', 1.0)
+        temperature = data.get('temperature') or defaults.get('temperature', 0.7)
+        tts_model = data.get('tts_model') or defaults.get('tts_model') or getattr(config, 'DEFAULT_TTS_MODEL', 'chatterbox')
+        # --- Resolve the voice per engine. ---
         requested_voice = data.get('voice_sample') or defaults.get('voice_sample')
-        audio_prompt_path = resolve_voice_sample_path(requested_voice)
-        resolved_from = requested_voice
-        if audio_prompt_path is None:
-            # Try the server-configured default voice (still a real sample file on disk).
-            cfg_default = getattr(config, 'DEFAULT_VOICE', None)
-            audio_prompt_path = resolve_voice_sample_path(cfg_default)
-            resolved_from = cfg_default
-        if audio_prompt_path is None:
-            return jsonify({
-                'error': 'No usable voice sample found. Refusing to generate with the '
-                         'Chatterbox default voice. Set a project voice or configure '
-                         'DEFAULT_VOICE to a file in the voice_samples directory.',
-                'requested_voice': requested_voice,
-                'config_default_voice': getattr(config, 'DEFAULT_VOICE', None),
-            }), 400
-        voice_sample = os.path.basename(audio_prompt_path)
-        print(f"[GEN-BOOK] Voice: {voice_sample} (requested '{resolved_from}') → {audio_prompt_path}",
-              flush=True)
+        audio_prompt_path = None
+        named_voice = None
+        if tts_model in ('kokoro', 'orpheus'):
+            named_voice = resolve_named_voice(requested_voice, tts_model)
+            if named_voice is None:
+                return jsonify({
+                    'error': f'Unknown {tts_model} voice. Choose a valid named voice.',
+                    'requested_voice': requested_voice,
+                }), 400
+            voice_sample = named_voice
+            print(f"[GEN-BOOK] Engine {tts_model}, voice: {voice_sample}", flush=True)
+        else:
+            # Chatterbox: NEVER fall back to the built-in default voice.
+            audio_prompt_path = resolve_voice_sample_path(requested_voice)
+            resolved_from = requested_voice
+            if audio_prompt_path is None:
+                cfg_default = getattr(config, 'DEFAULT_VOICE', None)
+                audio_prompt_path = resolve_voice_sample_path(cfg_default)
+                resolved_from = cfg_default
+            if audio_prompt_path is None:
+                return jsonify({
+                    'error': 'No usable voice sample found. Refusing to generate with the '
+                             'Chatterbox default voice. Set a project voice or configure '
+                             'DEFAULT_VOICE to a file in the voice_samples directory.',
+                    'requested_voice': requested_voice,
+                    'config_default_voice': getattr(config, 'DEFAULT_VOICE', None),
+                }), 400
+            voice_sample = os.path.basename(audio_prompt_path)
+            print(f"[GEN-BOOK] Voice: {voice_sample} (requested '{resolved_from}') → {audio_prompt_path}",
+                  flush=True)
 
         audio_dir = os.path.join(converter.current_project_path, 'audio')
         os.makedirs(audio_dir, exist_ok=True)
@@ -3217,13 +3600,17 @@ def generate_entire_book():
                     print(f"[GEN] {chapter['title'][:25]} c{chunk['id']}: "
                           f"\"{preview}…\" ({len(clean_text)}c)", flush=True)
 
-                    converter.generate_audio(
+                    gen_result = converter.generate_audio(
                         clean_text,
                         audio_path,
+                        voice=named_voice,
                         audio_prompt_path=audio_prompt_path,
                         language_id=language_id,
                         exaggeration=exaggeration,
-                        cfg_weight=cfg_weight
+                        cfg_weight=cfg_weight,
+                        speed=speed,
+                        temperature=temperature,
+                        tts_model=tts_model
                     )
 
                     audio_metadata = {
@@ -3233,7 +3620,10 @@ def generate_entire_book():
                         'language_id': language_id,
                         'exaggeration': exaggeration,
                         'cfg_weight': cfg_weight,
+                        'speed': speed,
+                        'tts_model': tts_model,
                         'voice_sample': voice_sample,
+                        'carrier': gen_result.get('carrier') if isinstance(gen_result, dict) else None,
                         'text_preview': chunk['text'][:200],
                         'input_text': chunk['text'],
                         'is_best_take': True
@@ -3788,6 +4178,9 @@ def generate_all_chapter_chunks():
         language_id = data.get('language_id') or converter.current_project_metadata.get('default_audio_settings', {}).get('language_id', 'en')
         exaggeration = data.get('exaggeration') or converter.current_project_metadata.get('default_audio_settings', {}).get('exaggeration', 0.6)
         cfg_weight = data.get('cfg_weight') or converter.current_project_metadata.get('default_audio_settings', {}).get('cfg_weight', 0.4)
+        speed = data.get('speed') or converter.current_project_metadata.get('default_audio_settings', {}).get('speed', 1.0)
+        temperature = data.get('temperature') or converter.current_project_metadata.get('default_audio_settings', {}).get('temperature', 0.7)
+        tts_model = data.get('tts_model') or converter.current_project_metadata.get('default_audio_settings', {}).get('tts_model') or getattr(config, 'DEFAULT_TTS_MODEL', 'chatterbox')
         voice_sample = data.get('voice_sample') or converter.current_project_metadata.get('default_audio_settings', {}).get('voice_sample', 'none')
 
         # Find the chapter
@@ -3805,18 +4198,31 @@ def generate_all_chapter_chunks():
         print(f"Total chunks to generate: {len(chunks)}")
         print(f"Parameters - Language: {language_id}, Exaggeration: {exaggeration}, CFG Weight: {cfg_weight}")
 
-        # Resolve voice sample — never fall back to the Chatterbox default voice.
-        audio_prompt_path = resolve_voice_sample_path(voice_sample)
-        if audio_prompt_path is None:
-            audio_prompt_path = resolve_voice_sample_path(getattr(config, 'DEFAULT_VOICE', None))
-        if audio_prompt_path is None:
-            return jsonify({
-                'error': 'No usable voice sample found. Refusing to generate with the '
-                         'Chatterbox default voice. Set a project voice or configure DEFAULT_VOICE.',
-                'requested_voice': voice_sample,
-            }), 400
-        voice_sample = os.path.basename(audio_prompt_path)
-        print(f"Voice: {voice_sample} → {audio_prompt_path}")
+        # Resolve the voice per engine. Chatterbox uses reference-audio files (never the
+        # built-in default); Kokoro/Orpheus use named voices.
+        audio_prompt_path = None
+        named_voice = None
+        if tts_model in ('kokoro', 'orpheus'):
+            named_voice = resolve_named_voice(voice_sample, tts_model)
+            if named_voice is None:
+                return jsonify({
+                    'error': f'Unknown {tts_model} voice. Choose a valid named voice.',
+                    'requested_voice': voice_sample,
+                }), 400
+            voice_sample = named_voice
+            print(f"Engine {tts_model}, voice: {voice_sample}")
+        else:
+            audio_prompt_path = resolve_voice_sample_path(voice_sample)
+            if audio_prompt_path is None:
+                audio_prompt_path = resolve_voice_sample_path(getattr(config, 'DEFAULT_VOICE', None))
+            if audio_prompt_path is None:
+                return jsonify({
+                    'error': 'No usable voice sample found. Refusing to generate with the '
+                             'Chatterbox default voice. Set a project voice or configure DEFAULT_VOICE.',
+                    'requested_voice': voice_sample,
+                }), 400
+            voice_sample = os.path.basename(audio_prompt_path)
+            print(f"Voice: {voice_sample} → {audio_prompt_path}")
 
         audio_dir = os.path.join(converter.current_project_path, 'audio')
         os.makedirs(audio_dir, exist_ok=True)
@@ -3858,10 +4264,14 @@ def generate_all_chapter_chunks():
                 result = converter.generate_audio(
                     clean_text,
                     audio_path,
+                    voice=named_voice,
                     audio_prompt_path=audio_prompt_path,
                     language_id=language_id,
                     exaggeration=exaggeration,
-                    cfg_weight=cfg_weight
+                    cfg_weight=cfg_weight,
+                    speed=speed,
+                    temperature=temperature,
+                    tts_model=tts_model
                 )
 
                 # Create metadata
@@ -3872,7 +4282,10 @@ def generate_all_chapter_chunks():
                     'language_id': language_id,
                     'exaggeration': exaggeration,
                     'cfg_weight': cfg_weight,
+                    'speed': speed,
+                    'tts_model': tts_model,
                     'voice_sample': voice_sample,
+                    'carrier': result.get('carrier'),
                     'text_preview': chunk['text'][:200],
                     'input_text': chunk['text'],
                     'is_best_take': len(chunk.get('generated_audios', [])) == 0  # First generation is best take

@@ -17,7 +17,9 @@ class BookTab {
     constructor() {
         this.chapters = [];
         this.voiceSamples = [];
-        this.projectDefaults = { exaggeration: 0.6, cfg_weight: 0.4, voice_sample: '', temperature: 0.8, tts_model: 'chatterbox' };
+        this.ttsEngines = null;  // {engine: {voices:'samples'|[...], params:[...], available, label}} from /api/config
+        this.carrier = { enabled: false, available: false, max_chars: 0, pre: '', post: '' };  // from /api/config
+        this.projectDefaults = { exaggeration: 0.6, cfg_weight: 0.4, voice_sample: '', temperature: 0.8, speed: 1.0, tts_model: 'chatterbox' };
         this.activeGenerations = {};
         this.generationQueue = [];
         this.maxParallelGenerations = 3;
@@ -47,6 +49,8 @@ class BookTab {
         try {
             const r = await fetch(`${SERVER_URL}/api/config`); if (!r.ok) return;
             const cfg = await r.json();
+            if (cfg.tts_engines) this.ttsEngines = cfg.tts_engines;
+            if (cfg.carrier) this.carrier = { ...this.carrier, ...cfg.carrier };
             if (cfg.default_tts_model) this.projectDefaults.tts_model = cfg.default_tts_model;
             const dv = cfg.default_voice || '';
             const m = this.voiceSamples.find(v => v.name.replace(/\.[^/.]+$/, '') === dv || v.name === dv);
@@ -167,7 +171,11 @@ class BookTab {
         const takes = [...(chunk.generated_audios || [])].sort((a, b) => (a.timestamp || 0) - (b.timestamp || 0));
         const settingsId = `cfg-${chId}-${cid}`;
 
+        const carrierHint = this._willUseCarrier(chunk)
+            ? `<span class="carrier-hint material-symbols-outlined" title="Short fragment: a carrier phrase will be spoken around it, then trimmed out via forced alignment">content_cut</span>`
+            : '';
         const actions = `<div class="takes-actions">
+            ${carrierHint}
             <button class="chunk-icon" title="Tune settings" onclick="bookTab.toggle('${settingsId}')"><span class="material-symbols-outlined">tune</span></button>
             <button class="chunk-icon" title="Generate take" onclick="bookTab.generateChunk('${chId}',${cid})"><span class="material-symbols-outlined">text_to_speech</span></button>
         </div>`;
@@ -175,23 +183,7 @@ class BookTab {
         const emptyLabel = (takes.length || generating) ? '' :
             '<div class="takes-empty-label" style="padding:6px 8px;">No takes yet</div>';
 
-        const settingsPanel = `<div class="take-settings" id="${settingsId}">
-            <div class="setting-row"><span class="setting-label">Voice</span><div class="setting-control">
-                <select id="voice-${chId}-${cid}">${this.voiceSamples.map(s => `<option value="${s.name}" ${this.projectDefaults.voice_sample === s.name ? 'selected' : ''}>${s.name}</option>`).join('')}</select></div></div>
-            <div class="setting-row"><span class="setting-label">Exaggeration</span><div class="setting-control">
-                <input type="range" id="exag-${chId}-${cid}" min="0" max="1" step="0.1" value="${this.projectDefaults.exaggeration}"
-                       oninput="document.getElementById('exagv-${chId}-${cid}').textContent=this.value">
-                <span class="setting-value" id="exagv-${chId}-${cid}">${this.projectDefaults.exaggeration}</span></div></div>
-            <div class="setting-row"><span class="setting-label">CFG Weight</span><div class="setting-control">
-                <input type="range" id="cfg-w-${chId}-${cid}" min="0" max="1" step="0.1" value="${this.projectDefaults.cfg_weight}"
-                       oninput="document.getElementById('cfgv-${chId}-${cid}').textContent=this.value">
-                <span class="setting-value" id="cfgv-${chId}-${cid}">${this.projectDefaults.cfg_weight}</span></div></div>
-            <div class="setting-row"><span class="setting-label">TTS Model</span><div class="setting-control">
-                <select id="model-${chId}-${cid}">
-                    <option value="chatterbox" ${this.projectDefaults.tts_model === 'chatterbox' ? 'selected' : ''}>Chatterbox</option>
-                    <option value="chatterbox_turbo" ${this.projectDefaults.tts_model === 'chatterbox_turbo' ? 'selected' : ''}>Turbo</option>
-                </select></div></div>
-        </div>`;
+        const settingsPanel = this._settingsPanel(settingsId, chId, cid);
 
         const takeRows = takes.map((t, i) => this._takeRow(chapter, chunk, t, i)).join('');
         return `<div class="takes-inner">${actions}<div class="takes-list">${settingsPanel}${placeholder}${emptyLabel}${takeRows}</div></div>`;
@@ -215,11 +207,14 @@ class BookTab {
         const isBest = !!take.is_best_take;
         const outdated = take.input_text && take.input_text !== chunk.text;
         const sid = `tk-${chId}-${cid}-${i}`;
-        const model = take.tts_model === 'chatterbox_turbo' ? 'Turbo' : 'Standard';
+        const MODEL_LABELS = { chatterbox_turbo: 'Turbo', kokoro: 'Kokoro', orpheus: 'Orpheus', chatterbox: 'Standard' };
+        const model = MODEL_LABELS[take.tts_model] || 'Standard';
+        const carrierTrimmed = take.carrier && take.carrier.trimmed;
         return `<div class="chunk-take-row ${isBest ? 'best-take' : 'non-best-take'}${outdated ? ' outdated-take' : ''}">
             <div class="chunk-take-header">
                 <span class="take-label">Take ${i + 1}</span>
                 <div class="take-icons">
+                    ${carrierTrimmed ? '<span class="material-symbols-outlined carrier-icon" title="Generated with a carrier phrase, then trimmed via forced alignment">content_cut</span>' : ''}
                     ${outdated ? '<span class="material-symbols-outlined outdated-icon" title="Text changed since this take">edit_off</span>' : ''}
                     <button class="take-icon check-circle ${isBest ? 'best' : ''}" title="${isBest ? 'Best take' : 'Set as best take'}"
                             onclick="bookTab.setBestTake('${chId}',${cid},'${file}')"><span class="material-symbols-outlined">${isBest ? 'check_circle' : 'radio_button_unchecked'}</span></button>
@@ -232,9 +227,12 @@ class BookTab {
             <div class="take-settings" id="${sid}">
                 <div class="setting-row"><span class="setting-label">Voice</span><span class="setting-value">${this._h(take.voice_sample || '—')}</span></div>
                 <div class="setting-row"><span class="setting-label">Model</span><span class="setting-value">${model}${take.tts_model_emotion_forced ? ' <span class="model-forced-badge">(auto)</span>' : ''}</span></div>
-                <div class="setting-row"><span class="setting-label">Exaggeration</span><span class="setting-value">${take.exaggeration ?? '—'}</span></div>
-                <div class="setting-row"><span class="setting-label">CFG Weight</span><span class="setting-value">${take.cfg_weight ?? '—'}</span></div>
+                ${take.tts_model === 'kokoro' ? `<div class="setting-row"><span class="setting-label">Speed</span><span class="setting-value">${take.speed ?? '—'}</span></div>`
+                  : take.tts_model === 'orpheus' ? `<div class="setting-row"><span class="setting-label">Temperature</span><span class="setting-value">${take.temperature ?? '—'}</span></div>`
+                  : `<div class="setting-row"><span class="setting-label">Exaggeration</span><span class="setting-value">${take.exaggeration ?? '—'}</span></div>
+                <div class="setting-row"><span class="setting-label">CFG Weight</span><span class="setting-value">${take.cfg_weight ?? '—'}</span></div>`}
                 ${take.audio_duration_seconds ? `<div class="setting-row"><span class="setting-label">Duration</span><span class="setting-value">${take.audio_duration_seconds}s</span></div>` : ''}
+                ${carrierTrimmed ? `<div class="setting-row"><span class="setting-label">Carrier</span><span class="setting-value">trimmed${take.carrier.target_span_s ? ` (${take.carrier.target_span_s[0]}–${take.carrier.target_span_s[1]}s)` : ''}</span></div>` : ''}
                 <div class="setting-row"><span class="setting-label">File</span><span class="setting-value" style="word-break:break-all;">${this._h(take.audio_file || '—')}</span></div>
                 ${take.possibly_truncated ? '<div class="setting-row warning-row"><span class="warning-text">May be truncated (40s TTS limit)</span></div>' : ''}
             </div>
@@ -243,16 +241,98 @@ class BookTab {
 
     toggle(id) { const el = document.getElementById(id); if (el) el.classList.toggle('expanded'); }
 
+    // ---- Carrier padding hint ----------------------------------------------
+    // Approximate the spoken text (resolve {display|spoken} → spoken) so the length
+    // hint roughly matches the server's threshold check on the processed text.
+    _spokenText(text) {
+        return (text || '').replace(/\{([^|}]+)\|([^}]*)\}/g, '$2');
+    }
+    // True when generating this chunk now would trigger carrier padding server-side.
+    _willUseCarrier(chunk) {
+        const c = this.carrier;
+        if (!c || !c.enabled || !c.available) return false;
+        const len = this._spokenText(chunk.text).trim().length;
+        return len > 0 && len < c.max_chars;
+    }
+
+    // ---- Settings panel (per-engine voice + params) ------------------------
+    // Engine catalog from /api/config, with a safe fallback to the Chatterbox pair.
+    _engines() {
+        return this.ttsEngines || {
+            chatterbox:       { voices: 'samples', params: ['exaggeration', 'cfg_weight'], available: true, label: 'Chatterbox' },
+            chatterbox_turbo: { voices: 'samples', params: ['exaggeration', 'cfg_weight'], available: true, label: 'Turbo' },
+        };
+    }
+
+    // <option> list for the Voice control given a model: reference-audio files for
+    // Chatterbox, or the engine's named voices otherwise.
+    _voiceOptions(model, selected) {
+        const eng = this._engines()[model];
+        if (!eng || eng.voices === 'samples') {
+            const sel = selected ?? this.projectDefaults.voice_sample;
+            return this.voiceSamples.map(s => `<option value="${s.name}" ${sel === s.name ? 'selected' : ''}>${s.name}</option>`).join('');
+        }
+        return (eng.voices || []).map(v => `<option value="${v}" ${selected === v ? 'selected' : ''}>${v}</option>`).join('');
+    }
+
+    _settingsPanel(settingsId, chId, cid) {
+        const engines = this._engines();
+        const model = (engines[this.projectDefaults.tts_model] ? this.projectDefaults.tts_model : 'chatterbox');
+        const params = (engines[model] || {}).params || [];
+        const modelOpts = Object.entries(engines).map(([k, e]) =>
+            `<option value="${k}" ${model === k ? 'selected' : ''} ${e.available === false ? 'disabled' : ''}>${e.label || k}${e.available === false ? ' (n/a)' : ''}</option>`).join('');
+        const show = (p) => params.includes(p) ? '' : ' style="display:none"';
+        return `<div class="take-settings" id="${settingsId}">
+            <div class="setting-row"><span class="setting-label">TTS Model</span><div class="setting-control">
+                <select id="model-${chId}-${cid}" onchange="bookTab.onModelChange('${chId}','${cid}')">${modelOpts}</select></div></div>
+            <div class="setting-row"><span class="setting-label">Voice</span><div class="setting-control">
+                <select id="voice-${chId}-${cid}">${this._voiceOptions(model)}</select></div></div>
+            <div class="setting-row" id="row-exag-${chId}-${cid}"${show('exaggeration')}><span class="setting-label">Exaggeration</span><div class="setting-control">
+                <input type="range" id="exag-${chId}-${cid}" min="0" max="1" step="0.1" value="${this.projectDefaults.exaggeration}"
+                       oninput="document.getElementById('exagv-${chId}-${cid}').textContent=this.value">
+                <span class="setting-value" id="exagv-${chId}-${cid}">${this.projectDefaults.exaggeration}</span></div></div>
+            <div class="setting-row" id="row-cfg-${chId}-${cid}"${show('cfg_weight')}><span class="setting-label">CFG Weight</span><div class="setting-control">
+                <input type="range" id="cfg-w-${chId}-${cid}" min="0" max="1" step="0.1" value="${this.projectDefaults.cfg_weight}"
+                       oninput="document.getElementById('cfgv-${chId}-${cid}').textContent=this.value">
+                <span class="setting-value" id="cfgv-${chId}-${cid}">${this.projectDefaults.cfg_weight}</span></div></div>
+            <div class="setting-row" id="row-speed-${chId}-${cid}"${show('speed')}><span class="setting-label">Speed</span><div class="setting-control">
+                <input type="range" id="speed-${chId}-${cid}" min="0.5" max="2" step="0.1" value="${this.projectDefaults.speed}"
+                       oninput="document.getElementById('speedv-${chId}-${cid}').textContent=this.value">
+                <span class="setting-value" id="speedv-${chId}-${cid}">${this.projectDefaults.speed}</span></div></div>
+            <div class="setting-row" id="row-temp-${chId}-${cid}"${show('temperature')}><span class="setting-label">Temperature</span><div class="setting-control">
+                <input type="range" id="temp-${chId}-${cid}" min="0.1" max="1.5" step="0.1" value="${this.projectDefaults.temperature}"
+                       oninput="document.getElementById('tempv-${chId}-${cid}').textContent=this.value">
+                <span class="setting-value" id="tempv-${chId}-${cid}">${this.projectDefaults.temperature}</span></div></div>
+        </div>`;
+    }
+
+    // Re-render the voice list and show only the params the selected engine supports.
+    onModelChange(chId, cid) {
+        const model = document.getElementById(`model-${chId}-${cid}`)?.value || 'chatterbox';
+        const eng = this._engines()[model] || {};
+        const params = eng.params || [];
+        const voiceSel = document.getElementById(`voice-${chId}-${cid}`);
+        if (voiceSel) voiceSel.innerHTML = this._voiceOptions(model);
+        const setRow = (id, on) => { const el = document.getElementById(`row-${id}-${chId}-${cid}`); if (el) el.style.display = on ? '' : 'none'; };
+        setRow('exag', params.includes('exaggeration'));
+        setRow('cfg', params.includes('cfg_weight'));
+        setRow('speed', params.includes('speed'));
+        setRow('temp', params.includes('temperature'));
+    }
+
     // ---- Generation --------------------------------------------------------
     _genSettings(chId, cid) {
         const val = (pfx) => document.getElementById(`${pfx}-${chId}-${cid}`)?.value;
         const chunk = this.chapters.find(c => String(c.id) === String(chId))?.chunks.find(c => String(c.id) === String(cid));
         let model = val('model') || this.projectDefaults.tts_model || 'chatterbox';
-        if (chunk && PARA_TAG_RE.test(chunk.text)) model = 'chatterbox_turbo';   // emotion tags force Turbo
+        // Emotion tags force Turbo only when a Chatterbox variant is selected.
+        if (chunk && PARA_TAG_RE.test(chunk.text) && (model === 'chatterbox' || model === 'chatterbox_turbo')) model = 'chatterbox_turbo';
         return {
             voice: val('voice') || this.projectDefaults.voice_sample,
             exaggeration: parseFloat(val('exag') ?? this.projectDefaults.exaggeration),
             cfg_weight: parseFloat(val('cfg-w') ?? this.projectDefaults.cfg_weight),
+            speed: parseFloat(val('speed') ?? this.projectDefaults.speed),
+            temperature: parseFloat(val('temp') ?? this.projectDefaults.temperature),
             tts_model: model
         };
     }
@@ -273,7 +353,7 @@ class BookTab {
                 method: 'POST', headers: { 'Content-Type': 'application/json', 'X-API-Key': API_KEY },
                 body: JSON.stringify({ text_file_id: chapterId, chunk_id: chunkId, chunk_text: chunk.text,
                     voice_sample: s.voice, exaggeration: s.exaggeration, cfg_weight: s.cfg_weight,
-                    temperature: this.projectDefaults.temperature, tts_model: s.tts_model })
+                    speed: s.speed, temperature: s.temperature, tts_model: s.tts_model })
             });
             const data = await r.json();
             if (!r.ok) throw new Error(data.error || `Server error ${r.status}`);

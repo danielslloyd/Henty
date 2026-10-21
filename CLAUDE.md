@@ -13,7 +13,16 @@ Do not reintroduce it.
 - **Backend**: Python/Flask (`server.py`) with the `TextToAudioConverter` class.
 - **Frontend**: Single page (`app.html`) + two vanilla-JS modules: `book_tab.js` (the grid)
   and `reader_tab.js` (the reader pane).
-- **TTS Engine**: Chatterbox (standard) and Chatterbox Turbo (paralinguistic emotion tags).
+- **TTS Engines**: Four selectable per chunk (`tts_model` on each take):
+  - **Chatterbox** (standard) and **Chatterbox Turbo** (paralinguistic emotion tags) —
+    reference-audio voice cloning via `audio_prompt_path`, with `exaggeration`/`cfg_weight`.
+  - **Kokoro** (`kokoro` pkg) — built-in **named voices** (e.g. `af_heart`), `speed` param.
+  - **Orpheus** (`canopylabs/orpheus-3b-0.1-ft`, SNAC-decoded) — built-in **named speakers**
+    (e.g. `tara`), `temperature` param.
+  Kokoro/Orpheus are optional (gated by `HAS_KOKORO`/`HAS_ORPHEUS`); the server starts without
+  them. They select a voice **by name** (validated via `resolve_named_voice()`), not by file,
+  so the Chatterbox default-voice ban does not apply to them. `generate_audio()` is an
+  engine-agnostic orchestrator that dispatches to per-engine helpers via `_generate_wav()`.
 - **GPU-only**: CUDA is required; the server raises at startup if CUDA is unavailable.
 - Exact pinned versions: see `README.md` → "Locked Environment".
 
@@ -81,6 +90,19 @@ notes render inline as footnote blocks. An **Original ⇄ Enriched** toggle (per
 The Chatterbox built-in default voice must **never** be used. All generation endpoints resolve
 the voice via `resolve_voice_sample_path()` (project voice → `DEFAULT_VOICE` fallback) and
 return a 400 error if none resolves. Voice names are extension-agnostic.
+
+### Carrier padding (short-fragment quality)
+TTS engines garble very short inputs. When `CARRIER_ENABLED` and a chunk's spoken text is
+shorter than `CARRIER_MAX_CHARS`, `generate_audio()` wraps it as `CARRIER_PRE + text +
+CARRIER_POST`, generates, then **trims the carrier audio back off via forced alignment**
+(`torchaudio.pipelines.MMS_FA`, lazy-loaded by `load_aligner()`; `_trim_to_target()` aligns
+the padded transcript and slices the target word span). Engine-agnostic — it operates on the
+output waveform, so it works for all four engines. On alignment failure it regenerates once
+without the carrier. Per-take result is stored under `take.carrier` (`{used, trimmed,
+target_span_s, fallback?}`); a per-request `use_carrier` bool overrides the auto length check.
+`/api/config` exposes `carrier:{enabled,max_chars,pre,post,available}` (available = aligner
+importable) so the grid can show a subtle "carrier" chip pre-generation and a scissors badge
+on trimmed takes. Gated by `HAS_ALIGNER`; disabled cleanly if torchaudio lacks MMS_FA.
 
 ### Filenames
 Audio filenames are sanitized with `_safe_filename_part()` — strips `:` and other characters

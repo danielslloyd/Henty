@@ -136,6 +136,11 @@
         .generating-text { font-size: 12px; color: #8b5cf6; font-style: italic; font-weight: 500; }
         .generating-model-badge { display:inline-block; font-style:normal; font-size:10px; font-weight:600; padding:1px 5px; border-radius:3px; background: rgba(139,92,246,0.15); color:#7c3aed; }
         .outdated-icon { color: #f87171; font-size: 16px; margin-right: 4px; }
+        .carrier-icon { color: #0ea5e9; font-size: 16px; margin-right: 4px; }
+        /* Subtle pre-generation hint shown when a chunk is short enough to be carrier-padded.
+           Icon-only and self-centered so it matches the action buttons' width and doesn't
+           widen the .takes-actions column (which would shove the takes out of alignment). */
+        .carrier-hint { color: #0ea5e9; font-size: 16px; align-self: center; cursor: default; }
 
         .take-icons { display: flex; gap: 2px; align-items: center; flex-shrink: 0; }
         .take-icon { background: none; border: none; cursor: pointer; padding: 5px; color: #94a3b8; transition: all 0.15s; border-radius: 4px; display: inline-flex; align-items: center; justify-content: center; }

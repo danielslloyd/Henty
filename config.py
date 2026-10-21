@@ -56,7 +56,19 @@ class ServerConfig:
         # Generation settings
         self.MAX_PARALLEL_GENERATIONS = int(os.getenv('MAX_PARALLEL_GENERATIONS', '3'))
         # GPU-only: the server requires CUDA and will refuse to start without it.
-        self.DEFAULT_TTS_MODEL = os.getenv('DEFAULT_TTS_MODEL', 'chatterbox')  # chatterbox or chatterbox_turbo
+        self.DEFAULT_TTS_MODEL = os.getenv('DEFAULT_TTS_MODEL', 'chatterbox')  # chatterbox | chatterbox_turbo | kokoro | orpheus
+
+        # Named-voice engine defaults (Kokoro/Orpheus use built-in voices, not reference audio)
+        self.KOKORO_DEFAULT_VOICE = os.getenv('KOKORO_DEFAULT_VOICE', 'af_heart')
+        self.ORPHEUS_DEFAULT_VOICE = os.getenv('ORPHEUS_DEFAULT_VOICE', 'tara')
+        self.ORPHEUS_MODEL = os.getenv('ORPHEUS_MODEL', 'canopylabs/orpheus-3b-0.1-ft')
+
+        # Carrier padding: wrap short chunks with fixed lead-in/out text, generate, then
+        # trim the carrier audio back off via forced alignment (improves short fragments).
+        self.CARRIER_ENABLED = os.getenv('CARRIER_ENABLED', 'True').lower() in ('1', 'true', 'yes', 'on')
+        self.CARRIER_MAX_CHARS = int(os.getenv('CARRIER_MAX_CHARS', '140'))
+        self.CARRIER_PRE = os.getenv('CARRIER_PRE', 'Here is the next passage.')
+        self.CARRIER_POST = os.getenv('CARRIER_POST', 'That is the end of it.')
 
         # Initialize API key if needed
         if self.REQUIRE_AUTH and not self.API_KEY:
@@ -87,7 +99,13 @@ class ServerConfig:
             'default_gutenberg_url': self.DEFAULT_GUTENBERG_URL,
             'default_voice': self.DEFAULT_VOICE,
             'default_tts_model': self.DEFAULT_TTS_MODEL,
-            'books_dir': self.BOOKS_DIR
+            'books_dir': self.BOOKS_DIR,
+            'carrier': {
+                'enabled': self.CARRIER_ENABLED,
+                'max_chars': self.CARRIER_MAX_CHARS,
+                'pre': self.CARRIER_PRE,
+                'post': self.CARRIER_POST,
+            }
         }
 
     @staticmethod
